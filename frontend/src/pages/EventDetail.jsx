@@ -7,8 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { renderScore, sportColor } from "@/lib/sports";
 import { useAuth } from "@/context/AuthContext";
-import { Trophy, MapPin, Calendar } from "lucide-react";
+import { Trophy, MapPin, Calendar, Wifi } from "lucide-react";
 import LiveScorer from "@/components/LiveScorer";
+import useFixtureSocket from "@/lib/useFixtureSocket";
 
 export default function EventDetail() {
   const { id } = useParams();
@@ -33,6 +34,15 @@ export default function EventDetail() {
   };
 
   useEffect(() => { loadAll(); }, [id]);
+
+  // Real-time updates: merge incoming fixture changes; refresh standings on completion.
+  useFixtureSocket((payload) => {
+    if (!payload || payload.event_id !== id) return;
+    setFixtures((prev) => prev.map((f) => (f.id === payload.fixture.id ? payload.fixture : f)));
+    if (payload.fixture.status === "completed") {
+      api.get(`/events/${id}/standings`).then((r) => setStandings(r.data));
+    }
+  });
 
   const teamMap = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t])), [teams]);
 
@@ -65,6 +75,9 @@ export default function EventDetail() {
             {event.venue && <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3" /> {event.venue}</span>}
             {event.start_date && <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3" /> {event.start_date}</span>}
             <span>{teams.length} teams · {fixtures.length} matches</span>
+            <span data-testid="live-stream-indicator" className="flex items-center gap-1.5 text-[#007AFF]">
+              <Wifi className="w-3 h-3" /> LIVE STREAM ON
+            </span>
           </div>
           {isAdmin && (
             <div className="mt-6 flex gap-2">

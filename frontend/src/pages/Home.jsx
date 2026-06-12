@@ -7,6 +7,7 @@ import SponsorBanner from "@/components/SponsorBanner";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Users, CalendarDays, Activity, Trophy, Sparkles } from "lucide-react";
 import { renderScore, sportColor } from "@/lib/sports";
+import useFixtureSocket from "@/lib/useFixtureSocket";
 
 export default function Home() {
   const [stats, setStats] = useState({ events: 0, teams: 0, players: 0, live: 0 });
@@ -14,16 +15,43 @@ export default function Home() {
   const [liveFixtures, setLiveFixtures] = useState([]);
   const [teamMap, setTeamMap] = useState({});
 
+  const loadLive = async () => {
+    const evRes = await api.get("/events");
+    setEvents(evRes.data.slice(0, 3));
+    const all = await Promise.all(
+      evRes.data.map((e) => api.get(`/events/${e.id}/fixtures`).then((res) => res.data.map((f) => ({ ...f, event: e }))))
+    );
+    setLiveFixtures(all.flat().filter((f) => f.status === "live").slice(0, 6));
+  };
+
   useEffect(() => {
     api.get("/stats").then((r) => setStats(r.data));
     api.get("/teams").then((r) => setTeamMap(Object.fromEntries(r.data.map((t) => [t.id, t]))));
-    api.get("/events").then(async (r) => {
-      setEvents(r.data.slice(0, 3));
-      const all = await Promise.all(r.data.map((e) => api.get(`/events/${e.id}/fixtures`).then(res => res.data.map(f => ({ ...f, event: e })))));
-      const live = all.flat().filter((f) => f.status === "live").slice(0, 3);
-      setLiveFixtures(live);
-    });
+    loadLive();
   }, []);
+
+  // Real-time: merge in-place if live card already shown; otherwise reload list when a match transitions to/from live.
+  useFixtureSocket((payload) => {
+    if (!payload || !payload.fixture) return;
+    const f = payload.fixture;
+    setLiveFixtures((prev) => {
+      const idx = prev.findIndex((x) => x.id === f.id);
+      if (idx >= 0) {
+        if (f.status !== "live") {
+          // dropped out of live
+          const next = prev.filter((x) => x.id !== f.id);
+          return next;
+        }
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...f };
+        return next;
+      }
+      // status went to live - need to fetch event info; trigger reload
+      if (f.status === "live") loadLive();
+      return prev;
+    });
+    api.get("/stats").then((r) => setStats(r.data));
+  });
 
   return (
     <div className="App bg-[#0a0a0a] min-h-screen text-white">

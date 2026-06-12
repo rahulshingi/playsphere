@@ -13,7 +13,7 @@ from typing import List, Optional, Literal
 
 import bcrypt
 import jwt
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, WebSocket, WebSocketDisconnect
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, ConfigDict, EmailStr
@@ -29,6 +29,33 @@ app = FastAPI(title="PlaySphere API")
 api = APIRouter(prefix="/api")
 
 JWT_ALGORITHM = "HS256"
+
+
+# ---------- WebSocket connection manager ----------
+class ConnectionManager:
+    def __init__(self):
+        self.active: list[WebSocket] = []
+
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        self.active.append(ws)
+
+    def disconnect(self, ws: WebSocket):
+        if ws in self.active:
+            self.active.remove(ws)
+
+    async def broadcast(self, payload: dict):
+        dead = []
+        for ws in self.active:
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+
+ws_manager = ConnectionManager()
 
 
 def get_jwt_secret() -> str:
@@ -573,6 +600,9 @@ async def update_fixture_score(fixture_id: str, body: ScoreUpdate, _: dict = Dep
     # propagate winner in knockout
     if body.winner_id and doc.get("bracket_position"):
         await propagate_knockout_winner(doc)
+        doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+    # Broadcast over WebSocket
+    await ws_manager.broadcast({"type": "fixture_update", "event_id": doc["event_id"], "fixture": doc})
     return Fixture(**doc)
 
 
@@ -609,7 +639,27 @@ async def init_score(fixture_id: str, _: dict = Depends(require_admin)):
     ev = await db.events.find_one({"id": doc["event_id"]}, {"_id": 0})
     score = default_score(ev["sport"])
     await db.fixtures.update_one({"id": fixture_id}, {"$set": {"score": score, "status": "live"}})
+    updated = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+    await ws_manager.broadcast({"type": "fixture_update", "event_id": doc["event_id"], "fixture": updated})
     return {"ok": True, "score": score}
+
+
+# ---------- WebSocket ----------
+@app.websocket("/api/ws")
+async def websocket_endpoint(ws: WebSocket):
+    await ws_manager.connect(ws)
+    try:
+        # initial hello so clients can verify the channel
+        await ws.send_json({"type": "hello", "ts": datetime.now(timezone.utc).isoformat()})
+        while True:
+            # we don't expect any inbound messages but keep the socket alive
+            msg = await ws.receive_text()
+            if msg == "ping":
+                await ws.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        ws_manager.disconnect(ws)
+    except Exception:
+        ws_manager.disconnect(ws)
 
 
 # ---------- Standings ----------

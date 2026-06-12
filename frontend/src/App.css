@@ -1,34 +1,22 @@
-.App-logo {
-    height: 40vmin;
-    pointer-events: none;
+/* component-specific styles */
+.App { min-height: 100vh; }
+
+.tactical-grid {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .App-logo {
-        animation: App-logo-spin infinite 20s linear;
-    }
+.bracket-line {
+  position: relative;
 }
-
-.App-header {
-    background-color: #0f0f10;
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-size: calc(10px + 2vmin);
-    color: white;
-}
-
-.App-link {
-    color: #61dafb;
-}
-
-@keyframes App-logo-spin {
-    from {
-        transform: rotate(0deg);
-    }
-    to {
-        transform: rotate(360deg);
-    }
+.bracket-line::before {
+  content: "";
+  position: absolute;
+  left: -16px;
+  top: 50%;
+  width: 16px;
+  height: 1px;
+  background: #262626;
 }

@@ -1,0 +1,98 @@
+{
+  "theme": "dark",
+  "archetype": "2_performance_pro",
+  "mood": "High energy, command-center feel, tactical minimalism. Competitive, connected, professional.",
+  "colors": {
+    "background": "#0A0A0A",
+    "foreground": "#FFFFFF",
+    "primary": "#007AFF",
+    "primary_foreground": "#FFFFFF",
+    "destructive": "#FF3B30",
+    "destructive_foreground": "#FFFFFF",
+    "card": "#141414",
+    "card_foreground": "#FFFFFF",
+    "muted": "#1F1F1F",
+    "muted_foreground": "#A3A3A3",
+    "border": "#262626",
+    "ring": "#007AFF",
+    "accent": "#141414",
+    "accent_foreground": "#FFFFFF"
+  },
+  "typography": {
+    "font_families": {
+      "heading": "Bebas Neue, sans-serif",
+      "body": "Manrope, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "guidelines": "Bebas Neue for high-impact marketing headings (H1/H2). Manrope for UI, dashboard, and body text. JetBrains Mono for stats, scores, live timers, and technical data. Never use Inter for headings. Ensure tight tracking (letter-spacing) for Bebas Neue."
+  },
+  "layout_and_spacing": {
+    "strategy": "Control room grid for dashboards, bento layout for marketing sections. The bento grid should be asymmetrical.",
+    "spacing_scale": "Generous spacing. p-8 to p-12 for bento boxes. p-4 to p-6 for dashboard cards.",
+    "border_radius": "radius-sm to radius-md (4px-8px) max to keep the tactical athletic feel.",
+    "alignment": "Optical alignment. Left-align dashboard forms. Center-align hero if visually appropriate. Strict grid adherence."
+  },
+  "components": {
+    "cards": "Cardless look or 1px border (#262626) with #141414 background. No muddy shadows.",
+    "buttons": "Primary buttons: #007AFF background. Live indicators: #FF3B30 background with pulse animation. Sharp or slightly rounded edges (max 8px).",
+    "inputs": "Shadcn UI inputs. 1px solid border, focus ring #007AFF.",
+    "live_scoring_widget": "Tactical look. JetBrains Mono for numbers. Electric Blaze (#FF3B30) for active 'LIVE' states and score highlights.",
+    "navigation": "Sticky nav with bg-black/60, backdrop-blur-xl, and border-b border-white/10. Logo and text must be high-contrast white."
+  },
+  "visual_enhancers": {
+    "glassmorphism": "Use sparingly. For sticky navs and critical modal overlays only.",
+    "borders": "Grid borders. border-collapse style layout for leaderboards and standings tables.",
+    "motion": "Hover translations (-translate-y-1). Accordion transitions. Pulse animation for live games.",
+    "textures": "Minimalistic. Use pure CSS lines or very subtle dark noise on hero section, don't overwhelm the pure #0A0A0A."
+  },
+  "media_urls": {
+    "hero_backgrounds": [
+      {
+        "url": "https://images.pexels.com/photos/1657324/pexels-photo-1657324.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Soccer match at sunset, high energy. Ideal for main marketing hero background."
+      },
+      {
+        "url": "https://images.pexels.com/photos/15779126/pexels-photo-15779126.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Illuminated stadium at night. Good for dashboard background, fixture banners, or active tournaments."
+      }
+    ],
+    "corporate_events": [
+      {
+        "url": "https://images.unsplash.com/photo-1774599661395-569eea1420e3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwzfHxjb3Jwb3JhdGUlMjBzcG9ydHMlMjBldmVudHxlbnwwfHx8fDE3ODEyNTU2MTR8MA&ixlib=rb-4.1.0&q=85",
+        "description": "People gathered on a rooftop court at dusk. Relates to Connect & Grow theme."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1764408721535-2dcb912db83e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwyfHxjb3Jwb3JhdGUlMjBzcG9ydHMlMjBldmVudHxlbnwwfHx8fDE3ODEyNTU2MTR8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Collection of trophies and awards. For leaderboard/standings header."
+      }
+    ],
+    "sponsor_logos": [
+      {
+        "url": "https://images.unsplash.com/photo-1644166186783-35d911470ff0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwxfHxicmFuZCUyMGxvZ28lMjB3aGl0ZSUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzgxMjU1NjE0fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Mercedes Benz emblem on a white background. Use for Sponsor branding showcase."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1700887938966-01f0450aee8c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwzfHxicmFuZCUyMGxvZ28lMjB3aGl0ZSUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzgxMjU1NjE0fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Coca Cola sign. Use for Sponsor branding showcase."
+      }
+    ],
+    "player_avatars": [
+      {
+        "url": "https://images.pexels.com/photos/2216610/pexels-photo-2216610.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Focused boxer in athletic stance. Player profile avatar."
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1710527304331-4186db4ee708?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Njd8MHwxfHNlYXJjaHw0fHxhdGhsZXRlJTIwcG9ydHJhaXQlMjBzdHVkaW8lMjBkYXJrfGVufDB8fHx8MTc4MTI1NTYzMXww&ixlib=rb-4.1.0&q=85",
+        "description": "Woman standing in the dark. Player profile avatar."
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "ALL interactive elements MUST have data-testid attributes.",
+    "Do NOT use placeholder images; use the provided media URLs exclusively.",
+    "Follow the Performance Pro archetype: Dark theme with Volt Blue (#007AFF) primary and Electric Blaze (#FF3B30) for destructive/live actions.",
+    "Implement Bebas Neue for display headings. Include via Google Fonts if necessary. Use Manrope for UI.",
+    "Dashboard should have a 'control-room' feel using JetBrains Mono for data/stats. Utilize 1px grid lines and avoid soft shadows.",
+    "Hero sections MUST use a heavy overlay (e.g., bg-black/50 or bg-gradient-to-r from-black/80 to-transparent) so text is highly readable against background images."
+  ]
+}

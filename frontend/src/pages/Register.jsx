@@ -26,7 +26,7 @@ export default function Register() {
     <div className="bg-[#0a0a0a] min-h-screen text-white">
       <Nav />
       <div className="max-w-md mx-auto px-6 py-20">
-        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#007AFF]">/ Create account</div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Create account</div>
         <h1 className="font-display text-5xl tracking-wide mt-2">JOIN PLAYSPHERE</h1>
         <form onSubmit={submit} className="mt-10 space-y-4">
           <div>
@@ -41,12 +41,12 @@ export default function Register() {
             <Label className="text-xs font-mono uppercase text-neutral-500">Password</Label>
             <Input data-testid="register-password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required className="mt-2 bg-[#141414] border-white/10 text-white" />
           </div>
-          <Button data-testid="register-submit" disabled={busy} className="w-full bg-[#007AFF] hover:bg-[#0066d6] rounded-sm h-11">
+          <Button data-testid="register-submit" disabled={busy} className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm h-11">
             {busy ? "Creating..." : "Create account"}
           </Button>
         </form>
         <p className="text-xs text-neutral-500 mt-6 text-center">
-          Already a member? <Link to="/login" className="text-[#007AFF] hover:underline">Sign in</Link>
+          Already a member? <Link to="/login" className="text-[#84CC16] hover:underline">Sign in</Link>
         </p>
       </div>
     </div>

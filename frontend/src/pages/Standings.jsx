@@ -23,7 +23,7 @@ export default function Standings() {
     <div className="bg-[#0a0a0a] text-white min-h-screen">
       <Nav />
       <div className="max-w-6xl mx-auto px-6 pt-16 pb-24">
-        <div className="font-mono text-[10px] tracking-[0.3em] text-[#007AFF] uppercase">/ Leaderboard</div>
+        <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ Leaderboard</div>
         <h1 className="font-display text-6xl tracking-wide mt-3">STANDINGS</h1>
         <p className="text-neutral-400 mt-3 max-w-xl">Every point counts. Filter by event to see who's hunting the trophy.</p>
 
@@ -33,7 +33,7 @@ export default function Standings() {
               key={e.id}
               data-testid={`standings-event-${e.id}`}
               onClick={() => setSelected(e.id)}
-              className={`px-4 py-2 text-sm rounded-sm border shrink-0 transition ${selected === e.id ? "bg-[#007AFF] border-[#007AFF] text-white" : "border-white/10 text-neutral-400 hover:text-white"}`}
+              className={`px-4 py-2 text-sm rounded-sm border shrink-0 transition ${selected === e.id ? "bg-[#84CC16] border-[#84CC16] text-black" : "border-white/10 text-neutral-400 hover:text-white"}`}
             >
               {e.name}
             </button>
@@ -65,7 +65,7 @@ export default function Standings() {
                   <td className="text-right px-3 font-mono text-emerald-400">{s.won}</td>
                   <td className="text-right px-3 font-mono">{s.drawn}</td>
                   <td className="text-right px-3 font-mono text-[#FF3B30]">{s.lost}</td>
-                  <td className="text-right px-5 font-mono text-[#007AFF] text-lg font-bold">{s.points}</td>
+                  <td className="text-right px-5 font-mono text-[#84CC16] text-lg font-bold">{s.points}</td>
                 </tr>
               ))}
               {rows.length === 0 && (

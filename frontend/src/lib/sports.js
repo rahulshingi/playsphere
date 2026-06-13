@@ -38,7 +38,7 @@ export function renderScore(sport, side) {
 export function sportColor(sport) {
   return ({
     cricket: "#10B981",
-    football: "#007AFF",
+    football: "#84CC16",
     basketball: "#F59E0B",
     badminton: "#A855F7",
     tabletennis: "#EC4899",
@@ -46,5 +46,5 @@ export function sportColor(sport) {
     chess: "#94A3B8",
     quiz: "#FACC15",
     hackathon: "#FF3B30",
-  })[sport] || "#007AFF";
+  })[sport] || "#84CC16";
 }

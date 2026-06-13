@@ -1,7 +1,9 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, Shield, Trophy } from "lucide-react";
+import { LogOut, Shield } from "lucide-react";
+
+const LOGO_URL = "https://customer-assets.emergentagent.com/job_live-scoring-hub-5/artifacts/4vqrrfy3_Playsphere%20logo%20main.png";
 
 const navItems = [
   { to: "/", label: "Home" },
@@ -21,14 +23,18 @@ export default function Nav() {
       className="sticky top-0 z-50 w-full backdrop-blur-xl bg-black/70 border-b border-white/10"
     >
       <div className="mx-auto max-w-7xl px-6 h-16 flex items-center justify-between">
-        <Link to="/" data-testid="nav-logo" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-sm bg-[#007AFF] grid place-items-center">
-            <Trophy className="w-4 h-4 text-white" />
-          </div>
-          <div className="leading-none">
-            <div className="font-display text-2xl tracking-wider text-white">PLAYSPHERE</div>
-            <div className="text-[10px] font-mono uppercase text-neutral-400 tracking-widest">
-              compete · connect · grow
+        <Link to="/" data-testid="nav-logo" className="flex items-center gap-3">
+          <img src={LOGO_URL} alt="PlaySphere" className="w-11 h-11 object-contain" />
+          <div className="leading-none hidden sm:block">
+            <div className="font-display text-2xl tracking-wider">
+              <span className="text-white">PLAY</span><span className="text-[#84CC16]">SPHERE</span>
+            </div>
+            <div className="text-[10px] font-mono uppercase tracking-widest mt-1">
+              <span className="text-[#EC4899]">compete</span>
+              <span className="text-neutral-500"> · </span>
+              <span className="text-[#84CC16]">connect</span>
+              <span className="text-neutral-500"> · </span>
+              <span className="text-[#06B6D4]">grow</span>
             </div>
           </div>
         </Link>
@@ -55,7 +61,7 @@ export default function Nav() {
               data-testid="nav-link-admin"
               className={({ isActive }) =>
                 `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 transition-colors ${
-                  isActive ? "text-[#007AFF]" : "text-[#007AFF]/80 hover:text-[#007AFF]"
+                  isActive ? "text-[#84CC16]" : "text-[#84CC16]/80 hover:text-[#84CC16]"
                 }`
               }
             >
@@ -95,7 +101,7 @@ export default function Nav() {
                 data-testid="nav-register-team-btn"
                 size="sm"
                 onClick={() => navigate("/register-team")}
-                className="bg-[#007AFF] hover:bg-[#0066d6] text-white rounded-sm"
+                className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm"
               >
                 Register Team
               </Button>

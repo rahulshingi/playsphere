@@ -15,12 +15,12 @@ export default function Teams() {
       <div className="max-w-7xl mx-auto px-6 pt-16 pb-24">
         <div className="flex items-end justify-between">
           <div>
-            <div className="font-mono text-[10px] tracking-[0.3em] text-[#007AFF] uppercase">/ Roster</div>
+            <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ Roster</div>
             <h1 className="font-display text-6xl tracking-wide mt-3">REGISTERED TEAMS</h1>
             <p className="text-neutral-400 mt-3 max-w-2xl">Every squad on the leaderboard. Click into any team for player profiles and stats.</p>
           </div>
           <Link to="/register-team">
-            <Button data-testid="teams-register-btn" className="bg-[#007AFF] hover:bg-[#0066d6] rounded-sm">+ Register team</Button>
+            <Button data-testid="teams-register-btn" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">+ Register team</Button>
           </Link>
         </div>
 

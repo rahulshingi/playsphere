@@ -80,15 +80,15 @@ export default function Admin() {
 
         <Tabs defaultValue="events" className="mt-10">
           <TabsList className="bg-[#141414] border border-white/10 rounded-sm">
-            <TabsTrigger value="events" data-testid="admin-tab-events" className="data-[state=active]:bg-[#007AFF] rounded-sm">Events</TabsTrigger>
-            <TabsTrigger value="teams" data-testid="admin-tab-teams" className="data-[state=active]:bg-[#007AFF] rounded-sm">Teams</TabsTrigger>
-            <TabsTrigger value="sponsors" data-testid="admin-tab-sponsors" className="data-[state=active]:bg-[#007AFF] rounded-sm">Sponsors</TabsTrigger>
+            <TabsTrigger value="events" data-testid="admin-tab-events" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Events</TabsTrigger>
+            <TabsTrigger value="teams" data-testid="admin-tab-teams" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Teams</TabsTrigger>
+            <TabsTrigger value="sponsors" data-testid="admin-tab-sponsors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sponsors</TabsTrigger>
           </TabsList>
 
           <TabsContent value="events" className="mt-6">
             <div className="grid md:grid-cols-2 gap-6">
               <form onSubmit={createEvent} className="border border-white/10 rounded-sm p-6 bg-[#141414] space-y-3">
-                <div className="font-display tracking-wider text-2xl flex items-center gap-2"><Plus className="w-4 h-4 text-[#007AFF]" /> NEW EVENT</div>
+                <div className="font-display tracking-wider text-2xl flex items-center gap-2"><Plus className="w-4 h-4 text-[#84CC16]" /> NEW EVENT</div>
                 <Input data-testid="admin-event-name" placeholder="Name" value={newEvent.name} onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })} required className="bg-black/40 border-white/10 text-white" />
                 <Textarea data-testid="admin-event-desc" placeholder="Description" value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 <div className="grid grid-cols-2 gap-2">
@@ -108,7 +108,7 @@ export default function Admin() {
                 </div>
                 <Input data-testid="admin-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 <Input data-testid="admin-event-banner" placeholder="Banner image URL" value={newEvent.banner_url} onChange={(e) => setNewEvent({ ...newEvent, banner_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
-                <Button data-testid="admin-create-event-btn" type="submit" className="w-full bg-[#007AFF] hover:bg-[#0066d6] rounded-sm">Create</Button>
+                <Button data-testid="admin-create-event-btn" type="submit" className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Create</Button>
               </form>
 
               <div className="space-y-2">
@@ -119,7 +119,7 @@ export default function Admin() {
                       <div className="text-xs font-mono text-neutral-500 uppercase">{e.sport} · {e.format.replace("_", " ")}</div>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => nav(`/events/${e.id}`)} className="text-[#007AFF]">Open</Button>
+                      <Button size="sm" variant="ghost" onClick={() => nav(`/events/${e.id}`)} className="text-[#84CC16]">Open</Button>
                       <Button size="sm" variant="ghost" data-testid={`admin-delete-event-${e.id}`} onClick={async () => {
                         if (window.confirm(`Delete ${e.name}?`)) { await api.delete(`/events/${e.id}`); loadAll(); toast.success("Deleted"); }
                       }} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
@@ -142,7 +142,7 @@ export default function Admin() {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => nav(`/teams/${t.id}`)} className="text-[#007AFF]">View</Button>
+                    <Button size="sm" variant="ghost" onClick={() => nav(`/teams/${t.id}`)} className="text-[#84CC16]">View</Button>
                     <Button size="sm" variant="ghost" data-testid={`admin-delete-team-${t.id}`} onClick={async () => {
                       if (window.confirm(`Delete ${t.name}?`)) { await api.delete(`/teams/${t.id}`); loadAll(); toast.success("Deleted"); }
                     }} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
@@ -155,7 +155,7 @@ export default function Admin() {
           <TabsContent value="sponsors" className="mt-6">
             <div className="grid md:grid-cols-2 gap-6">
               <form onSubmit={createSponsor} className="border border-white/10 rounded-sm p-6 bg-[#141414] space-y-3">
-                <div className="font-display tracking-wider text-2xl flex items-center gap-2"><Plus className="w-4 h-4 text-[#007AFF]" /> NEW SPONSOR</div>
+                <div className="font-display tracking-wider text-2xl flex items-center gap-2"><Plus className="w-4 h-4 text-[#84CC16]" /> NEW SPONSOR</div>
                 <Input data-testid="admin-sponsor-name" placeholder="Name" value={newSponsor.name} onChange={(e) => setNewSponsor({ ...newSponsor, name: e.target.value })} required className="bg-black/40 border-white/10 text-white" />
                 <Input data-testid="admin-sponsor-logo" placeholder="Logo URL" value={newSponsor.logo_url} onChange={(e) => setNewSponsor({ ...newSponsor, logo_url: e.target.value })} required className="bg-black/40 border-white/10 text-white" />
                 <Input data-testid="admin-sponsor-website" placeholder="Website" value={newSponsor.website} onChange={(e) => setNewSponsor({ ...newSponsor, website: e.target.value })} className="bg-black/40 border-white/10 text-white" />
@@ -169,7 +169,7 @@ export default function Admin() {
                   </SelectContent>
                 </Select>
                 <Textarea data-testid="admin-sponsor-desc" placeholder="Description" value={newSponsor.description} onChange={(e) => setNewSponsor({ ...newSponsor, description: e.target.value })} className="bg-black/40 border-white/10 text-white" />
-                <Button data-testid="admin-create-sponsor-btn" type="submit" className="w-full bg-[#007AFF] hover:bg-[#0066d6] rounded-sm">Add sponsor</Button>
+                <Button data-testid="admin-create-sponsor-btn" type="submit" className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Add sponsor</Button>
               </form>
 
               <div className="space-y-2">

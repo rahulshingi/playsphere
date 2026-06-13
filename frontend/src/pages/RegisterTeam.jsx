@@ -10,12 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
-const COLORS = ["#007AFF", "#FF3B30", "#10B981", "#F59E0B", "#A855F7", "#EC4899", "#06B6D4", "#FFFFFF"];
+const COLORS = ["#84CC16", "#FF3B30", "#10B981", "#F59E0B", "#A855F7", "#EC4899", "#06B6D4", "#FFFFFF"];
 
 export default function RegisterTeam() {
   const nav = useNavigate();
   const [events, setEvents] = useState([]);
-  const [form, setForm] = useState({ name: "", department: "", captain: "", color: "#007AFF", event_id: "", logo_url: "" });
+  const [form, setForm] = useState({ name: "", department: "", captain: "", color: "#84CC16", event_id: "", logo_url: "" });
   const [players, setPlayers] = useState([{ name: "", role: "", jersey: "" }]);
   const [busy, setBusy] = useState(false);
 
@@ -48,7 +48,7 @@ export default function RegisterTeam() {
     <div className="bg-[#0a0a0a] min-h-screen text-white">
       <Nav />
       <div className="max-w-3xl mx-auto px-6 pt-16 pb-24">
-        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#007AFF]">/ New squad</div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ New squad</div>
         <h1 className="font-display text-6xl tracking-wide mt-3">REGISTER YOUR TEAM</h1>
         <p className="text-neutral-400 mt-3">Add your team, pick an event, and lock in your roster.</p>
 
@@ -86,7 +86,7 @@ export default function RegisterTeam() {
           <div>
             <div className="flex items-center justify-between mb-3">
               <Label className="text-xs font-mono uppercase text-neutral-500">Roster (optional)</Label>
-              <Button type="button" size="sm" variant="ghost" data-testid="rt-add-player" onClick={() => setPlayers([...players, { name: "", role: "", jersey: "" }])} className="text-[#007AFF]">+ Add player</Button>
+              <Button type="button" size="sm" variant="ghost" data-testid="rt-add-player" onClick={() => setPlayers([...players, { name: "", role: "", jersey: "" }])} className="text-[#84CC16]">+ Add player</Button>
             </div>
             <div className="space-y-2">
               {players.map((p, i) => (
@@ -99,7 +99,7 @@ export default function RegisterTeam() {
             </div>
           </div>
 
-          <Button type="submit" disabled={busy} data-testid="rt-submit" className="w-full bg-[#007AFF] hover:bg-[#0066d6] h-12 rounded-sm">
+          <Button type="submit" disabled={busy} data-testid="rt-submit" className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold h-12 rounded-sm">
             {busy ? "Registering..." : "Register team"}
           </Button>
         </form>

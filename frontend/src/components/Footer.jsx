@@ -5,9 +5,14 @@ export default function Footer() {
     <footer data-testid="site-footer" className="border-t border-white/10 mt-24">
       <div className="max-w-7xl mx-auto px-6 py-12 grid md:grid-cols-4 gap-8">
         <div>
-          <div className="font-display text-3xl tracking-wider">PLAYSPHERE</div>
-          <p className="text-xs text-neutral-500 font-mono mt-1 tracking-wide">
-            WHERE TEAMS COMPETE, CONNECT &amp; GROW
+          <div className="flex items-center gap-3">
+            <img src="https://customer-assets.emergentagent.com/job_live-scoring-hub-5/artifacts/4vqrrfy3_Playsphere%20logo%20main.png" alt="PlaySphere" className="w-12 h-12 object-contain" />
+            <div className="font-display text-3xl tracking-wider">
+              <span className="text-white">PLAY</span><span className="text-[#84CC16]">SPHERE</span>
+            </div>
+          </div>
+          <p className="text-xs font-mono mt-3 tracking-wide">
+            <span className="text-[#EC4899]">WHERE TEAMS COMPETE,</span> <span className="text-[#84CC16]">CONNECT</span> &amp; <span className="text-[#06B6D4]">GROW</span>
           </p>
           <p className="text-sm text-neutral-400 mt-4 max-w-xs">
             Employee engagement, built for teams that play to win — together.
@@ -16,17 +21,17 @@ export default function Footer() {
         <div>
           <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Platform</div>
           <ul className="space-y-2 text-sm">
-            <li><Link className="hover:text-[#007AFF]" to="/events">Events</Link></li>
-            <li><Link className="hover:text-[#007AFF]" to="/teams">Teams</Link></li>
-            <li><Link className="hover:text-[#007AFF]" to="/standings">Standings</Link></li>
-            <li><Link className="hover:text-[#007AFF]" to="/sponsors">Sponsors</Link></li>
+            <li><Link className="hover:text-[#84CC16]" to="/events">Events</Link></li>
+            <li><Link className="hover:text-[#84CC16]" to="/teams">Teams</Link></li>
+            <li><Link className="hover:text-[#84CC16]" to="/standings">Standings</Link></li>
+            <li><Link className="hover:text-[#84CC16]" to="/sponsors">Sponsors</Link></li>
           </ul>
         </div>
         <div>
           <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Get Involved</div>
           <ul className="space-y-2 text-sm">
-            <li><Link className="hover:text-[#007AFF]" to="/register-team">Register a team</Link></li>
-            <li><Link className="hover:text-[#007AFF]" to="/login">Admin sign in</Link></li>
+            <li><Link className="hover:text-[#84CC16]" to="/register-team">Register a team</Link></li>
+            <li><Link className="hover:text-[#84CC16]" to="/login">Admin sign in</Link></li>
           </ul>
         </div>
         <div>

@@ -17,7 +17,7 @@ export default function Events() {
     <div className="bg-[#0a0a0a] text-white min-h-screen">
       <Nav />
       <div className="max-w-7xl mx-auto px-6 pt-16 pb-24">
-        <div className="font-mono text-[10px] tracking-[0.3em] text-[#007AFF] uppercase">/ Tournaments</div>
+        <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ Tournaments</div>
         <h1 className="font-display text-6xl tracking-wide mt-3">ALL EVENTS</h1>
         <p className="text-neutral-400 mt-3 max-w-2xl">Multi-sport, multi-format, multi-team — every season's lineup at a glance.</p>
 
@@ -28,7 +28,7 @@ export default function Events() {
               data-testid={`events-filter-${s}`}
               onClick={() => setFilter(s)}
               className={`px-3 py-1.5 text-xs font-mono uppercase tracking-widest rounded-sm transition ${
-                filter === s ? "bg-[#007AFF] text-white" : "text-neutral-400 hover:text-white"
+                filter === s ? "bg-[#84CC16] text-black" : "text-neutral-400 hover:text-white"
               }`}
             >
               {s}
@@ -59,7 +59,7 @@ export default function Events() {
                 )}
               </div>
               <div className="p-5">
-                <h3 className="text-xl font-semibold group-hover:text-[#007AFF]">{e.name}</h3>
+                <h3 className="text-xl font-semibold group-hover:text-[#84CC16]">{e.name}</h3>
                 <p className="text-sm text-neutral-400 mt-2 line-clamp-2">{e.description}</p>
                 <div className="flex items-center justify-between mt-4 text-xs font-mono text-neutral-500 uppercase">
                   <span>{e.venue || "TBD"}</span>

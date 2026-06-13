@@ -58,7 +58,7 @@ export default function LiveScorer({ fixture, event, teamMap, onClose, onSaved }
                   key={s}
                   data-testid={`status-${s}`}
                   onClick={() => setStatus(s)}
-                  className={`px-3 py-1.5 text-xs font-mono uppercase rounded-sm border ${status === s ? "bg-[#007AFF] border-[#007AFF] text-white" : "border-white/10 text-neutral-400"}`}
+                  className={`px-3 py-1.5 text-xs font-mono uppercase rounded-sm border ${status === s ? "bg-[#84CC16] border-[#84CC16] text-black" : "border-white/10 text-neutral-400"}`}
                 >
                   {s}
                 </button>
@@ -68,8 +68,8 @@ export default function LiveScorer({ fixture, event, teamMap, onClose, onSaved }
           <div>
             <Label className="text-xs font-mono uppercase text-neutral-500">Winner (on completion)</Label>
             <div className="flex gap-2 mt-2">
-              <button data-testid="winner-a" onClick={() => setWinnerId(a?.id)} className={`px-3 py-1.5 text-xs uppercase rounded-sm border ${winnerId === a?.id ? "bg-[#007AFF] border-[#007AFF]" : "border-white/10 text-neutral-400"}`}>{a?.name || "A"}</button>
-              <button data-testid="winner-b" onClick={() => setWinnerId(b?.id)} className={`px-3 py-1.5 text-xs uppercase rounded-sm border ${winnerId === b?.id ? "bg-[#007AFF] border-[#007AFF]" : "border-white/10 text-neutral-400"}`}>{b?.name || "B"}</button>
+              <button data-testid="winner-a" onClick={() => setWinnerId(a?.id)} className={`px-3 py-1.5 text-xs uppercase rounded-sm border ${winnerId === a?.id ? "bg-[#84CC16] border-[#84CC16]" : "border-white/10 text-neutral-400"}`}>{a?.name || "A"}</button>
+              <button data-testid="winner-b" onClick={() => setWinnerId(b?.id)} className={`px-3 py-1.5 text-xs uppercase rounded-sm border ${winnerId === b?.id ? "bg-[#84CC16] border-[#84CC16]" : "border-white/10 text-neutral-400"}`}>{b?.name || "B"}</button>
               <button data-testid="winner-clear" onClick={() => setWinnerId("")} className="px-3 py-1.5 text-xs uppercase rounded-sm border border-white/10 text-neutral-400">Clear</button>
             </div>
           </div>
@@ -173,7 +173,7 @@ function NumberField({ label, value, onChange, step = 1, max, testid }) {
       <div className="flex items-center gap-1 mt-1">
         <Button type="button" size="sm" variant="outline" data-testid={`${testid}-dec`} className="h-9 w-9 p-0 border-white/10 bg-transparent text-white" onClick={() => onChange(Math.max(0, Number((value - step).toFixed(1))))}>−</Button>
         <Input data-testid={testid} value={value} onChange={(e) => onChange(Number(e.target.value) || 0)} className="h-9 text-center font-mono bg-black/40 border-white/10 text-white" />
-        <Button type="button" size="sm" data-testid={`${testid}-inc`} className="h-9 w-9 p-0 bg-[#007AFF] hover:bg-[#0066d6] rounded-sm" onClick={() => {
+        <Button type="button" size="sm" data-testid={`${testid}-inc`} className="h-9 w-9 p-0 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm" onClick={() => {
           const nv = Number((value + step).toFixed(1));
           if (max !== undefined && nv > max) return;
           onChange(nv);

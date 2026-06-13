@@ -77,8 +77,8 @@ export default function Home() {
           </div>
           <h1 className="font-display text-6xl md:text-8xl lg:text-9xl mt-6 leading-[0.92] tracking-wide max-w-4xl">
             WHERE TEAMS<br />
-            <span className="text-[#007AFF]">COMPETE,</span> CONNECT<br />
-            &amp; GROW.
+            <span className="text-[#EC4899]">COMPETE,</span> <span className="text-[#84CC16]">CONNECT</span><br />
+            &amp; <span className="text-[#06B6D4]">GROW.</span>
           </h1>
           <p className="mt-8 max-w-xl text-neutral-300 text-lg leading-relaxed">
             PlaySphere turns workplace tournaments into rituals — sports, quizzes, hackathons, all in one
@@ -86,7 +86,7 @@ export default function Home() {
           </p>
           <div className="mt-10 flex flex-wrap gap-3">
             <Link to="/register-team">
-              <Button data-testid="hero-register-btn" size="lg" className="bg-[#007AFF] hover:bg-[#0066d6] rounded-sm px-7 h-12">
+              <Button data-testid="hero-register-btn" size="lg" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm px-7 h-12">
                 Register Your Team <ArrowRight className="ml-2 w-4 h-4" />
               </Button>
             </Link>
@@ -127,7 +127,7 @@ export default function Home() {
               <div className="font-mono text-[10px] tracking-[0.3em] text-[#FF3B30] uppercase">● Live Zone</div>
               <h2 className="font-display text-5xl mt-2 tracking-wide">HAPPENING NOW</h2>
             </div>
-            <Link to="/events" className="text-sm text-neutral-400 hover:text-[#007AFF]">View all →</Link>
+            <Link to="/events" className="text-sm text-neutral-400 hover:text-[#84CC16]">View all →</Link>
           </div>
           <div className="grid md:grid-cols-3 gap-4">
             {liveFixtures.map((f) => (
@@ -139,7 +139,7 @@ export default function Home() {
 
       {/* FEATURES Bento */}
       <section className="max-w-7xl mx-auto px-6 py-20">
-        <div className="font-mono text-[10px] tracking-[0.3em] text-[#007AFF] uppercase">/ Platform</div>
+        <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ Platform</div>
         <h2 className="font-display text-5xl mt-2 tracking-wide">EVERYTHING TO RUN THE SEASON</h2>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-12">
@@ -158,7 +158,7 @@ export default function Home() {
             <div className="font-mono text-[10px] tracking-[0.3em] text-neutral-500 uppercase">/ Calendar</div>
             <h2 className="font-display text-5xl mt-2 tracking-wide">UPCOMING EVENTS</h2>
           </div>
-          <Link to="/events" className="text-sm text-neutral-400 hover:text-[#007AFF]" data-testid="home-view-all-events">View all →</Link>
+          <Link to="/events" className="text-sm text-neutral-400 hover:text-[#84CC16]" data-testid="home-view-all-events">View all →</Link>
         </div>
         <div className="grid md:grid-cols-3 gap-5">
           {events.map((e) => (
@@ -178,7 +178,7 @@ export default function Home() {
                   </span>
                   <span className="font-mono text-[10px] uppercase text-neutral-500">{e.status}</span>
                 </div>
-                <h3 className="text-lg font-semibold mt-3 group-hover:text-[#007AFF] transition-colors">{e.name}</h3>
+                <h3 className="text-lg font-semibold mt-3 group-hover:text-[#84CC16] transition-colors">{e.name}</h3>
                 <p className="text-sm text-neutral-400 mt-1 line-clamp-2">{e.description}</p>
               </div>
             </Link>
@@ -194,7 +194,7 @@ export default function Home() {
 function FeatureCard({ icon: Icon, title, desc, accent, big, className = "" }) {
   return (
     <div className={`relative p-8 rounded-sm border border-white/10 bg-[#141414] hover-lift ${className} ${big ? "md:p-10" : ""}`}>
-      <Icon className={`w-5 h-5 ${accent ? "text-[#FF3B30]" : "text-[#007AFF]"}`} />
+      <Icon className={`w-5 h-5 ${accent ? "text-[#FF3B30]" : "text-[#84CC16]"}`} />
       <div className="font-display tracking-wider text-2xl mt-4">{title}</div>
       <p className="text-sm text-neutral-400 mt-3 max-w-xs leading-relaxed">{desc}</p>
       {big && (

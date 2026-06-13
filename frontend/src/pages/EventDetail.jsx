@@ -75,13 +75,13 @@ export default function EventDetail() {
             {event.venue && <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3" /> {event.venue}</span>}
             {event.start_date && <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3" /> {event.start_date}</span>}
             <span>{teams.length} teams · {fixtures.length} matches</span>
-            <span data-testid="live-stream-indicator" className="flex items-center gap-1.5 text-[#007AFF]">
+            <span data-testid="live-stream-indicator" className="flex items-center gap-1.5 text-[#84CC16]">
               <Wifi className="w-3 h-3" /> LIVE STREAM ON
             </span>
           </div>
           {isAdmin && (
             <div className="mt-6 flex gap-2">
-              <Button data-testid="generate-fixtures-btn" onClick={generate} className="bg-[#007AFF] hover:bg-[#0066d6] rounded-sm">
+              <Button data-testid="generate-fixtures-btn" onClick={generate} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
                 Generate fixtures
               </Button>
             </div>
@@ -92,10 +92,10 @@ export default function EventDetail() {
       <div className="max-w-7xl mx-auto px-6 pb-24">
         <Tabs defaultValue="fixtures">
           <TabsList data-testid="event-tabs" className="bg-[#141414] border border-white/10 rounded-sm">
-            <TabsTrigger value="fixtures" data-testid="tab-fixtures" className="data-[state=active]:bg-[#007AFF] data-[state=active]:text-white rounded-sm">Fixtures</TabsTrigger>
-            <TabsTrigger value="standings" data-testid="tab-standings" className="data-[state=active]:bg-[#007AFF] data-[state=active]:text-white rounded-sm">Standings</TabsTrigger>
-            <TabsTrigger value="teams" data-testid="tab-teams" className="data-[state=active]:bg-[#007AFF] data-[state=active]:text-white rounded-sm">Teams</TabsTrigger>
-            {event.format === "knockout" && <TabsTrigger value="bracket" data-testid="tab-bracket" className="data-[state=active]:bg-[#007AFF] data-[state=active]:text-white rounded-sm">Bracket</TabsTrigger>}
+            <TabsTrigger value="fixtures" data-testid="tab-fixtures" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Fixtures</TabsTrigger>
+            <TabsTrigger value="standings" data-testid="tab-standings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Standings</TabsTrigger>
+            <TabsTrigger value="teams" data-testid="tab-teams" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Teams</TabsTrigger>
+            {event.format === "knockout" && <TabsTrigger value="bracket" data-testid="tab-bracket" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bracket</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="fixtures" className="mt-6">
@@ -166,7 +166,7 @@ function FixtureCard({ fixture, event, teamMap, isAdmin, onScore }) {
       <div className="text-[10px] font-mono text-neutral-600 my-1.5 text-center">VS</div>
       <TeamRow team={b} score={renderScore(event.sport, fixture.score?.team_b)} winner={fixture.winner_id === b?.id} />
       {isAdmin && a && b && (
-        <Button data-testid={`score-fixture-${fixture.id}`} size="sm" onClick={() => onScore(fixture)} className="mt-3 w-full bg-white/5 hover:bg-[#007AFF] text-white rounded-sm border border-white/10">
+        <Button data-testid={`score-fixture-${fixture.id}`} size="sm" onClick={() => onScore(fixture)} className="mt-3 w-full bg-white/5 hover:bg-[#84CC16] text-white rounded-sm border border-white/10">
           Update score
         </Button>
       )}
@@ -225,7 +225,7 @@ function StandingsTable({ standings }) {
               <td className="text-right px-3 font-mono text-emerald-400">{s.won}</td>
               <td className="text-right px-3 font-mono">{s.drawn}</td>
               <td className="text-right px-3 font-mono text-[#FF3B30]">{s.lost}</td>
-              <td className="text-right px-5 font-mono text-[#007AFF] text-lg font-bold">{s.points}</td>
+              <td className="text-right px-5 font-mono text-[#84CC16] text-lg font-bold">{s.points}</td>
             </tr>
           ))}
         </tbody>

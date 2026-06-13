@@ -27,7 +27,7 @@ export default function Login() {
     <div className="bg-[#0a0a0a] min-h-screen text-white">
       <Nav />
       <div className="max-w-md mx-auto px-6 py-20">
-        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#007AFF]">/ Sign in</div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Sign in</div>
         <h1 className="font-display text-5xl tracking-wide mt-2">ENTER THE ARENA</h1>
         <p className="text-neutral-400 mt-2 text-sm">Admin access to manage events, teams and live scoring.</p>
 
@@ -40,13 +40,13 @@ export default function Login() {
             <Label className="text-xs font-mono uppercase text-neutral-500">Password</Label>
             <Input data-testid="login-password" value={password} onChange={(e) => setPassword(e.target.value)} required type="password" className="mt-2 bg-[#141414] border-white/10 text-white" />
           </div>
-          <Button data-testid="login-submit" disabled={busy} className="w-full bg-[#007AFF] hover:bg-[#0066d6] rounded-sm h-11">
+          <Button data-testid="login-submit" disabled={busy} className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm h-11">
             {busy ? "Signing in..." : "Sign in"}
           </Button>
         </form>
 
         <p className="text-xs text-neutral-500 mt-6 text-center">
-          New here? <Link to="/register" className="text-[#007AFF] hover:underline">Create account</Link>
+          New here? <Link to="/register" className="text-[#84CC16] hover:underline">Create account</Link>
         </p>
         <div className="mt-6 p-3 border border-white/10 rounded-sm text-[11px] font-mono text-neutral-400 leading-relaxed">
           Demo admin · admin@playsphere.com / admin123

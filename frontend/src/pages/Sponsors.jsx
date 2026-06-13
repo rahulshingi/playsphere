@@ -4,7 +4,7 @@ import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 
 const tierMeta = {
-  title:  { label: "TITLE PARTNER", color: "#007AFF", size: "lg" },
+  title:  { label: "TITLE PARTNER", color: "#84CC16", size: "lg" },
   gold:   { label: "GOLD",          color: "#F59E0B", size: "md" },
   silver: { label: "SILVER",        color: "#A3A3A3", size: "md" },
   bronze: { label: "BRONZE",        color: "#A16207", size: "sm" },
@@ -22,7 +22,7 @@ export default function Sponsors() {
     <div className="bg-[#0a0a0a] text-white min-h-screen">
       <Nav />
       <div className="max-w-7xl mx-auto px-6 pt-16 pb-24">
-        <div className="font-mono text-[10px] tracking-[0.3em] text-[#007AFF] uppercase">/ Partners</div>
+        <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ Partners</div>
         <h1 className="font-display text-6xl tracking-wide mt-3">OUR SPONSORS</h1>
         <p className="text-neutral-400 mt-3 max-w-2xl">PlaySphere stands on the shoulders of brands that believe in workplace play.</p>
 
@@ -60,8 +60,8 @@ export default function Sponsors() {
           <div className="text-center text-neutral-500 py-32">No sponsors listed yet.</div>
         )}
 
-        <div className="mt-24 border border-white/10 rounded-sm p-10 bg-gradient-to-r from-[#007AFF]/10 to-transparent">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-[#007AFF]">/ Become a sponsor</div>
+        <div className="mt-24 border border-white/10 rounded-sm p-10 bg-gradient-to-r from-[#84CC16]/10 to-transparent">
+          <div className="font-mono text-[10px] uppercase tracking-widest text-[#84CC16]">/ Become a sponsor</div>
           <h2 className="font-display text-4xl tracking-wide mt-3">PUT YOUR BRAND IN THE GAME</h2>
           <p className="text-neutral-300 mt-3 max-w-xl">Reach engaged professionals across every tournament. Email partnerships@playsphere.io</p>
         </div>

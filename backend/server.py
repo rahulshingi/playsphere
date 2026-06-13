@@ -1093,7 +1093,7 @@ async def delete_booking(booking_id: str, user: dict = Depends(get_current_user)
 
 # ---------- Stats ----------
 @api.get("/stats")
-async def get_stats(user: Optional[dict] = None):
+async def get_stats():
     return {
         "events": await db.events.count_documents({}),
         "teams": await db.teams.count_documents({}),

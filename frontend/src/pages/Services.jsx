@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
+import { fmtPrice } from "@/lib/currency";
 
 const categoryMeta = {
   streaming:   { label: "STREAMING",   color: "#EC4899" },
@@ -63,7 +64,7 @@ export default function Services() {
                   <p className="text-sm text-neutral-400 mt-2 line-clamp-2">{s.description}</p>
                   <div className="flex items-end justify-between mt-4">
                     <div>
-                      <div className="font-mono text-2xl text-white">${s.base_price.toFixed(0)}</div>
+                      <div className="font-mono text-2xl text-white">{fmtPrice(s.base_price, s.currency)}</div>
                       <div className="text-[10px] font-mono uppercase text-neutral-500">{s.price_unit}</div>
                     </div>
                     {s.variants?.length > 0 && (

@@ -386,6 +386,7 @@ class Booking(BaseModel):
     base_price: float = 0.0
     variant_price: float = 0.0
     total_price: float = 0.0
+    currency: str = "USD"
     status: BookingStatus = "pending"
     created_by: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -1052,6 +1053,7 @@ async def create_booking(body: BookingCreate, user: dict = Depends(require_compa
         base_price=base_price,
         variant_price=variant_price,
         total_price=total,
+        currency=svc.get("currency", "USD"),
         status="pending",
         created_by=user["id"],
     )

@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { fmtPrice } from "@/lib/currency";
 
 const statusOptions = ["pending", "approved", "fulfilled", "cancelled"];
 
@@ -62,7 +63,7 @@ export default function Bookings() {
                   <td className="px-4 py-3 text-neutral-300">{b.variant_name || "—"}</td>
                   <td className="px-4 py-3 text-neutral-400 max-w-xs">{b.custom_text || "—"}</td>
                   <td className="px-3 py-3 text-right font-mono">{b.quantity}</td>
-                  <td className="px-3 py-3 text-right font-mono text-[#84CC16]">${b.total_price.toFixed(0)}</td>
+                  <td className="px-3 py-3 text-right font-mono text-[#84CC16]">{fmtPrice(b.total_price, b.currency)}</td>
                   <td className="px-4 py-3">
                     {isPlatformAdmin ? (
                       <select data-testid={`booking-status-${b.id}`} value={b.status} onChange={(e) => updateStatus(b.id, e.target.value)} className="bg-black/40 border border-white/10 text-white rounded-sm px-2 py-1 text-xs font-mono uppercase">

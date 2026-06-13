@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
+import { CURRENCIES, fmtPrice } from "@/lib/currency";
 
 const CATEGORIES = ["streaming", "apparel", "merchandise", "awards", "venue", "equipment", "training", "other"];
 
@@ -95,7 +96,7 @@ export default function PlatformAdmin() {
                   <img src={s.images?.[0] || "https://placehold.co/80x80/141414/84CC16?text=PS"} className="w-12 h-12 object-cover rounded-sm" alt="" />
                   <div>
                     <div className="font-semibold">{s.name}{!s.active && <span className="ml-2 text-[10px] uppercase font-mono text-amber-400">INACTIVE</span>}</div>
-                    <div className="text-xs font-mono text-neutral-500 uppercase">{s.category} · ${s.base_price} {s.price_unit}</div>
+                    <div className="text-xs font-mono text-neutral-500 uppercase">{s.category} · {fmtPrice(s.base_price, s.currency)} {s.price_unit}</div>
                   </div>
                 </div>
                 <div className="flex gap-2">
@@ -122,7 +123,7 @@ export default function PlatformAdmin() {
                 <div key={b.id} className="border border-white/10 rounded-sm p-4 bg-[#141414]">
                   <div className="text-[10px] font-mono uppercase text-neutral-500">{b.company_name}</div>
                   <div className="font-semibold mt-1">{b.service_name}</div>
-                  <div className="text-xs text-neutral-400 mt-1">qty {b.quantity} · ${b.total_price.toFixed(0)} · {b.status}</div>
+                  <div className="text-xs text-neutral-400 mt-1">qty {b.quantity} · {fmtPrice(b.total_price, b.currency)} · {b.status}</div>
                 </div>
               ))}
             </div>
@@ -167,7 +168,15 @@ function ServiceEditor({ service, setService, onSave, onClose }) {
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Base price (USD)"><Input data-testid="svc-price" type="number" min={0} value={service.base_price} onChange={(e) => upd({ base_price: e.target.value })} className="bg-black/40 border-white/10 text-white" /></Field>
+          <Field label="Currency">
+            <Select value={service.currency || "USD"} onValueChange={(v) => upd({ currency: v })}>
+              <SelectTrigger data-testid="svc-currency" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
+              <SelectContent className="bg-[#141414] text-white border-white/10">
+                {CURRENCIES.map((c) => <SelectItem key={c.code} value={c.code}>{c.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+          <Field label={`Base price (${service.currency || "USD"})`}><Input data-testid="svc-price" type="number" min={0} value={service.base_price} onChange={(e) => upd({ base_price: e.target.value })} className="bg-black/40 border-white/10 text-white" /></Field>
           <Field label="Price unit"><Input data-testid="svc-unit" value={service.price_unit} onChange={(e) => upd({ price_unit: e.target.value })} className="bg-black/40 border-white/10 text-white" /></Field>
         </div>
         <Field label="Description"><Textarea data-testid="svc-desc" value={service.description} onChange={(e) => upd({ description: e.target.value })} className="bg-black/40 border-white/10 text-white" /></Field>

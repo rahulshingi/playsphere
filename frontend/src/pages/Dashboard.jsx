@@ -6,6 +6,7 @@ import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { CalendarDays, Users, Activity, Package, Plus, ChevronRight } from "lucide-react";
+import { fmtPrice } from "@/lib/currency";
 
 export default function Dashboard() {
   const { ready, isCompanyAdmin, companyName, user } = useAuth();
@@ -80,7 +81,7 @@ export default function Dashboard() {
                   <div className="text-[10px] font-mono uppercase text-neutral-500">qty {b.quantity} · {b.variant_name || "—"}</div>
                 </div>
                 <div className="text-right">
-                  <div className="font-mono">${b.total_price.toFixed(0)}</div>
+                  <div className="font-mono">{fmtPrice(b.total_price, b.currency)}</div>
                   <StatusPill status={b.status} />
                 </div>
               </div>

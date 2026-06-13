@@ -121,7 +121,7 @@ export default function ServiceDetail() {
                         <div className="p-3">
                           <div className="text-sm font-medium">{v.name}</div>
                           <div className="font-mono text-xs text-neutral-400 mt-0.5">
-                            {v.extra_price === 0 ? "Included" : v.extra_price > 0 ? `+ $${v.extra_price.toFixed(2)}` : `- $${Math.abs(v.extra_price).toFixed(2)}`}
+                            {v.extra_price === 0 ? "Included" : v.extra_price > 0 ? `+ ${fmtPrice(v.extra_price, service.currency)}` : `- ${fmtPrice(Math.abs(v.extra_price), service.currency)}`}
                           </div>
                         </div>
                       </button>
@@ -136,7 +136,7 @@ export default function ServiceDetail() {
           <form onSubmit={submit} className="lg:col-span-2 border border-white/10 rounded-sm bg-[#141414] p-6 h-fit lg:sticky lg:top-24 space-y-4">
             <div className="flex items-end justify-between">
               <div>
-                <div className="font-display text-4xl tracking-wider">${total.toFixed(0)}</div>
+                <div className="font-display text-4xl tracking-wider">{fmtPrice(total, service.currency)}</div>
                 <div className="text-[10px] font-mono uppercase text-neutral-500">{service.price_unit}{quantity > 1 ? ` × ${quantity}` : ""}</div>
               </div>
               <div className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm bg-[#84CC16]/10 text-[#84CC16] border border-[#84CC16]/30">Request Quote</div>
@@ -206,5 +206,8 @@ export default function ServiceDetail() {
       </div>
       <Footer />
     </div>
+  );
+}
+iv>
   );
 }

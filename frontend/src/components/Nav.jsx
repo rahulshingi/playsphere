@@ -3,7 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { LogOut, Shield } from "lucide-react";
 
-const LOGO_URL = "https://customer-assets.emergentagent.com/job_live-scoring-hub-5/artifacts/4vqrrfy3_Playsphere%20logo%20main.png";
+const LOGO_URL = "/playsphere-mark.png";
 
 const navItems = [
   { to: "/", label: "Home" },

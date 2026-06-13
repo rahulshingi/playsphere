@@ -6,7 +6,7 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6 py-12 grid md:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-3">
-            <img src="https://customer-assets.emergentagent.com/job_live-scoring-hub-5/artifacts/4vqrrfy3_Playsphere%20logo%20main.png" alt="PlaySphere" className="w-12 h-12 object-contain" />
+            <img src="/playsphere-mark.png" alt="PlaySphere" className="w-12 h-12 object-contain" />
             <div className="font-display text-3xl tracking-wider">
               <span className="text-white">PLAY</span><span className="text-[#84CC16]">SPHERE</span>
             </div>

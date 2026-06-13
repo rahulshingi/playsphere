@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 3 (currency + 17-service catalog) verified end-to-end. Backend: 65/65 pytest tests pass across backend_test.py (31), test_multitenant.py (16) and a new test_currency_catalog.py (18). New tests cover 17-service seed presence, expected USD/INR currency mix, per-new-service required config fields (photography/videography/drone/anchor/dj/catering/medals/banners/first-aid/match-officials), platform_admin PATCH of service.currency USD<->INR, booking auto-population of currency (Anchor/MC INR 12000 -> booking.currency=='INR', total=12000; Photography USD 199 -> 'USD'), idempotent seed (no duplicate names, list count stable). Frontend: /services renders all 17 cards with category badges and correct symbols (₹4,500 / ₹12,000 / ₹18,000 / ₹350 / ₹1,500 INR and $8/$22/$35/$80/$120/$150/$199/$249/$299/$349/$499 USD). Indian locale grouping verified (₹4,500; en-IN active). Acme login -> Anchor/MC detail shows ₹12,000 base, booking submit -> /bookings row shows ₹12,000 INR (PENDING). Custom Medals detail shows 3 variants (gold $0/Included, silver -$2, bronze -$3) with USD live total. PlatformAdmin 'New service' modal has data-testid='svc-currency' Select with USD ($) default and INR option. NOTE: Found & fixed a runtime bug — /services/{id} crashed with 'fmtPrice is not defined' because ServiceDetail.jsx was missing the import; added import { fmtPrice } from '@/lib/currency' and verified service detail + booking flow now works.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/services seed", "issue": "Service named 'First Aid & Paramedic Stand' in seed but request spec referenced 'First Aid'/'First Aid & Medical'. Name is consistent with code; flag only as spec/test alignment."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ServiceDetail.jsx", "issue": "Missing import for fmtPrice — page threw 'fmtPrice is not defined' on every /services/{id} render, completely blocking the booking flow. Fixed by adding `import { fmtPrice } from '@/lib/currency'`.", "selector": "/services/{id}", "priority": "HIGH (now fixed)"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Custom Medals detail", "issues": ["Gold variant image returns broken/empty (Unsplash photo URL likely 404); silver/bronze render fine. Cosmetic only."]},
+      {"screen": "Services catalog", "issues": ["Professional Photography card omits category badge while other OTHER cards render the badge — likely conditional rendering nit; verify Services.jsx badge logic."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_multitenant.py",
+    "/app/backend/tests/test_currency_catalog.py",
+    "/app/test_reports/pytest/all_iter3_results.xml",
+    "/app/test_reports/pytest/currency_results.xml"
+  ],
+  "action_items": [
+    "Verify fix to ServiceDetail.jsx (fmtPrice import added by testing agent) is acceptable; consider committing.",
+    "Optional: rename seed service 'First Aid & Paramedic Stand' or update product/test docs that reference 'First Aid & Medical' so naming is consistent.",
+    "Replace broken Unsplash URL for Custom Medals 'Gold finish' variant image.",
+    "Investigate why Professional Photography card lacks category badge while other OTHER-category cards show it."
+  ],
+  "critical_code_review_comments": [
+    "ServiceDetail.jsx used fmtPrice without importing it — this is exactly the kind of regression that ESLint no-undef should have caught; consider enabling no-undef rule in CI to prevent shipping crashes.",
+    "server.py is now ~1700+ lines including seed_services with 17 large dicts; split out a /app/backend/seed_data/ module to keep server.py focused on routing.",
+    "Booking.currency is silently defaulted to 'USD' in the Booking model — if a future service stores a non-USD/INR currency the frontend symbol map will fall back to '$'. Validate Service.currency on POST/PATCH against CURRENCIES whitelist.",
+    "Idempotent seed inserts by name only; if an existing seed name has its currency/price changed in code, db will not reflect it (silent drift). Consider upsert-by-name when fields change.",
+    "Bookings list endpoint returns all rows for company_admin without pagination — could be slow once bookings grow."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/ServiceDetail.jsx (added missing fmtPrice import)",
+    "/app/backend/tests/test_currency_catalog.py (new — 18 tests)"
+  ],
+  "success_rate": {"backend": "100% (65/65)", "frontend": "100% of tested critical flows after fmtPrice import fix"},
+  "test_credentials": "admin@playsphere.com/admin123 (platform_admin); acme@example.com/acme123 (company_admin Acme Corp); viewer@playsphere.com/viewer123. All verified.",
+  "seed_data_creation": "Used existing seed (idempotent). Created several TEST_ prefixed bookings (Anchor/MC INR, Photography USD) and a TEST_ service for the PATCH currency test — all deleted in teardown. A few historical TEST_ bookings from prior iterations remain visible on the /bookings page (Trophies & Awards rows).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/ -v` for full regression (65 tests across 3 files). The fmtPrice import on ServiceDetail.jsx was missing and was added by this testing agent — re-confirm in repo. Service named 'First Aid & Paramedic Stand' (not 'First Aid & Medical' as per request spec). data-testid additions confirmed: svc-currency on PlatformAdmin new-service modal; service-card-* on /services; booking-submit on detail page; bookings table rows still use total_price column with currency-formatted text. INR Indian grouping verified via Intl en-IN. Idempotent seed means tests must not assume fresh DB — use name lookups, not index-based access.",
+  "rca of the issue": "Bug RCA — ServiceDetail.jsx crash: ServiceDetail.jsx referenced fmtPrice(service.currency,...) at lines 124 and 139 but the file never imported fmtPrice from '@/lib/currency'. React rendered the component and threw ReferenceError: fmtPrice is not defined, surfacing as 'Uncaught runtime errors' overlay and blanking out the booking form. Repro: navigate to /services/{any-id}. Mitigation: added `import { fmtPrice } from '@/lib/currency';` near the existing lucide-react import. Verified service detail renders ₹12,000 for Anchor/MC, booking submits, and /bookings shows the INR row."
+}

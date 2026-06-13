@@ -1299,8 +1299,6 @@ async def seed_demo_data():
 
 
 async def seed_services():
-    if await db.services.count_documents({}) > 0:
-        return
     services = [
         {
             "name": "Live YouTube Streaming",
@@ -1308,6 +1306,7 @@ async def seed_services():
             "description": "Multi-camera live broadcast on YouTube with on-screen scoreboard, replays and commentary.",
             "images": ["https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=900"],
             "base_price": 499.0,
+            "currency": "USD",
             "price_unit": "per match",
             "config_fields": [
                 {"key": "cameras", "label": "Number of cameras", "type": "number", "min": 1, "max": 8, "default": "2", "required": True},
@@ -1324,6 +1323,7 @@ async def seed_services():
             "description": "Premium dry-fit team jerseys, fully customisable with team name, sponsor logos and player numbers.",
             "images": ["https://images.unsplash.com/photo-1556906781-9a412961c28c?w=900"],
             "base_price": 22.0,
+            "currency": "USD",
             "price_unit": "per piece",
             "config_fields": [
                 {"key": "size_mix", "label": "Size mix (e.g., 4S, 6M, 5L, 1XL)", "type": "text", "required": True},
@@ -1342,6 +1342,7 @@ async def seed_services():
             "description": "Embroidered team caps; available in snapback, baseball and bucket styles.",
             "images": ["https://images.unsplash.com/photo-1521369909029-2afed882baee?w=900"],
             "base_price": 9.0,
+            "currency": "USD",
             "price_unit": "per piece",
             "config_fields": [
                 {"key": "quantity_breakdown", "label": "Color split (e.g., 20 black / 10 white)", "type": "text"},
@@ -1359,6 +1360,7 @@ async def seed_services():
             "description": "Premium engraved trophies for tournament winners, runner-up and individual awards.",
             "images": ["https://images.unsplash.com/photo-1567427361984-0cbe7396fc6c?w=900"],
             "base_price": 35.0,
+            "currency": "USD",
             "price_unit": "per trophy",
             "config_fields": [
                 {"key": "height_inches", "label": "Height (inches)", "type": "number", "min": 6, "max": 24, "default": "10"},
@@ -1377,6 +1379,7 @@ async def seed_services():
             "description": "Reserve premium grounds and indoor arenas: cricket, football, badminton courts, basketball.",
             "images": ["https://images.unsplash.com/photo-1459865264687-595d652de67e?w=900"],
             "base_price": 250.0,
+            "currency": "USD",
             "price_unit": "per hour",
             "config_fields": [
                 {"key": "sport", "label": "Sport / surface", "type": "select", "options": ["Cricket", "Football", "Badminton", "Tennis", "Basketball", "Volleyball"], "required": True},
@@ -1393,6 +1396,7 @@ async def seed_services():
             "description": "Rental equipment kit: cricket bats, balls, footballs, badminton rackets, scoreboards, stumps.",
             "images": ["https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=900"],
             "base_price": 80.0,
+            "currency": "USD",
             "price_unit": "per kit / day",
             "config_fields": [
                 {"key": "kit_for", "label": "Kit for", "type": "select", "options": ["Cricket", "Football", "Badminton", "Basketball", "Volleyball", "Mixed"], "required": True},
@@ -1406,8 +1410,9 @@ async def seed_services():
             "name": "Training Kits",
             "category": "training",
             "description": "Pre-tournament conditioning & drills kits: cones, hurdles, agility ladders, coaches on rental.",
-            "images": ["https://images.unsplash.com/photo-1517438476312-10d79c5f25af?w=900"],
+            "images": ["https://images.unsplash.com/photo-1517649763962-0c623066013b?w=900"],
             "base_price": 120.0,
+            "currency": "USD",
             "price_unit": "per session",
             "config_fields": [
                 {"key": "sessions", "label": "Number of sessions", "type": "number", "min": 1, "max": 30, "default": "4", "required": True},
@@ -1417,10 +1422,183 @@ async def seed_services():
             "variants": [],
             "allow_custom_text": True, "custom_text_label": "Focus areas (e.g., fitness, batting, bowling)",
         },
+        # ---- New services (event lifecycle add-ons) ----
+        {
+            "name": "Professional Photography",
+            "category": "other",
+            "description": "DSLR match-day photography with edited gallery delivered within 48 hours.",
+            "images": ["https://images.unsplash.com/photo-1542038784456-1ea8e935640e?w=900"],
+            "base_price": 199.0,
+            "currency": "USD",
+            "price_unit": "per session",
+            "config_fields": [
+                {"key": "photographers", "label": "Number of photographers", "type": "number", "min": 1, "max": 6, "default": "1", "required": True},
+                {"key": "hours", "label": "Coverage hours", "type": "number", "min": 1, "max": 12, "default": "4"},
+                {"key": "deliverable", "label": "Deliverable", "type": "select", "options": ["Online gallery (200+ photos)", "Album + soft copies", "Printed photo book"], "default": "Online gallery (200+ photos)"},
+            ],
+            "variants": [],
+            "allow_custom_text": True, "custom_text_label": "Mood / shot list (e.g., team huddles, candids)",
+        },
+        {
+            "name": "Videography & Highlights Reel",
+            "category": "other",
+            "description": "Edited cinematic highlights reel plus full match recording, broadcast-quality.",
+            "images": ["https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?w=900"],
+            "base_price": 349.0,
+            "currency": "USD",
+            "price_unit": "per match",
+            "config_fields": [
+                {"key": "cameras", "label": "Number of cameras", "type": "number", "min": 1, "max": 4, "default": "2"},
+                {"key": "reel_length_minutes", "label": "Highlights length (minutes)", "type": "number", "min": 1, "max": 10, "default": "3"},
+                {"key": "voiceover", "label": "Voice-over commentary", "type": "select", "options": ["Yes", "No"], "default": "Yes"},
+                {"key": "turnaround", "label": "Turnaround", "type": "select", "options": ["48 hours", "1 week", "2 weeks"], "default": "1 week"},
+            ],
+            "variants": [],
+            "allow_custom_text": True, "custom_text_label": "Music preference / theme",
+        },
+        {
+            "name": "Drone Aerial Coverage",
+            "category": "other",
+            "description": "Aerial cinematography with licensed pilots — opening visuals, action loops, sponsor reveals.",
+            "images": ["https://images.unsplash.com/photo-1473968512647-3e447244af8f?w=900"],
+            "base_price": 299.0,
+            "currency": "USD",
+            "price_unit": "per event",
+            "config_fields": [
+                {"key": "duration_hours", "label": "Flight time (hours)", "type": "number", "min": 1, "max": 8, "default": "2", "required": True},
+                {"key": "footage_format", "label": "Footage", "type": "select", "options": ["4K", "1080p", "Both"], "default": "4K"},
+                {"key": "venue_type", "label": "Venue type", "type": "select", "options": ["Open ground", "Stadium", "Indoor (NA)"], "default": "Open ground"},
+            ],
+            "variants": [],
+            "allow_custom_text": False,
+        },
+        {
+            "name": "Anchor / MC",
+            "category": "other",
+            "description": "Professional emcee to host opening, breaks and prize ceremony — energise the crowd.",
+            "images": ["https://images.unsplash.com/photo-1531058020387-3be344556be6?w=900"],
+            "base_price": 12000.0,
+            "currency": "INR",
+            "price_unit": "per event",
+            "config_fields": [
+                {"key": "language", "label": "Language", "type": "select", "options": ["English", "Hindi", "Bilingual", "Other"], "default": "Bilingual", "required": True},
+                {"key": "hours", "label": "Hours required", "type": "number", "min": 1, "max": 10, "default": "4"},
+                {"key": "experience_level", "label": "Experience level", "type": "select", "options": ["Junior", "Senior", "Celebrity"], "default": "Senior"},
+            ],
+            "variants": [],
+            "allow_custom_text": True, "custom_text_label": "Script highlights / sponsor mentions",
+        },
+        {
+            "name": "DJ & Sound System",
+            "category": "equipment",
+            "description": "DJ + PA system + speakers + wireless mics for tournament announcements and player walk-outs.",
+            "images": ["https://images.unsplash.com/photo-1571266028243-d220c6a89a36?w=900"],
+            "base_price": 18000.0,
+            "currency": "INR",
+            "price_unit": "per day",
+            "config_fields": [
+                {"key": "venue_size", "label": "Venue size", "type": "select", "options": ["Small (<100 ppl)", "Medium (100-500)", "Large (500+)"], "default": "Medium (100-500)"},
+                {"key": "wireless_mics", "label": "Wireless mics", "type": "number", "min": 1, "max": 10, "default": "2"},
+                {"key": "dj_required", "label": "DJ included", "type": "select", "options": ["Yes", "No (sound only)"], "default": "Yes"},
+            ],
+            "variants": [],
+            "allow_custom_text": True, "custom_text_label": "Genre / playlist preferences",
+        },
+        {
+            "name": "Catering & Refreshments",
+            "category": "other",
+            "description": "Match-day meals, snacks, hydration stations for players and audience.",
+            "images": ["https://images.unsplash.com/photo-1555244162-803834f70033?w=900"],
+            "base_price": 350.0,
+            "currency": "INR",
+            "price_unit": "per head",
+            "config_fields": [
+                {"key": "headcount", "label": "Total headcount", "type": "number", "min": 10, "max": 5000, "default": "50", "required": True},
+                {"key": "meal_type", "label": "Meal type", "type": "select", "options": ["Snacks only", "Lunch", "Lunch + snacks", "Full day"], "default": "Lunch + snacks"},
+                {"key": "preference", "label": "Cuisine", "type": "select", "options": ["Veg only", "Veg + Non-veg", "Vegan", "Indian", "Continental", "Mixed"], "default": "Veg + Non-veg"},
+                {"key": "hydration", "label": "Hydration station", "type": "select", "options": ["Yes", "No"], "default": "Yes"},
+            ],
+            "variants": [],
+            "allow_custom_text": True, "custom_text_label": "Allergies / dietary notes",
+        },
+        {
+            "name": "Custom Medals",
+            "category": "awards",
+            "description": "Gold / silver / bronze medals with custom ribbons and engraving — ideal for top 3 across categories.",
+            "images": ["https://images.unsplash.com/photo-1564307713687-d0e1c9c9ef76?w=900"],
+            "base_price": 8.0,
+            "currency": "USD",
+            "price_unit": "per medal",
+            "config_fields": [
+                {"key": "diameter_mm", "label": "Diameter (mm)", "type": "number", "min": 40, "max": 100, "default": "60"},
+                {"key": "ribbon_color", "label": "Ribbon color", "type": "text", "default": "Blue"},
+            ],
+            "variants": [
+                {"id": "medal-gold", "name": "Gold finish", "image_url": "https://images.unsplash.com/photo-1556910638-aaf3b3e8eaf3?w=600", "extra_price": 0.0},
+                {"id": "medal-silver", "name": "Silver finish", "image_url": "https://images.unsplash.com/photo-1503602642458-232111445657?w=600", "extra_price": -2.0},
+                {"id": "medal-bronze", "name": "Bronze finish", "image_url": "https://images.unsplash.com/photo-1571388208497-71bedc66e932?w=600", "extra_price": -3.0},
+            ],
+            "allow_custom_text": True, "custom_text_label": "Engraving (e.g., '1st Place — Spring Cup 2026')",
+        },
+        {
+            "name": "Banners & Venue Branding",
+            "category": "merchandise",
+            "description": "Flex banners, standees, sponsor backdrops, finish-line tapes — high-resolution print.",
+            "images": ["https://images.unsplash.com/photo-1568288860824-b7c7c45ee83b?w=900"],
+            "base_price": 1500.0,
+            "currency": "INR",
+            "price_unit": "per piece",
+            "config_fields": [
+                {"key": "size", "label": "Size (W × H ft)", "type": "text", "default": "8 × 4", "required": True},
+                {"key": "material", "label": "Material", "type": "select", "options": ["Flex (outdoor)", "Vinyl (indoor)", "Fabric (premium)"], "default": "Flex (outdoor)"},
+            ],
+            "variants": [
+                {"id": "banner-flex", "name": "Roll-up Standee", "image_url": "https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600", "extra_price": 0.0},
+                {"id": "banner-back", "name": "Backdrop", "image_url": "https://images.unsplash.com/photo-1607344645866-009c320b63e0?w=600", "extra_price": 800.0},
+                {"id": "banner-flag", "name": "Feather Flag", "image_url": "https://images.unsplash.com/photo-1517649763962-0c623066013b?w=600", "extra_price": 300.0},
+            ],
+            "allow_custom_text": True, "custom_text_label": "Print text / sponsor list",
+        },
+        {
+            "name": "First Aid & Paramedic Stand",
+            "category": "other",
+            "description": "On-ground first responder + stocked medical kit + ambulance on standby for tournament safety.",
+            "images": ["https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=900"],
+            "base_price": 150.0,
+            "currency": "USD",
+            "price_unit": "per day",
+            "config_fields": [
+                {"key": "paramedics", "label": "Paramedics required", "type": "number", "min": 1, "max": 6, "default": "1", "required": True},
+                {"key": "ambulance_standby", "label": "Ambulance on standby", "type": "select", "options": ["Yes", "No"], "default": "Yes"},
+                {"key": "hours", "label": "Hours required", "type": "number", "min": 2, "max": 12, "default": "6"},
+            ],
+            "variants": [],
+            "allow_custom_text": False,
+        },
+        {
+            "name": "Match Officials & Umpires",
+            "category": "training",
+            "description": "Certified umpires, referees and scorekeepers — hire neutral officials for fair play.",
+            "images": ["https://images.unsplash.com/photo-1530549387789-4c1017266635?w=900"],
+            "base_price": 4500.0,
+            "currency": "INR",
+            "price_unit": "per match",
+            "config_fields": [
+                {"key": "sport", "label": "Sport", "type": "select", "options": ["Cricket", "Football", "Badminton", "Basketball", "Volleyball", "Other"], "required": True},
+                {"key": "officials_count", "label": "Number of officials", "type": "number", "min": 1, "max": 6, "default": "2", "required": True},
+                {"key": "certification", "label": "Certification level", "type": "select", "options": ["State", "National", "International"], "default": "State"},
+            ],
+            "variants": [],
+            "allow_custom_text": False,
+        },
     ]
+    inserted = 0
     for s in services:
-        await db.services.insert_one(Service(**s).model_dump())
-    logger.info(f"Seeded {len(services)} services")
+        if not await db.services.find_one({"name": s["name"]}):
+            await db.services.insert_one(Service(**s).model_dump())
+            inserted += 1
+    if inserted:
+        logger.info(f"Seeded {inserted} new services (total {len(services)} defined)")
 
 
 @app.on_event("startup")

@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { Check } from "lucide-react";
+import { fmtPrice } from "@/lib/currency";
 
 export default function ServiceDetail() {
   const { id } = useParams();
@@ -206,8 +207,5 @@ export default function ServiceDetail() {
       </div>
       <Footer />
     </div>
-  );
-}
-iv>
   );
 }

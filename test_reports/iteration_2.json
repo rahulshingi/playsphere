@@ -1,0 +1,46 @@
+{
+  "summary": "PlaySphere multi-tenant iteration verified end-to-end. Backend: 47/47 pytest tests pass (31 legacy + 16 new for companies/services/bookings/tenancy/stats). New backend_test additions cover company signup, role checks (platform_admin/company_admin), 7-service seed catalog with Trophies variants (gold/crystal/silver/medal), services CRUD RBAC, booking pricing (Trophy gold qty=3 -> $105, crystal +18 qty=2 -> $106), per-company booking scoping, status RBAC drop for company_admin, owner delete, event tenancy stamping & cross-company 403, /api/stats globals & /api/stats/company scoping. Frontend: services catalog renders 7 cards with category filter; service detail variant gallery + dynamic fields + custom text + live total works ($105 verified for gold/3/12in); booking submit redirects to /bookings with new pending row; Acme login -> /dashboard, admin login -> /platform-admin with all tabs; company signup creates tenant and lands on /dashboard with company name shown.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "Role rename admin -> platform_admin", "issue": "seed_admin now sets role=platform_admin. Pre-existing test assertions in backend_test.py expected role=='admin' and broke (fixed in this iteration by updating assertions). Any external clients hard-coded to 'admin' will need updates."},
+      {"endpoint": "GET /api/stats", "issue": "Accepts an undocumented `user: Optional[dict] = None` query-style parameter which FastAPI tries to bind. Currently harmless (returns None default), but it is dead code and could surface as a query parser quirk; remove the parameter."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Global", "issues": ["Unauthenticated initial /api/auth/me still produces a 401 in console (existing minor noise, not new)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_multitenant.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/multitenant_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Remove dead `user: Optional[dict] = None` parameter from GET /api/stats handler.",
+    "(Optional) Suppress 401 console noise from AuthContext probe on first render.",
+    "(Optional) Split server.py (~1440 lines) into routers/auth, routers/services, routers/bookings, routers/events for maintainability."
+  ],
+  "critical_code_review_comments": [
+    "server.py now ~1440 lines — exceeds 700-line threshold. Split into modular routers + a services/seed module.",
+    "Booking pricing logic ignores trying to clamp negative variant_price (medal = -20). Currently fine because no negative-total scenario, but worth a min(0, total) guard or explicit allow.",
+    "`update_booking` silently drops status changes for company_admin (per spec). Consider returning 200 with explicit warning or 403 instead of silent drop; silent drops can confuse API consumers.",
+    "`_user_with_company` re-reads company per /auth/me call. Acceptable but could be cached or joined to reduce N+1 in heavy traffic.",
+    "Companies signup doesn't enforce password policy/length — any string accepted. Add minimum length & bcrypt cost via env."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (admin role assertion fixes)",
+    "/app/backend/tests/test_multitenant.py (new comprehensive multitenant test module)"
+  ],
+  "success_rate": {"backend": "100% (47/47)", "frontend": "100% of tested critical flows"},
+  "test_credentials": "admin@playsphere.com/admin123 (platform_admin), acme@example.com/acme123 (company_admin, Acme Corp), viewer@playsphere.com/viewer123. All verified.",
+  "seed_data_creation": "Auto-seeded on startup: Acme Corp company + company_admin user, 3 demo events (all assigned to Acme), 7 services with config_fields & variants. Tests created TEST_ prefixed entities and cleaned up; a few TEST_ bookings remain on Acme (visible in screenshot) — cleaned up where lifecycle test allowed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest /app/backend/tests/ -v` for full backend regression (47 tests). Multi-tenant tests live in /app/backend/tests/test_multitenant.py. Key data-testids confirmed working: login-email/password/submit, nav-link-services, services-filter-*, service-card-*, variant-trophy-gold, booking-quantity, booking-custom-text, field-height_inches, booking-submit, bookings-table, dashboard-new-event, dashboard-browse-services, pa-tab-services/companies/bookings, platform-new-service, signup-company-name, signup-admin-name, signup-email, signup-password, signup-submit. Login submit must be invoked via data-testid='login-submit' (using get_by_role 'button:Sign in' also matches the nav 'Sign in' link). Booking total computes as (base + variant.extra_price) * qty — verified $105 for trophy-gold/35 base/qty3, and $106 for trophy-crystal/+18/qty2.",
+  "rca of the issue": "N/A — no failing flows. Two old-iteration test assertions broke due to expected role rename (admin -> platform_admin) and were updated. No application bugs found."
+}

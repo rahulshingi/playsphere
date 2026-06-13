@@ -137,6 +137,49 @@ export default function Home() {
         </section>
       )}
 
+      {/* FOR COMPANIES BAND */}
+      <section className="border-y border-white/10 bg-gradient-to-r from-[#84CC16]/10 via-[#06B6D4]/5 to-transparent">
+        <div className="max-w-7xl mx-auto px-6 py-16 grid md:grid-cols-2 gap-10 items-center">
+          <div>
+            <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ For HR & companies</div>
+            <h2 className="font-display text-5xl tracking-wide mt-3">RUN YOUR INTERNAL TOURNAMENTS — END-TO-END.</h2>
+            <p className="text-neutral-300 mt-4 max-w-xl">
+              Onboard your company in 60 seconds. Self-create cricket, football, badminton, hackathon, quiz events.
+              Hire <span className="text-[#84CC16]">live YouTube streaming</span>, <span className="text-[#EC4899]">jerseys</span>,
+              <span className="text-[#06B6D4]"> trophies</span>, grounds, training kits — all on rental from one dashboard.
+            </p>
+            <div className="flex gap-3 mt-7">
+              <Link to="/signup-company">
+                <Button data-testid="home-signup-company" size="lg" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm px-6 h-12">
+                  Onboard your company <ArrowRight className="ml-2 w-4 h-4" />
+                </Button>
+              </Link>
+              <Link to="/services">
+                <Button data-testid="home-browse-services" size="lg" variant="outline" className="border-white/20 bg-white/0 text-white rounded-sm px-6 h-12 hover:bg-white/5">
+                  Browse services
+                </Button>
+              </Link>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { t: "Live Streaming", c: "#EC4899", d: "Multi-cam YouTube broadcast" },
+              { t: "Jerseys & Caps", c: "#A855F7", d: "Custom team apparel" },
+              { t: "Trophies", c: "#F59E0B", d: "Engraved with team names" },
+              { t: "Grounds", c: "#06B6D4", d: "Reserve premium venues" },
+              { t: "Match Kits", c: "#84CC16", d: "Bats, balls, scoreboards" },
+              { t: "Training", c: "#FF3B30", d: "Coaches & conditioning" },
+            ].map((x, i) => (
+              <div key={i} className="border border-white/10 rounded-sm p-4 bg-black/40 backdrop-blur">
+                <span className="w-2 h-2 rounded-full block" style={{ background: x.c }} />
+                <div className="font-display tracking-wider text-xl mt-3">{x.t.toUpperCase()}</div>
+                <div className="text-xs text-neutral-400 mt-1">{x.d}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* FEATURES Bento */}
       <section className="max-w-7xl mx-auto px-6 py-20">
         <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ Platform</div>

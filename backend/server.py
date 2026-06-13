@@ -74,11 +74,12 @@ def verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def create_access_token(user_id: str, email: str, role: str) -> str:
+def create_access_token(user_id: str, email: str, role: str, company_id: Optional[str] = None) -> str:
     payload = {
         "sub": user_id,
         "email": email,
         "role": role,
+        "company_id": company_id,
         "exp": datetime.now(timezone.utc) + timedelta(hours=12),
         "type": "access",
     }
@@ -108,8 +109,22 @@ async def get_current_user(request: Request) -> dict:
 
 
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:
-    if user.get("role") != "admin":
+    if user.get("role") not in ("admin", "platform_admin", "company_admin"):
         raise HTTPException(status_code=403, detail="Admin only")
+    return user
+
+
+async def require_platform_admin(user: dict = Depends(get_current_user)) -> dict:
+    if user.get("role") not in ("platform_admin", "admin"):
+        raise HTTPException(status_code=403, detail="Platform admin only")
+    return user
+
+
+async def require_company_admin(user: dict = Depends(get_current_user)) -> dict:
+    if user.get("role") not in ("company_admin", "platform_admin", "admin"):
+        raise HTTPException(status_code=403, detail="Company admin only")
+    if user.get("role") == "company_admin" and not user.get("company_id"):
+        raise HTTPException(status_code=403, detail="No company assigned")
     return user
 
 
@@ -131,6 +146,8 @@ class UserPublic(BaseModel):
     email: EmailStr
     name: str
     role: str
+    company_id: Optional[str] = None
+    company_name: Optional[str] = None
 
 
 class RegisterBody(BaseModel):
@@ -142,6 +159,27 @@ class RegisterBody(BaseModel):
 class LoginBody(BaseModel):
     email: EmailStr
     password: str
+
+
+class CompanySignupBody(BaseModel):
+    company_name: str
+    admin_name: str
+    admin_email: EmailStr
+    admin_password: str
+    contact_phone: Optional[str] = ""
+    logo_url: Optional[str] = ""
+
+
+class Company(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    slug: str
+    logo_url: Optional[str] = ""
+    contact_email: Optional[str] = ""
+    contact_phone: Optional[str] = ""
+    owner_user_id: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 SportType = Literal[
@@ -162,6 +200,7 @@ class Team(BaseModel):
     color: Optional[str] = "#007AFF"
     logo_url: Optional[str] = ""
     event_id: Optional[str] = None
+    company_id: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -208,6 +247,7 @@ class Event(BaseModel):
     venue: Optional[str] = ""
     status: EventStatus = "upcoming"
     banner_url: Optional[str] = ""
+    company_id: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -269,6 +309,109 @@ class SponsorCreate(BaseModel):
     show_in_banner: bool = True
 
 
+# ---------- Services & Bookings ----------
+ServiceCategory = Literal[
+    "streaming", "apparel", "merchandise", "awards", "venue", "equipment", "training", "other"
+]
+BookingStatus = Literal["pending", "approved", "fulfilled", "cancelled"]
+
+
+class ServiceField(BaseModel):
+    key: str
+    label: str
+    type: Literal["number", "text", "textarea", "select"] = "number"
+    options: Optional[List[str]] = None
+    required: bool = False
+    min: Optional[float] = None
+    max: Optional[float] = None
+    default: Optional[str] = None
+    help_text: Optional[str] = ""
+
+
+class ServiceVariant(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    image_url: str
+    extra_price: float = 0.0
+    description: Optional[str] = ""
+
+
+class Service(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    category: ServiceCategory
+    description: str = ""
+    images: List[str] = Field(default_factory=list)
+    base_price: float = 0.0
+    currency: str = "USD"
+    price_unit: str = "per booking"  # e.g., "per day", "per match", "each"
+    config_fields: List[ServiceField] = Field(default_factory=list)
+    variants: List[ServiceVariant] = Field(default_factory=list)
+    allow_custom_text: bool = False
+    custom_text_label: Optional[str] = "Inscription / Custom text"
+    active: bool = True
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class ServiceCreate(BaseModel):
+    name: str
+    category: ServiceCategory
+    description: Optional[str] = ""
+    images: List[str] = Field(default_factory=list)
+    base_price: float = 0.0
+    currency: str = "USD"
+    price_unit: Optional[str] = "per booking"
+    config_fields: List[ServiceField] = Field(default_factory=list)
+    variants: List[ServiceVariant] = Field(default_factory=list)
+    allow_custom_text: bool = False
+    custom_text_label: Optional[str] = "Inscription / Custom text"
+    active: bool = True
+
+
+class Booking(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    company_id: str
+    company_name: str = ""
+    service_id: str
+    service_name: str = ""
+    event_id: Optional[str] = None
+    quantity: int = 1
+    config: dict = Field(default_factory=dict)
+    variant_id: Optional[str] = None
+    variant_name: Optional[str] = None
+    custom_text: Optional[str] = ""
+    notes: Optional[str] = ""
+    base_price: float = 0.0
+    variant_price: float = 0.0
+    total_price: float = 0.0
+    status: BookingStatus = "pending"
+    created_by: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class BookingCreate(BaseModel):
+    service_id: str
+    event_id: Optional[str] = None
+    quantity: int = 1
+    config: dict = Field(default_factory=dict)
+    variant_id: Optional[str] = None
+    custom_text: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+async def _user_with_company(user: dict) -> dict:
+    """Attach company_name (if any) and strip password fields."""
+    out = {k: user.get(k) for k in ["id", "email", "name", "role", "company_id"]}
+    out["company_name"] = None
+    if out.get("company_id"):
+        c = await db.companies.find_one({"id": out["company_id"]}, {"_id": 0, "name": 1})
+        if c:
+            out["company_name"] = c["name"]
+    return out
+
+
 # ---------- Auth Endpoints ----------
 @api.post("/auth/register", response_model=UserPublic)
 async def register(body: RegisterBody, response: Response):
@@ -281,13 +424,14 @@ async def register(body: RegisterBody, response: Response):
         "email": email,
         "name": body.name,
         "role": "viewer",
+        "company_id": None,
         "password_hash": hash_password(body.password),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user)
-    token = create_access_token(user["id"], user["email"], user["role"])
+    token = create_access_token(user["id"], user["email"], user["role"], None)
     set_auth_cookie(response, token)
-    return UserPublic(id=user["id"], email=user["email"], name=user["name"], role=user["role"])
+    return UserPublic(**await _user_with_company(user))
 
 
 @api.post("/auth/login", response_model=UserPublic)
@@ -296,9 +440,9 @@ async def login(body: LoginBody, response: Response):
     user = await db.users.find_one({"email": email})
     if not user or not verify_password(body.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
-    token = create_access_token(user["id"], user["email"], user["role"])
+    token = create_access_token(user["id"], user["email"], user["role"], user.get("company_id"))
     set_auth_cookie(response, token)
-    return UserPublic(id=user["id"], email=user["email"], name=user["name"], role=user["role"])
+    return UserPublic(**await _user_with_company(user))
 
 
 @api.post("/auth/logout")
@@ -309,7 +453,73 @@ async def logout(response: Response):
 
 @api.get("/auth/me", response_model=UserPublic)
 async def me(user: dict = Depends(get_current_user)):
-    return UserPublic(**{k: user[k] for k in ["id", "email", "name", "role"]})
+    return UserPublic(**await _user_with_company(user))
+
+
+# ---------- Company Signup ----------
+def _slugify(s: str) -> str:
+    out = "".join(c.lower() if c.isalnum() else "-" for c in s).strip("-")
+    while "--" in out:
+        out = out.replace("--", "-")
+    return out or "company"
+
+
+@api.post("/companies/signup", response_model=UserPublic)
+async def company_signup(body: CompanySignupBody, response: Response):
+    email = body.admin_email.lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "Email already registered")
+    base_slug = _slugify(body.company_name)
+    slug = base_slug
+    n = 1
+    while await db.companies.find_one({"slug": slug}):
+        n += 1
+        slug = f"{base_slug}-{n}"
+    company = Company(
+        name=body.company_name,
+        slug=slug,
+        logo_url=body.logo_url or "",
+        contact_email=email,
+        contact_phone=body.contact_phone or "",
+    )
+    user_id = str(uuid.uuid4())
+    company.owner_user_id = user_id
+    await db.companies.insert_one(company.model_dump())
+    user_doc = {
+        "id": user_id,
+        "email": email,
+        "name": body.admin_name,
+        "role": "company_admin",
+        "company_id": company.id,
+        "password_hash": hash_password(body.admin_password),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(user_doc)
+    token = create_access_token(user_id, email, "company_admin", company.id)
+    set_auth_cookie(response, token)
+    return UserPublic(**await _user_with_company(user_doc))
+
+
+@api.get("/companies/me")
+async def get_my_company(user: dict = Depends(require_company_admin)):
+    if not user.get("company_id"):
+        raise HTTPException(404, "No company")
+    c = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+    if not c:
+        raise HTTPException(404, "Company not found")
+    return c
+
+
+@api.patch("/companies/me")
+async def update_my_company(body: dict, user: dict = Depends(require_company_admin)):
+    body.pop("id", None); body.pop("slug", None); body.pop("owner_user_id", None)
+    await db.companies.update_one({"id": user["company_id"]}, {"$set": body})
+    return await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+
+
+@api.get("/companies")
+async def list_companies(_: dict = Depends(require_platform_admin)):
+    return await db.companies.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
 
 
 # ---------- Helper for sport-specific default scores ----------
@@ -336,8 +546,9 @@ def default_score(sport: str) -> dict:
 
 # ---------- Events ----------
 @api.get("/events", response_model=List[Event])
-async def list_events():
-    docs = await db.events.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
+async def list_events(company_id: Optional[str] = None):
+    q = {"company_id": company_id} if company_id else {}
+    docs = await db.events.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
     return [Event(**d) for d in docs]
 
 
@@ -350,24 +561,36 @@ async def get_event(event_id: str):
 
 
 @api.post("/events", response_model=Event)
-async def create_event(body: EventCreate, _: dict = Depends(require_admin)):
-    ev = Event(**body.model_dump())
+async def create_event(body: EventCreate, user: dict = Depends(require_admin)):
+    payload = body.model_dump()
+    # company_admin events are stamped with their company_id
+    if user.get("role") == "company_admin":
+        payload["company_id"] = user.get("company_id")
+    ev = Event(**payload)
     await db.events.insert_one(ev.model_dump())
     return ev
 
 
 @api.patch("/events/{event_id}", response_model=Event)
-async def update_event(event_id: str, body: dict, _: dict = Depends(require_admin)):
+async def update_event(event_id: str, body: dict, user: dict = Depends(require_admin)):
     body.pop("id", None)
+    existing = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(404, "Event not found")
+    if user.get("role") == "company_admin" and existing.get("company_id") != user.get("company_id"):
+        raise HTTPException(403, "Not your event")
     await db.events.update_one({"id": event_id}, {"$set": body})
     doc = await db.events.find_one({"id": event_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Event not found")
     return Event(**doc)
 
 
 @api.delete("/events/{event_id}")
-async def delete_event(event_id: str, _: dict = Depends(require_admin)):
+async def delete_event(event_id: str, user: dict = Depends(require_admin)):
+    existing = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not existing:
+        return {"ok": True}
+    if user.get("role") == "company_admin" and existing.get("company_id") != user.get("company_id"):
+        raise HTTPException(403, "Not your event")
     await db.events.delete_one({"id": event_id})
     await db.teams.update_many({"event_id": event_id}, {"$set": {"event_id": None}})
     await db.fixtures.delete_many({"event_id": event_id})
@@ -727,9 +950,150 @@ async def delete_sponsor(sponsor_id: str, _: dict = Depends(require_admin)):
     return {"ok": True}
 
 
+# ---------- Services (catalog) ----------
+@api.get("/services", response_model=List[Service])
+async def list_services(category: Optional[str] = None, include_inactive: bool = False):
+    q = {}
+    if category:
+        q["category"] = category
+    if not include_inactive:
+        q["active"] = True
+    docs = await db.services.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return [Service(**d) for d in docs]
+
+
+@api.get("/services/{service_id}", response_model=Service)
+async def get_service(service_id: str):
+    doc = await db.services.find_one({"id": service_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Service not found")
+    return Service(**doc)
+
+
+@api.post("/services", response_model=Service)
+async def create_service(body: ServiceCreate, _: dict = Depends(require_platform_admin)):
+    s = Service(**body.model_dump())
+    await db.services.insert_one(s.model_dump())
+    return s
+
+
+@api.patch("/services/{service_id}", response_model=Service)
+async def update_service(service_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+    body.pop("id", None)
+    await db.services.update_one({"id": service_id}, {"$set": body})
+    doc = await db.services.find_one({"id": service_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Service not found")
+    return Service(**doc)
+
+
+@api.delete("/services/{service_id}")
+async def delete_service(service_id: str, _: dict = Depends(require_platform_admin)):
+    await db.services.delete_one({"id": service_id})
+    return {"ok": True}
+
+
+# ---------- Bookings ----------
+@api.get("/bookings", response_model=List[Booking])
+async def list_bookings(user: dict = Depends(get_current_user)):
+    if user.get("role") in ("platform_admin", "admin"):
+        q = {}
+    elif user.get("role") == "company_admin":
+        q = {"company_id": user.get("company_id")}
+    else:
+        raise HTTPException(403, "Forbidden")
+    docs = await db.bookings.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [Booking(**d) for d in docs]
+
+
+@api.get("/bookings/{booking_id}", response_model=Booking)
+async def get_booking(booking_id: str, user: dict = Depends(get_current_user)):
+    doc = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Booking not found")
+    if user.get("role") == "company_admin" and doc["company_id"] != user.get("company_id"):
+        raise HTTPException(403, "Forbidden")
+    return Booking(**doc)
+
+
+@api.post("/bookings", response_model=Booking)
+async def create_booking(body: BookingCreate, user: dict = Depends(require_company_admin)):
+    svc = await db.services.find_one({"id": body.service_id}, {"_id": 0})
+    if not svc:
+        raise HTTPException(404, "Service not found")
+    company = await db.companies.find_one({"id": user.get("company_id")}, {"_id": 0})
+    if not company:
+        raise HTTPException(400, "Company missing")
+
+    variant_price = 0.0
+    variant_name = None
+    if body.variant_id:
+        v = next((v for v in svc.get("variants", []) if v["id"] == body.variant_id), None)
+        if v:
+            variant_price = float(v.get("extra_price", 0))
+            variant_name = v.get("name")
+
+    qty = max(1, int(body.quantity or 1))
+    base_price = float(svc.get("base_price", 0))
+    total = (base_price + variant_price) * qty
+
+    booking = Booking(
+        company_id=user["company_id"],
+        company_name=company.get("name", ""),
+        service_id=svc["id"],
+        service_name=svc["name"],
+        event_id=body.event_id,
+        quantity=qty,
+        config=body.config or {},
+        variant_id=body.variant_id,
+        variant_name=variant_name,
+        custom_text=body.custom_text or "",
+        notes=body.notes or "",
+        base_price=base_price,
+        variant_price=variant_price,
+        total_price=total,
+        status="pending",
+        created_by=user["id"],
+    )
+    await db.bookings.insert_one(booking.model_dump())
+    return booking
+
+
+@api.patch("/bookings/{booking_id}", response_model=Booking)
+async def update_booking(booking_id: str, body: dict, user: dict = Depends(get_current_user)):
+    doc = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Booking not found")
+    is_platform = user.get("role") in ("platform_admin", "admin")
+    is_owner = user.get("role") == "company_admin" and doc["company_id"] == user.get("company_id")
+    if not (is_platform or is_owner):
+        raise HTTPException(403, "Forbidden")
+    # company admin can only update non-platform fields & while pending
+    if is_owner and not is_platform and doc.get("status") != "pending":
+        raise HTTPException(400, "Booking already processed")
+    if not is_platform:
+        body.pop("status", None)
+    body.pop("id", None); body.pop("company_id", None); body.pop("total_price", None)
+    await db.bookings.update_one({"id": booking_id}, {"$set": body})
+    updated = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    return Booking(**updated)
+
+
+@api.delete("/bookings/{booking_id}")
+async def delete_booking(booking_id: str, user: dict = Depends(get_current_user)):
+    doc = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        return {"ok": True}
+    if user.get("role") not in ("platform_admin", "admin"):
+        if user.get("role") != "company_admin" or doc["company_id"] != user.get("company_id"):
+            raise HTTPException(403, "Forbidden")
+    await db.bookings.delete_one({"id": booking_id})
+    return {"ok": True}
+
+
 # ---------- Stats ----------
 @api.get("/stats")
-async def get_stats():
+async def get_stats(user: Optional[dict] = None):
     return {
         "events": await db.events.count_documents({}),
         "teams": await db.teams.count_documents({}),
@@ -737,6 +1101,25 @@ async def get_stats():
         "fixtures": await db.fixtures.count_documents({}),
         "live": await db.fixtures.count_documents({"status": "live"}),
         "sponsors": await db.sponsors.count_documents({}),
+        "services": await db.services.count_documents({"active": True}),
+        "companies": await db.companies.count_documents({}),
+        "bookings": await db.bookings.count_documents({}),
+    }
+
+
+@api.get("/stats/company")
+async def get_company_stats(user: dict = Depends(require_company_admin)):
+    cid = user.get("company_id")
+    event_ids = [d["id"] for d in await db.events.find({"company_id": cid}, {"_id": 0, "id": 1}).to_list(500)]
+    team_ids = [d["id"] for d in await db.teams.find({"event_id": {"$in": event_ids}}, {"_id": 0, "id": 1}).to_list(500)]
+    return {
+        "events": len(event_ids),
+        "teams": len(team_ids),
+        "players": await db.players.count_documents({"team_id": {"$in": team_ids}}),
+        "fixtures": await db.fixtures.count_documents({"event_id": {"$in": event_ids}}),
+        "live": await db.fixtures.count_documents({"event_id": {"$in": event_ids}, "status": "live"}),
+        "bookings": await db.bookings.count_documents({"company_id": cid}),
+        "pending_bookings": await db.bookings.count_documents({"company_id": cid, "status": "pending"}),
     }
 
 
@@ -768,16 +1151,23 @@ async def seed_admin():
         await db.users.insert_one({
             "id": str(uuid.uuid4()),
             "email": admin_email,
-            "name": "Admin",
-            "role": "admin",
+            "name": "PlaySphere Admin",
+            "role": "platform_admin",
+            "company_id": None,
             "password_hash": hash_password(admin_password),
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
-        logger.info(f"Seeded admin: {admin_email}")
-    elif not verify_password(admin_password, existing["password_hash"]):
-        await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
+        logger.info(f"Seeded platform admin: {admin_email}")
+    else:
+        # ensure role is set correctly and password matches
+        updates = {}
+        if existing.get("role") not in ("platform_admin",):
+            updates["role"] = "platform_admin"
+        if not verify_password(admin_password, existing["password_hash"]):
+            updates["password_hash"] = hash_password(admin_password)
+        if updates:
+            await db.users.update_one({"email": admin_email}, {"$set": updates})
 
-    # Seed a viewer
     viewer = await db.users.find_one({"email": "viewer@playsphere.com"})
     if not viewer:
         await db.users.insert_one({
@@ -785,6 +1175,7 @@ async def seed_admin():
             "email": "viewer@playsphere.com",
             "name": "Viewer",
             "role": "viewer",
+            "company_id": None,
             "password_hash": hash_password("viewer123"),
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
@@ -793,6 +1184,27 @@ async def seed_admin():
 async def seed_demo_data():
     if await db.events.count_documents({}) > 0:
         return
+    # Demo company (Acme Corp) with company_admin user
+    acme_owner_id = str(uuid.uuid4())
+    acme = Company(
+        name="Acme Corp", slug="acme-corp",
+        logo_url="",
+        contact_email="acme@example.com",
+        contact_phone="+1 415 555 0100",
+        owner_user_id=acme_owner_id,
+    )
+    await db.companies.insert_one(acme.model_dump())
+    if not await db.users.find_one({"email": "acme@example.com"}):
+        await db.users.insert_one({
+            "id": acme_owner_id,
+            "email": "acme@example.com",
+            "name": "Acme HR",
+            "role": "company_admin",
+            "company_id": acme.id,
+            "password_hash": hash_password("acme123"),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
     # Demo sponsors
     sponsors = [
         {"name": "Mercedes-Benz", "tier": "title", "logo_url": "https://images.unsplash.com/photo-1644166186783-35d911470ff0?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2Nzd8MHwxfHNlYXJjaHwxfHxicmFuZCUyMGxvZ28lMjB3aGl0ZSUyMGJhY2tncm91bmR8ZW58MHx8fHwxNzgxMjU1NjE0fDA&ixlib=rb-4.1.0&q=85", "website": "https://mercedes-benz.com", "show_in_banner": True, "description": "Driving excellence"},
@@ -813,6 +1225,7 @@ async def seed_demo_data():
         venue="Central Sports Ground",
         status="ongoing",
         banner_url="https://images.pexels.com/photos/1657324/pexels-photo-1657324.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        company_id=acme.id,
     )
     await db.events.insert_one(ev.model_dump())
 
@@ -865,6 +1278,7 @@ async def seed_demo_data():
         venue="Oval Ground",
         status="upcoming",
         banner_url="https://images.pexels.com/photos/15779126/pexels-photo-15779126.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        company_id=acme.id,
     )
     await db.events.insert_one(ev2.model_dump())
 
@@ -877,18 +1291,148 @@ async def seed_demo_data():
         venue="Auditorium A",
         status="upcoming",
         banner_url="https://images.unsplash.com/photo-1774599661395-569eea1420e3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwzfHxjb3Jwb3JhdGUlMjBzcG9ydHMlMjBldmVudHxlbnwwfHx8fDE3ODEyNTU2MTR8MA&ixlib=rb-4.1.0&q=85",
+        company_id=acme.id,
     )
     await db.events.insert_one(ev3.model_dump())
+
+
+async def seed_services():
+    if await db.services.count_documents({}) > 0:
+        return
+    services = [
+        {
+            "name": "Live YouTube Streaming",
+            "category": "streaming",
+            "description": "Multi-camera live broadcast on YouTube with on-screen scoreboard, replays and commentary.",
+            "images": ["https://images.unsplash.com/photo-1492691527719-9d1e07e534b4?w=900"],
+            "base_price": 499.0,
+            "price_unit": "per match",
+            "config_fields": [
+                {"key": "cameras", "label": "Number of cameras", "type": "number", "min": 1, "max": 8, "default": "2", "required": True},
+                {"key": "umpires_mic", "label": "Number of umpires (mic-up)", "type": "number", "min": 0, "max": 6, "default": "2"},
+                {"key": "commentary", "label": "Commentary language", "type": "select", "options": ["English", "Hindi", "Spanish", "None"], "default": "English"},
+                {"key": "match_duration_hours", "label": "Match duration (hours)", "type": "number", "min": 1, "max": 12, "default": "3"},
+            ],
+            "variants": [],
+            "allow_custom_text": True, "custom_text_label": "YouTube channel link / Stream title",
+        },
+        {
+            "name": "Team Jerseys",
+            "category": "apparel",
+            "description": "Premium dry-fit team jerseys, fully customisable with team name, sponsor logos and player numbers.",
+            "images": ["https://images.unsplash.com/photo-1556906781-9a412961c28c?w=900"],
+            "base_price": 22.0,
+            "price_unit": "per piece",
+            "config_fields": [
+                {"key": "size_mix", "label": "Size mix (e.g., 4S, 6M, 5L, 1XL)", "type": "text", "required": True},
+                {"key": "fabric", "label": "Fabric", "type": "select", "options": ["Polyester Dri-Fit", "Cotton Blend", "Premium Mesh"], "default": "Polyester Dri-Fit"},
+            ],
+            "variants": [
+                {"id": "jersey-v1", "name": "Classic Stripe", "image_url": "https://images.unsplash.com/photo-1521577352947-9bb58764b69a?w=600", "extra_price": 0.0},
+                {"id": "jersey-v2", "name": "Modern Gradient", "image_url": "https://images.unsplash.com/photo-1517466787929-bc90951d0974?w=600", "extra_price": 4.0},
+                {"id": "jersey-v3", "name": "Retro Block", "image_url": "https://images.unsplash.com/photo-1556906781-c9c0a0bea1aa?w=600", "extra_price": 2.5},
+            ],
+            "allow_custom_text": True, "custom_text_label": "Team name + sponsor text to print",
+        },
+        {
+            "name": "Branded Caps",
+            "category": "apparel",
+            "description": "Embroidered team caps; available in snapback, baseball and bucket styles.",
+            "images": ["https://images.unsplash.com/photo-1521369909029-2afed882baee?w=900"],
+            "base_price": 9.0,
+            "price_unit": "per piece",
+            "config_fields": [
+                {"key": "quantity_breakdown", "label": "Color split (e.g., 20 black / 10 white)", "type": "text"},
+            ],
+            "variants": [
+                {"id": "cap-snap", "name": "Snapback", "image_url": "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=600", "extra_price": 0.0},
+                {"id": "cap-base", "name": "Baseball", "image_url": "https://images.unsplash.com/photo-1521369909029-2afed882baee?w=600", "extra_price": 1.0},
+                {"id": "cap-buck", "name": "Bucket", "image_url": "https://images.unsplash.com/photo-1572307480813-ceb0e59d8325?w=600", "extra_price": 1.5},
+            ],
+            "allow_custom_text": True, "custom_text_label": "Embroidery text (e.g., team initials)",
+        },
+        {
+            "name": "Trophies & Awards",
+            "category": "awards",
+            "description": "Premium engraved trophies for tournament winners, runner-up and individual awards.",
+            "images": ["https://images.unsplash.com/photo-1567427361984-0cbe7396fc6c?w=900"],
+            "base_price": 35.0,
+            "price_unit": "per trophy",
+            "config_fields": [
+                {"key": "height_inches", "label": "Height (inches)", "type": "number", "min": 6, "max": 24, "default": "10"},
+            ],
+            "variants": [
+                {"id": "trophy-gold", "name": "Golden Cup", "image_url": "https://images.unsplash.com/photo-1564607220646-a0d8e988a2e1?w=600", "extra_price": 0.0},
+                {"id": "trophy-crystal", "name": "Crystal Star", "image_url": "https://images.unsplash.com/photo-1606925797300-0b35e9d1794e?w=600", "extra_price": 18.0},
+                {"id": "trophy-silver", "name": "Silver Shield", "image_url": "https://images.unsplash.com/photo-1567427361984-0cbe7396fc6c?w=600", "extra_price": 8.0},
+                {"id": "trophy-medal", "name": "Medal & Ribbon", "image_url": "https://images.unsplash.com/photo-1518091093578-ca38ba0c9b8c?w=600", "extra_price": -20.0},
+            ],
+            "allow_custom_text": True, "custom_text_label": "Inscription (e.g., Best Batsman — Spring Cup 2026)",
+        },
+        {
+            "name": "Ground Booking",
+            "category": "venue",
+            "description": "Reserve premium grounds and indoor arenas: cricket, football, badminton courts, basketball.",
+            "images": ["https://images.unsplash.com/photo-1459865264687-595d652de67e?w=900"],
+            "base_price": 250.0,
+            "price_unit": "per hour",
+            "config_fields": [
+                {"key": "sport", "label": "Sport / surface", "type": "select", "options": ["Cricket", "Football", "Badminton", "Tennis", "Basketball", "Volleyball"], "required": True},
+                {"key": "hours", "label": "Hours required", "type": "number", "min": 1, "max": 12, "default": "4", "required": True},
+                {"key": "preferred_date", "label": "Preferred date (YYYY-MM-DD)", "type": "text"},
+                {"key": "city", "label": "City / area", "type": "text"},
+            ],
+            "variants": [],
+            "allow_custom_text": False,
+        },
+        {
+            "name": "Match Instruments",
+            "category": "equipment",
+            "description": "Rental equipment kit: cricket bats, balls, footballs, badminton rackets, scoreboards, stumps.",
+            "images": ["https://images.unsplash.com/photo-1531415074968-036ba1b575da?w=900"],
+            "base_price": 80.0,
+            "price_unit": "per kit / day",
+            "config_fields": [
+                {"key": "kit_for", "label": "Kit for", "type": "select", "options": ["Cricket", "Football", "Badminton", "Basketball", "Volleyball", "Mixed"], "required": True},
+                {"key": "balls_count", "label": "Match balls required", "type": "number", "min": 0, "max": 50, "default": "6"},
+                {"key": "scoreboard", "label": "Manual scoreboard", "type": "select", "options": ["Yes", "No"], "default": "Yes"},
+            ],
+            "variants": [],
+            "allow_custom_text": True, "custom_text_label": "Special items / notes",
+        },
+        {
+            "name": "Training Kits",
+            "category": "training",
+            "description": "Pre-tournament conditioning & drills kits: cones, hurdles, agility ladders, coaches on rental.",
+            "images": ["https://images.unsplash.com/photo-1517438476312-10d79c5f25af?w=900"],
+            "base_price": 120.0,
+            "price_unit": "per session",
+            "config_fields": [
+                {"key": "sessions", "label": "Number of sessions", "type": "number", "min": 1, "max": 30, "default": "4", "required": True},
+                {"key": "with_coach", "label": "Include certified coach", "type": "select", "options": ["Yes", "No"], "default": "Yes"},
+                {"key": "team_size", "label": "Approx team size", "type": "number", "default": "15"},
+            ],
+            "variants": [],
+            "allow_custom_text": True, "custom_text_label": "Focus areas (e.g., fitness, batting, bowling)",
+        },
+    ]
+    for s in services:
+        await db.services.insert_one(Service(**s).model_dump())
+    logger.info(f"Seeded {len(services)} services")
 
 
 @app.on_event("startup")
 async def on_startup():
     await db.users.create_index("email", unique=True)
+    await db.companies.create_index("slug", unique=True)
     await db.teams.create_index("event_id")
+    await db.events.create_index("company_id")
     await db.fixtures.create_index("event_id")
     await db.players.create_index("team_id")
+    await db.bookings.create_index("company_id")
     await seed_admin()
     await seed_demo_data()
+    await seed_services()
 
 
 @app.on_event("shutdown")

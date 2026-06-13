@@ -24,7 +24,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data } = await api.post("/auth/login", { email, password });
       setUser(data);
-      return { ok: true };
+      return { ok: true, user: data };
     } catch (e) {
       return { ok: false, error: formatApiErrorDetail(e.response?.data?.detail) || e.message };
     }
@@ -34,7 +34,17 @@ export const AuthProvider = ({ children }) => {
     try {
       const { data } = await api.post("/auth/register", { email, password, name });
       setUser(data);
-      return { ok: true };
+      return { ok: true, user: data };
+    } catch (e) {
+      return { ok: false, error: formatApiErrorDetail(e.response?.data?.detail) || e.message };
+    }
+  };
+
+  const signupCompany = async (body) => {
+    try {
+      const { data } = await api.post("/companies/signup", body);
+      setUser(data);
+      return { ok: true, user: data };
     } catch (e) {
       return { ok: false, error: formatApiErrorDetail(e.response?.data?.detail) || e.message };
     }
@@ -46,7 +56,19 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, ready, login, register, logout, isAdmin: user && user.role === "admin" }}>
+    <AuthContext.Provider value={{
+      user,
+      ready,
+      login,
+      register,
+      signupCompany,
+      logout,
+      isAdmin: !!user && (user.role === "admin" || user.role === "platform_admin" || user.role === "company_admin"),
+      isPlatformAdmin: !!user && (user.role === "platform_admin" || user.role === "admin"),
+      isCompanyAdmin: !!user && user.role === "company_admin",
+      companyId: user && user.company_id,
+      companyName: user && user.company_name,
+    }}>
       {children}
     </AuthContext.Provider>
   );

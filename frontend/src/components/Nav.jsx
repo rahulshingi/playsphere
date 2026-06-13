@@ -1,31 +1,33 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, Shield } from "lucide-react";
+import { LogOut, Shield, Briefcase, Crown } from "lucide-react";
 
 const LOGO_URL = "/playsphere-mark.png";
 
-const navItems = [
+const publicLinks = [
   { to: "/", label: "Home" },
   { to: "/events", label: "Events" },
   { to: "/teams", label: "Teams" },
   { to: "/standings", label: "Standings" },
+  { to: "/services", label: "Services" },
   { to: "/sponsors", label: "Sponsors" },
 ];
 
 export default function Nav() {
-  const { user, isAdmin, logout } = useAuth();
+  const { user, isCompanyAdmin, isPlatformAdmin, companyName, logout } = useAuth();
   const navigate = useNavigate();
+  const isAuthed = user && user !== false;
 
   return (
     <header
       data-testid="site-nav"
       className="sticky top-0 z-50 w-full backdrop-blur-xl bg-black/70 border-b border-white/10"
     >
-      <div className="mx-auto max-w-7xl px-6 h-16 flex items-center justify-between">
-        <Link to="/" data-testid="nav-logo" className="flex items-center gap-3">
+      <div className="mx-auto max-w-7xl px-6 h-16 flex items-center justify-between gap-4">
+        <Link to="/" data-testid="nav-logo" className="flex items-center gap-3 shrink-0">
           <img src={LOGO_URL} alt="PlaySphere" className="w-11 h-11 object-contain" />
-          <div className="leading-none hidden sm:block">
+          <div className="leading-none hidden lg:block">
             <div className="font-display text-2xl tracking-wider">
               <span className="text-white">PLAY</span><span className="text-[#84CC16]">SPHERE</span>
             </div>
@@ -39,8 +41,8 @@ export default function Nav() {
           </div>
         </Link>
 
-        <nav className="hidden md:flex items-center gap-1">
-          {navItems.map((n) => (
+        <nav className="hidden md:flex items-center gap-0.5 flex-1 justify-center">
+          {publicLinks.map((n) => (
             <NavLink
               key={n.to}
               to={n.to}
@@ -55,27 +57,30 @@ export default function Nav() {
               {n.label}
             </NavLink>
           ))}
-          {isAdmin && (
-            <NavLink
-              to="/admin"
-              data-testid="nav-link-admin"
-              className={({ isActive }) =>
-                `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 transition-colors ${
-                  isActive ? "text-[#84CC16]" : "text-[#84CC16]/80 hover:text-[#84CC16]"
-                }`
-              }
-            >
-              <Shield className="w-3.5 h-3.5" /> Admin
+          {isCompanyAdmin && (
+            <>
+              <NavLink to="/dashboard" data-testid="nav-link-dashboard" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#84CC16]" : "text-[#84CC16]/80 hover:text-[#84CC16]"}`}>
+                <Briefcase className="w-3.5 h-3.5" /> Dashboard
+              </NavLink>
+              <NavLink to="/admin" data-testid="nav-link-admin" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#84CC16]" : "text-[#84CC16]/80 hover:text-[#84CC16]"}`}>
+                <Shield className="w-3.5 h-3.5" /> Manage
+              </NavLink>
+            </>
+          )}
+          {isPlatformAdmin && (
+            <NavLink to="/platform-admin" data-testid="nav-link-platform-admin" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#FF3B30]" : "text-[#FF3B30]/80 hover:text-[#FF3B30]"}`}>
+              <Crown className="w-3.5 h-3.5" /> HQ
             </NavLink>
           )}
         </nav>
 
-        <div className="flex items-center gap-2">
-          {user && user !== false ? (
+        <div className="flex items-center gap-2 shrink-0">
+          {isAuthed ? (
             <>
-              <span data-testid="nav-user-email" className="hidden sm:block text-xs text-neutral-400 font-mono">
-                {user.email}
-              </span>
+              <div className="hidden sm:flex flex-col items-end leading-tight">
+                {companyName && <span className="text-xs font-mono text-[#84CC16]">{companyName}</span>}
+                <span data-testid="nav-user-email" className="text-[10px] text-neutral-500 font-mono">{user.email}</span>
+              </div>
               <Button
                 data-testid="nav-logout-btn"
                 variant="ghost"
@@ -98,12 +103,12 @@ export default function Nav() {
                 Sign in
               </Button>
               <Button
-                data-testid="nav-register-team-btn"
+                data-testid="nav-signup-company-btn"
                 size="sm"
-                onClick={() => navigate("/register-team")}
+                onClick={() => navigate("/signup-company")}
                 className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm"
               >
-                Register Team
+                For Companies
               </Button>
             </>
           )}

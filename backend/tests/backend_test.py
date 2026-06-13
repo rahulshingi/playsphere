@@ -68,13 +68,13 @@ class TestAuth:
         assert r.status_code == 200
         body = r.json()
         assert body["email"] == ADMIN_EMAIL
-        assert body["role"] == "admin"
+        assert body["role"] == "platform_admin"
         assert "access_token" in s.cookies.get_dict()
 
     def test_me_with_cookie(self, admin_session):
         r = admin_session.get(f"{API}/auth/me")
         assert r.status_code == 200
-        assert r.json()["role"] == "admin"
+        assert r.json()["role"] == "platform_admin"
 
     def test_login_bad_password(self):
         r = requests.post(f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": "wrong"})

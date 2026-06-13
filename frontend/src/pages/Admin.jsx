@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { Trash2, Plus } from "lucide-react";
 
 export default function Admin() {
-  const { user, ready, isAdmin } = useAuth();
+  const { user, ready, isAdmin, isPlatformAdmin, companyId } = useAuth();
   const nav = useNavigate();
   const [stats, setStats] = useState({});
   const [events, setEvents] = useState([]);
@@ -26,14 +26,17 @@ export default function Admin() {
   const [newSponsor, setNewSponsor] = useState({ name: "", tier: "bronze", logo_url: "", website: "", description: "", show_in_banner: true });
 
   const loadAll = async () => {
-    const [s, e, t, sp] = await Promise.all([api.get("/stats"), api.get("/events"), api.get("/teams"), api.get("/sponsors")]);
+    const eventsUrl = companyId ? `/events?company_id=${companyId}` : "/events";
+    const statsUrl = companyId ? "/stats/company" : "/stats";
+    const [s, e, t, sp] = await Promise.all([api.get(statsUrl), api.get(eventsUrl), api.get("/teams"), api.get("/sponsors")]);
     setStats(s.data); setEvents(e.data); setTeams(t.data); setSponsors(sp.data);
   };
 
   useEffect(() => {
     if (ready && !isAdmin) nav("/login");
+    else if (ready && isPlatformAdmin) nav("/platform-admin");
     else if (ready) loadAll();
-  }, [ready, isAdmin]);
+  }, [ready, isAdmin, isPlatformAdmin, companyId]);
 
   if (!ready) return <div className="bg-[#0a0a0a] min-h-screen text-white"><Nav /><div className="p-20 text-center">Loading…</div></div>;
 
@@ -69,7 +72,7 @@ export default function Admin() {
         <div className="grid grid-cols-2 md:grid-cols-6 gap-px bg-white/10 mt-8 border border-white/10 rounded-sm overflow-hidden">
           {[
             ["Events", stats.events], ["Teams", stats.teams], ["Players", stats.players],
-            ["Fixtures", stats.fixtures], ["Live", stats.live], ["Sponsors", stats.sponsors],
+            ["Fixtures", stats.fixtures], ["Live", stats.live], ["Bookings", stats.bookings ?? stats.sponsors],
           ].map(([l, v]) => (
             <div key={l} className="bg-[#0a0a0a] p-4">
               <div className={`font-mono text-2xl ${l === "Live" ? "text-[#FF3B30]" : "text-white"}`}>{String(v ?? 0).padStart(2, "0")}</div>

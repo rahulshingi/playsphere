@@ -1534,7 +1534,7 @@ async def seed_services():
                 {"key": "ribbon_color", "label": "Ribbon color", "type": "text", "default": "Blue"},
             ],
             "variants": [
-                {"id": "medal-gold", "name": "Gold finish", "image_url": "https://images.unsplash.com/photo-1556910638-aaf3b3e8eaf3?w=600", "extra_price": 0.0},
+                {"id": "medal-gold", "name": "Gold finish", "image_url": "https://images.unsplash.com/photo-1567427361984-0cbe7396fc6c?w=600", "extra_price": 0.0},
                 {"id": "medal-silver", "name": "Silver finish", "image_url": "https://images.unsplash.com/photo-1503602642458-232111445657?w=600", "extra_price": -2.0},
                 {"id": "medal-bronze", "name": "Bronze finish", "image_url": "https://images.unsplash.com/photo-1571388208497-71bedc66e932?w=600", "extra_price": -3.0},
             ],

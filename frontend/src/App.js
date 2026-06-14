@@ -28,6 +28,7 @@ import { PlayerSearch, PlayerProfileView } from "@/pages/PlayerDirectory";
 import VendorSignup from "@/pages/VendorSignup";
 import VendorDashboard from "@/pages/VendorDashboard";
 import VendorMarket from "@/pages/VendorMarket";
+import About from "@/pages/About";
 
 function App() {
   return (
@@ -44,6 +45,7 @@ function App() {
           <Route path="/sponsors" element={<Sponsors />} />
           <Route path="/services" element={<Services />} />
           <Route path="/services/:id" element={<ServiceDetail />} />
+          <Route path="/about" element={<About />} />
           <Route path="/hire" element={<VendorMarket />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/bookings" element={<Bookings />} />

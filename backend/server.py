@@ -297,6 +297,7 @@ class Sponsor(BaseModel):
     website: Optional[str] = ""
     description: Optional[str] = ""
     show_in_banner: bool = True
+    event_id: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -307,6 +308,7 @@ class SponsorCreate(BaseModel):
     website: Optional[str] = ""
     description: Optional[str] = ""
     show_in_banner: bool = True
+    event_id: Optional[str] = None
 
 
 # ---------- Services & Bookings ----------
@@ -1061,8 +1063,9 @@ async def get_standings(event_id: str):
 
 # ---------- Sponsors ----------
 @api.get("/sponsors", response_model=List[Sponsor])
-async def list_sponsors():
-    docs = await db.sponsors.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+async def list_sponsors(event_id: Optional[str] = None):
+    flt = {"event_id": event_id} if event_id else {}
+    docs = await db.sponsors.find(flt, {"_id": 0}).sort("created_at", -1).to_list(200)
     return [Sponsor(**d) for d in docs]
 
 
@@ -1255,6 +1258,29 @@ async def update_settings(body: dict, _: dict = Depends(require_platform_admin))
     out = SiteSettings(**doc).model_dump()
     out["id"] = "site"
     return out
+
+
+# ---------- About page ----------
+@api.get("/about")
+async def get_about():
+    doc = await db.about_settings.find_one({"id": "about"}, {"_id": 0})
+    if not doc:
+        doc = {
+            "id": "about",
+            "company_description": "",
+            "mission": "",
+            "vision": "",
+            "founders": [],
+            "directors": [],
+        }
+    return doc
+
+
+@api.patch("/about")
+async def update_about(body: dict, _: dict = Depends(require_platform_admin)):
+    body.pop("id", None)
+    await db.about_settings.update_one({"id": "about"}, {"$set": body}, upsert=True)
+    return await db.about_settings.find_one({"id": "about"}, {"_id": 0})
 
 
 # ---------- Player accounts (mobile + password) ----------

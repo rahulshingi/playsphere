@@ -49,9 +49,11 @@ export default function PlatformAdmin() {
     api.get("/vendors"),
     api.get("/admin/listings"),
     api.get("/settings"),
-  ]).then(([s, c, b, v, l, st]) => {
+    api.get("/about"),
+  ]).then(([s, c, b, v, l, st, ab]) => {
     setServices(s.data); setCompanies(c.data); setBookings(b.data);
     setVendors(v.data); setListings(l.data); setSettings(st.data);
+    setAbout({ company_description: "", mission: "", vision: "", founders: [], directors: [], ...ab.data });
   });
 
   useEffect(() => {
@@ -99,6 +101,7 @@ export default function PlatformAdmin() {
             <TabsTrigger value="vendors" data-testid="pa-tab-vendors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Vendors ({vendors.length})</TabsTrigger>
             <TabsTrigger value="listings" data-testid="pa-tab-listings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Listings ({listings.length})</TabsTrigger>
             <TabsTrigger value="settings" data-testid="pa-tab-settings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Settings</TabsTrigger>
+            <TabsTrigger value="about" data-testid="pa-tab-about" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">About page</TabsTrigger>
           </TabsList>
 
           <TabsContent value="services" className="mt-6 space-y-2">
@@ -193,6 +196,23 @@ export default function PlatformAdmin() {
                 </div>
               ))}
               <Button data-testid="settings-save" onClick={async () => { await api.patch("/settings", settings); toast.success("Saved"); load(); }} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Save settings</Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="about" className="mt-6">
+            <div className="border border-white/10 rounded-sm bg-[#141414] p-6 max-w-3xl space-y-3">
+              <div className="font-display tracking-wider text-2xl">ABOUT PAGE CONTENT</div>
+              <Label className="text-xs font-mono uppercase text-neutral-500">Company description</Label>
+              <Textarea data-testid="about-desc" rows={3} value={about.company_description} onChange={(e) => setAbout({ ...about, company_description: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <Label className="text-xs font-mono uppercase text-neutral-500">Mission</Label>
+              <Textarea data-testid="about-mission" rows={2} value={about.mission} onChange={(e) => setAbout({ ...about, mission: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <Label className="text-xs font-mono uppercase text-neutral-500">Vision</Label>
+              <Textarea data-testid="about-vision" rows={2} value={about.vision} onChange={(e) => setAbout({ ...about, vision: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+
+              <PeopleEditor label="Founders" testid="founders" people={about.founders || []} onChange={(p) => setAbout({ ...about, founders: p })} />
+              <PeopleEditor label="Directors" testid="directors" people={about.directors || []} onChange={(p) => setAbout({ ...about, directors: p })} />
+
+              <Button data-testid="about-save" onClick={async () => { await api.patch("/about", about); toast.success("About page updated"); load(); }} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Save About page</Button>
             </div>
           </TabsContent>
         </Tabs>
@@ -322,6 +342,32 @@ function Field({ label, children }) {
     <div>
       <Label className="text-xs font-mono uppercase text-neutral-500">{label}</Label>
       <div className="mt-1">{children}</div>
+    </div>
+  );
+}
+
+function PeopleEditor({ label, testid, people, onChange }) {
+  const add = () => onChange([...people, { name: "", role: "", image_url: "", bio: "", linkedin_url: "", twitter_url: "" }]);
+  const upd = (i, patch) => { const next = [...people]; next[i] = { ...next[i], ...patch }; onChange(next); };
+  const del = (i) => onChange(people.filter((_, idx) => idx !== i));
+  return (
+    <div className="border border-white/10 rounded-sm p-3 mt-3">
+      <div className="flex items-center justify-between">
+        <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ {label} ({people.length})</div>
+        <Button size="sm" variant="ghost" onClick={add} className="text-[#84CC16]" data-testid={`${testid}-add`}>+ Add</Button>
+      </div>
+      <div className="space-y-2 mt-2">
+        {people.map((p, i) => (
+          <div key={i} className="grid grid-cols-12 gap-2 items-center">
+            <Input data-testid={`${testid}-${i}-name`} placeholder="Name" value={p.name} onChange={(e) => upd(i, { name: e.target.value })} className="col-span-3 bg-black/40 border-white/10 text-white" />
+            <Input data-testid={`${testid}-${i}-role`} placeholder="Role" value={p.role} onChange={(e) => upd(i, { role: e.target.value })} className="col-span-3 bg-black/40 border-white/10 text-white" />
+            <Input data-testid={`${testid}-${i}-image`} placeholder="Image URL" value={p.image_url} onChange={(e) => upd(i, { image_url: e.target.value })} className="col-span-4 bg-black/40 border-white/10 text-white" />
+            <Input placeholder="LinkedIn" value={p.linkedin_url || ""} onChange={(e) => upd(i, { linkedin_url: e.target.value })} className="col-span-1 bg-black/40 border-white/10 text-white" />
+            <Button size="sm" variant="ghost" onClick={() => del(i)} className="col-span-1 text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
+            <Textarea data-testid={`${testid}-${i}-bio`} rows={1} placeholder="Bio" value={p.bio || ""} onChange={(e) => upd(i, { bio: e.target.value })} className="col-span-12 bg-black/40 border-white/10 text-white" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

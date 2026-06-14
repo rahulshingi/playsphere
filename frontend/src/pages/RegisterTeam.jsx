@@ -14,7 +14,7 @@ const COLORS = ["#84CC16", "#FF3B30", "#10B981", "#F59E0B", "#A855F7", "#EC4899"
 
 export default function RegisterTeam() {
   const nav = useNavigate();
-  const { isCompanyAdmin, companyId } = useAuth();
+  const { isCompanyAdmin, isPlatformAdmin, companyId } = useAuth();
   const [events, setEvents] = useState([]);
   const [registered, setRegistered] = useState([]);
   const [form, setForm] = useState({ name: "", department: "", captain: "", color: "#84CC16", event_id: "", logo_url: "" });
@@ -23,10 +23,12 @@ export default function RegisterTeam() {
 
   useEffect(() => {
     api.get("/events").then((r) => setEvents(r.data));
-    if (isCompanyAdmin && companyId) {
+    if (isPlatformAdmin) {
+      api.get("/players/profiles").then((r) => setRegistered(r.data));
+    } else if (isCompanyAdmin && companyId) {
       api.get(`/players/profiles?company_id=${companyId}`).then((r) => setRegistered(r.data));
     }
-  }, [isCompanyAdmin, companyId]);
+  }, [isCompanyAdmin, isPlatformAdmin, companyId]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -95,9 +97,9 @@ export default function RegisterTeam() {
               <Label className="text-xs font-mono uppercase text-neutral-500">Roster (optional)</Label>
               <Button type="button" size="sm" variant="ghost" data-testid="rt-add-player" onClick={() => setPlayers([...players, { name: "", role: "", jersey: "" }])} className="text-[#84CC16]">+ Add player</Button>
             </div>
-            {isCompanyAdmin && registered.length > 0 && (
+            {(isCompanyAdmin || isPlatformAdmin) && registered.length > 0 && (
               <div className="border border-[#84CC16]/30 rounded-sm bg-[#84CC16]/5 p-3 mb-3">
-                <div className="text-[10px] font-mono uppercase tracking-widest text-[#84CC16] mb-2">/ Pick from registered company players ({registered.length})</div>
+                <div className="text-[10px] font-mono uppercase tracking-widest text-[#84CC16] mb-2">/ Pick from {isPlatformAdmin ? "all registered players" : "registered company players"} ({registered.length})</div>
                 <div className="flex flex-wrap gap-2">
                   {registered.map((rp) => (
                     <button key={rp.id} type="button" data-testid={`rt-pick-${rp.id}`} onClick={() => {

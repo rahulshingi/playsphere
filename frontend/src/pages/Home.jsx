@@ -117,7 +117,9 @@ export default function Home() {
         </div>
       </section>
 
-      <SponsorBanner />
+      {false && (
+        <SponsorBanner />
+      )}
 
       {/* LIVE ZONE */}
       {liveFixtures.length > 0 && (

@@ -18,6 +18,7 @@ export default function EventDetail() {
   const [teams, setTeams] = useState([]);
   const [fixtures, setFixtures] = useState([]);
   const [standings, setStandings] = useState([]);
+  const [sponsors, setSponsors] = useState([]);
   const [scoringFixture, setScoringFixture] = useState(null);
 
   const loadAll = async () => {
@@ -96,6 +97,7 @@ export default function EventDetail() {
             <TabsTrigger value="standings" data-testid="tab-standings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Standings</TabsTrigger>
             <TabsTrigger value="teams" data-testid="tab-teams" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Teams</TabsTrigger>
             {event.format === "knockout" && <TabsTrigger value="bracket" data-testid="tab-bracket" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bracket</TabsTrigger>}
+            <TabsTrigger value="sponsors" data-testid="tab-sponsors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sponsors ({sponsors.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="fixtures" className="mt-6">
@@ -112,6 +114,9 @@ export default function EventDetail() {
               <Bracket fixtures={fixtures} teamMap={teamMap} event={event} />
             </TabsContent>
           )}
+          <TabsContent value="sponsors" className="mt-6">
+            <EventSponsors eventId={event.id} sponsors={sponsors} isAdmin={isAdmin} reload={loadAll} />
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -286,6 +291,74 @@ function BracketRow({ team, score, winner }) {
         <span className={`text-sm ${winner ? "text-white font-semibold" : "text-neutral-400"}`}>{team?.name || "TBD"}</span>
       </div>
       <span className="font-mono text-sm">{score}</span>
+    </div>
+  );
+}
+
+function EventSponsors({ eventId, sponsors, isAdmin, reload }) {
+  const [form, setForm] = useState({ name: "", tier: "bronze", logo_url: "", website: "", description: "" });
+  const tiers = ["title", "gold", "silver", "bronze"];
+  const tierColor = { title: "#84CC16", gold: "#F59E0B", silver: "#A3A3A3", bronze: "#A16207" };
+
+  const add = async (e) => {
+    e.preventDefault();
+    if (!form.name || !form.logo_url) return;
+    await api.post("/sponsors", { ...form, event_id: eventId });
+    setForm({ name: "", tier: "bronze", logo_url: "", website: "", description: "" });
+    reload();
+  };
+
+  const remove = async (id) => {
+    if (!window.confirm("Remove sponsor?")) return;
+    await api.delete(`/sponsors/${id}`); reload();
+  };
+
+  return (
+    <div className="space-y-6">
+      {tiers.map((t) => {
+        const list = sponsors.filter((s) => s.tier === t);
+        if (list.length === 0) return null;
+        return (
+          <div key={t}>
+            <div className="flex items-center gap-3 mb-3">
+              <span className="w-8 h-1 rounded-full" style={{ background: tierColor[t] }} />
+              <span className="font-mono text-xs uppercase tracking-[0.3em]" style={{ color: tierColor[t] }}>{t}</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+              {list.map((s) => (
+                <div key={s.id} data-testid={`event-sponsor-${s.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-4">
+                  <div className="flex items-center gap-3">
+                    <img src={s.logo_url} alt={s.name} className="w-12 h-12 object-cover rounded-sm" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold truncate">{s.name}</div>
+                      <div className="text-[10px] font-mono uppercase text-neutral-500">{s.tier}</div>
+                    </div>
+                  </div>
+                  {s.description && <p className="text-xs text-neutral-400 mt-2 line-clamp-2">{s.description}</p>}
+                  {isAdmin && (
+                    <Button size="sm" variant="ghost" data-testid={`event-sponsor-del-${s.id}`} onClick={() => remove(s.id)} className="text-[#FF3B30] mt-2">Remove</Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+      {sponsors.length === 0 && <div className="text-neutral-500 text-center py-12 border border-dashed border-white/10 rounded-sm">No sponsors for this tournament yet.</div>}
+
+      {isAdmin && (
+        <form onSubmit={add} className="border border-white/10 rounded-sm bg-[#141414] p-5 mt-8 grid md:grid-cols-2 gap-3">
+          <div className="md:col-span-2 font-display tracking-wider text-xl">ADD SPONSOR</div>
+          <input data-testid="event-sponsor-name" placeholder="Sponsor name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="bg-black/40 border border-white/10 rounded-sm px-3 py-2 text-white text-sm" />
+          <select data-testid="event-sponsor-tier" value={form.tier} onChange={(e) => setForm({ ...form, tier: e.target.value })} className="bg-black/40 border border-white/10 rounded-sm px-3 py-2 text-white text-sm">
+            {tiers.map((t) => <option key={t} value={t}>{t}</option>)}
+          </select>
+          <input data-testid="event-sponsor-logo" placeholder="Logo URL" value={form.logo_url} onChange={(e) => setForm({ ...form, logo_url: e.target.value })} className="md:col-span-2 bg-black/40 border border-white/10 rounded-sm px-3 py-2 text-white text-sm" />
+          <input placeholder="Website" value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} className="bg-black/40 border border-white/10 rounded-sm px-3 py-2 text-white text-sm" />
+          <input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="bg-black/40 border border-white/10 rounded-sm px-3 py-2 text-white text-sm" />
+          <Button data-testid="event-sponsor-add" type="submit" className="md:col-span-2 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Add sponsor</Button>
+        </form>
+      )}
     </div>
   );
 }

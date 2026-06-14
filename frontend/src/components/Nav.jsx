@@ -10,7 +10,7 @@ const publicLinks = [
   { to: "/events", label: "Events" },
   { to: "/teams", label: "Teams" },
   { to: "/services", label: "Services" },
-  { to: "/sponsors", label: "Sponsors" },
+  { to: "/about", label: "About" },
 ];
 
 export default function Nav() {

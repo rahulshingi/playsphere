@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
-import { MapPin, Search } from "lucide-react";
+import { MapPin, Search, BadgeCheck } from "lucide-react";
 
 const VENDOR_TYPE_LABEL = {
   ground: "Grounds", court: "Courts", coach: "Coaches", referee: "Referees",
@@ -83,6 +83,9 @@ export default function VendorMarket() {
                     <div className="h-40 bg-black/40 relative">
                       {l.images?.[0] && <img src={l.images[0]} alt="" className="w-full h-full object-cover" />}
                       <span className="absolute top-2 left-2 text-[10px] font-mono uppercase px-2 py-0.5 rounded-sm bg-black/60 text-white">{l.city}</span>
+                      <span data-testid={`vm-verified-${l.id}`} className="absolute top-2 right-2 inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 rounded-sm bg-[#84CC16] text-black font-semibold shadow-[0_2px_8px_rgba(132,204,22,0.35)]">
+                        <BadgeCheck className="w-3 h-3" /> Verified
+                      </span>
                     </div>
                     <div className="p-4">
                       <div className="font-semibold">{l.title}</div>

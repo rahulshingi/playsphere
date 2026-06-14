@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Eye, Save, Search } from "lucide-react";
+import ImageUpload from "@/components/ImageUpload";
 
 const ROLES = ["any", "batsman", "bowler", "all-rounder", "wicket-keeper"];
 const BATTING = ["right", "left"];
@@ -75,7 +76,7 @@ export default function PlayerProfile() {
             <div className="aspect-square rounded-sm overflow-hidden bg-black/40 border border-white/10">
               <img src={profile.photo_url || "https://images.pexels.com/photos/2216610/pexels-photo-2216610.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"} alt="" className="w-full h-full object-cover" />
             </div>
-            <Field label="Photo URL"><Input data-testid="pp-photo" value={profile.photo_url || ""} onChange={(e) => upd({ photo_url: e.target.value })} className="bg-black/40 border-white/10 text-white" /></Field>
+            <Field label="Photo"><ImageUpload value={profile.photo_url} onChange={(v) => upd({ photo_url: v })} testid="pp-photo" placeholder="https://… or upload selfie" /></Field>
             <Field label="Company (universal — change any time)">
               <Select value={profile.company_id || "__none__"} onValueChange={(v) => upd({ company_id: v === "__none__" ? null : v })}>
                 <SelectTrigger data-testid="pp-company" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Independent" /></SelectTrigger>

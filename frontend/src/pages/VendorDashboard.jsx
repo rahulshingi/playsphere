@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { CURRENCIES, fmtPrice } from "@/lib/currency";
+import ImageUpload from "@/components/ImageUpload";
 
 const SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
 
@@ -258,8 +259,7 @@ function ListingEditor({ listing, setListing, onSave, onClose }) {
           <div className="space-y-2 mt-2">
             {(listing.images || []).map((img, i) => (
               <div key={i} className="flex gap-2 items-center">
-                <Input data-testid={`vl-img-${i}`} value={img} onChange={(e) => updImage(i, e.target.value)} placeholder="https://…" className="bg-black/40 border-white/10 text-white" />
-                {img && <img src={img} alt="" className="w-10 h-10 object-cover rounded-sm" />}
+                <div className="flex-1"><ImageUpload value={img} onChange={(v) => updImage(i, v)} testid={`vl-img-${i}`} placeholder="https://… or upload venue photo" /></div>
                 <Button size="sm" variant="ghost" onClick={() => delImage(i)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
               </div>
             ))}

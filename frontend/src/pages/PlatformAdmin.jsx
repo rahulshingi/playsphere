@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CURRENCIES, fmtPrice } from "@/lib/currency";
+import ImageUpload from "@/components/ImageUpload";
 
 const CATEGORIES = ["streaming", "apparel", "merchandise", "awards", "venue", "equipment", "training", "other"];
 
@@ -268,8 +269,8 @@ function ServiceEditor({ service, setService, onSave, onClose }) {
           <Field label="Price unit"><Input data-testid="svc-unit" value={service.price_unit} onChange={(e) => upd({ price_unit: e.target.value })} className="bg-black/40 border-white/10 text-white" /></Field>
         </div>
         <Field label="Description"><Textarea data-testid="svc-desc" value={service.description} onChange={(e) => upd({ description: e.target.value })} className="bg-black/40 border-white/10 text-white" /></Field>
-        <Field label="Main image URL">
-          <Input data-testid="svc-image" value={service.images?.[0] || ""} onChange={(e) => upd({ images: [e.target.value] })} className="bg-black/40 border-white/10 text-white" />
+        <Field label="Main image">
+          <ImageUpload value={service.images?.[0] || ""} onChange={(v) => upd({ images: [v] })} testid="svc-image" placeholder="https://… or upload image" />
         </Field>
 
         <div className="flex items-center gap-3">
@@ -362,7 +363,7 @@ function PeopleEditor({ label, testid, people, onChange }) {
           <div key={i} className="grid grid-cols-12 gap-2 items-center">
             <Input data-testid={`${testid}-${i}-name`} placeholder="Name" value={p.name} onChange={(e) => upd(i, { name: e.target.value })} className="col-span-3 bg-black/40 border-white/10 text-white" />
             <Input data-testid={`${testid}-${i}-role`} placeholder="Role" value={p.role} onChange={(e) => upd(i, { role: e.target.value })} className="col-span-3 bg-black/40 border-white/10 text-white" />
-            <Input data-testid={`${testid}-${i}-image`} placeholder="Image URL" value={p.image_url} onChange={(e) => upd(i, { image_url: e.target.value })} className="col-span-4 bg-black/40 border-white/10 text-white" />
+            <div className="col-span-4"><ImageUpload value={p.image_url} onChange={(v) => upd(i, { image_url: v })} testid={`${testid}-${i}-image`} placeholder="Image — paste URL or upload" /></div>
             <Input placeholder="LinkedIn" value={p.linkedin_url || ""} onChange={(e) => upd(i, { linkedin_url: e.target.value })} className="col-span-1 bg-black/40 border-white/10 text-white" />
             <Button size="sm" variant="ghost" onClick={() => del(i)} className="col-span-1 text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
             <Textarea data-testid={`${testid}-${i}-bio`} rows={1} placeholder="Bio" value={p.bio || ""} onChange={(e) => upd(i, { bio: e.target.value })} className="col-span-12 bg-black/40 border-white/10 text-white" />

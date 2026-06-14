@@ -170,7 +170,7 @@ vendor_sections = [
             "Choose a password and click <b>Create vendor account</b>.",
             "You are taken straight to <b>/vendor/dashboard</b>. A yellow <b>“PENDING APPROVAL”</b> chip is shown on your business banner until PlaySphere HQ verifies you.",
         ]),
-        ("tip", "Tip — vendors are approved per business and per listing. Make sure your business details are accurate before adding listings; this speeds up approval."),
+        ("tip", "Tip — vendors are approved per business and per listing. Make sure your business details are accurate before adding listings; this speeds up approval. Once a listing is live, it carries a green <b>✓ Verified by PlaySphere</b> badge in the marketplace — instant trust signal for HR teams browsing /hire."),
     ]},
     {"title": "3. Add a listing (ground, court, coach, etc.)",
      "blocks": [
@@ -326,10 +326,15 @@ company_sections = [
         ("h3", "Marketplace services"),
         ("p", "Open <b>/services</b> to browse the 17-service catalogue (Live YouTube streaming, Jerseys, Caps, Trophies with image picks, Custom Medals, Banners, Catering, DJ, Photography, Videography, Drone, Anchoring, First Aid, Match Officials, …). Click a card → fill the dynamic form → submit a quote request. Track status under <b>/bookings</b>."),
         ("h3", "Hire grounds, coaches, officials"),
-        ("p", "Open <b>/hire</b> from the nav. Tabs cover Grounds, Courts, Coaches, Referees, Umpires, Trainers, Photographers and Videographers. Filter by city. Click a listing → pick date, start & end time → <b>Request booking</b>. The vendor confirms or declines from their dashboard."),
+        ("p", "Open <b>/hire</b> from the nav. Tabs cover Grounds, Courts, Coaches, Referees, Umpires, Trainers, Photographers and Videographers. Filter by city. Every visible card carries a green <b>✓ Verified</b> badge — only listings approved by PlaySphere HQ appear here. Click a listing → pick date, start & end time → <b>Request booking</b>. The vendor confirms or declines from their dashboard."),
         ("warn", "Vendor contact details are deliberately hidden from you until they confirm — this is how PlaySphere keeps the marketplace neutral. After confirmation we connect you over email."),
     ]},
-    {"title": "6. Live updates",
+    {"title": "6. Sponsors — now per-tournament",
+     "blocks": [
+        ("p", "Sponsors are managed at the <b>tournament</b> level, not site-wide. Open an event you own and switch to the <b>Sponsors</b> tab to add sponsors with tier (Title / Gold / Silver / Bronze), logo URL, website and description. Public visitors see those sponsors only on that event's page — keeping every sponsorship deal scoped to the event it funds."),
+        ("tip", "Pitch sponsors on per-tournament packages: Title for one premium logo, Gold/Silver/Bronze tiers for graded exposure. Sponsors only appear on the events they sponsor — a clean ROI story for HQ."),
+    ]},
+    {"title": "7. Live updates",
      "blocks": [
         ("bul", [
             "Every event page shows a <b>LIVE STREAM ON</b> badge — score changes appear instantly via WebSocket.",
@@ -379,21 +384,45 @@ admin_sections = [
             "Vendor bookings — visible in /platform-admin under bookings overview; full lifecycle (pending / confirmed / declined / cancelled).",
         ]),
     ]},
-    {"title": "5. Site settings & branding",
+    {"title": "5. Site settings, About page & branding",
      "blocks": [
+        ("h3", "Social media (Settings tab)"),
         ("num", [
             "Open the <b>Settings</b> tab on /platform-admin.",
             "Paste the URLs for Facebook, Instagram, LinkedIn, Twitter and YouTube.",
             "Click <b>Save settings</b>. The footer renders an icon for every link you set, and hides icons for fields you leave blank.",
         ]),
+        ("h3", "About page content (About page tab)"),
+        ("num", [
+            "Switch to the <b>About page</b> tab.",
+            "Edit the company description, mission and vision text — these show up at <b>/about</b>.",
+            "Add <b>Founders</b> and <b>Directors</b> entries with name, role, image URL, bio and LinkedIn link.",
+            "Click <b>Save About page</b>. /about updates instantly across the site.",
+        ]),
+        ("tip", "The /about route is publicly accessible — no login required. It's the standard B2B credibility page; make sure the founders & mission copy is brand-aligned before launching marketing pushes."),
     ]},
-    {"title": "6. Operational tips",
+    {"title": "6. Tournaments & cross-company rostering",
+     "blocks": [
+        ("p", "Platform admin can create tournaments directly on /platform-admin (or /admin). When you build a team via /register-team you can <b>pick from ALL registered players across every company</b> — not just one company's roster. Company admins only see their own company's players; this is intentional."),
+        ("warn", "Pulling a player into a tournament does not change their company affiliation. Players retain their universal corporate-sports profile."),
+    ]},
+    {"title": "7. Sponsors are now per-tournament",
+     "blocks": [
+        ("p", "The global <b>/sponsors</b> page has been retired. Every event detail page now has a <b>Sponsors</b> tab where admins (platform or company) can add Title / Gold / Silver / Bronze sponsors with logos, website and description. Public visitors browsing an event see only that event's sponsors — making each sponsorship contract cleanly scoped."),
+        ("bul", [
+            "Per-tournament sponsor lists encourage tiered packages and repeat sponsorships.",
+            "If a vendor is also a sponsor, they appear in both places — no double-counting.",
+            "Removing a sponsor is non-destructive: the historical event card and bracket views remain.",
+        ]),
+    ]},
+    {"title": "8. Operational tips",
      "blocks": [
         ("bul", [
             "Run weekly approval batches — group vendor + listing approvals for predictable SLAs.",
             "Audit currency mix — Indian customers expect INR; US/EU expect USD. Set the right default per service.",
-            "Use the <b>“Verified”</b> badge as a quality signal — it appears automatically on every approved listing in /hire.",
+            "Use the <b>✓ Verified</b> badge as a quality signal — it appears automatically on every approved listing in /hire (no manual flag needed).",
             "Keep the seed admin password rotation policy: change it after onboarding the real HQ team and remove the default.",
+            "Regenerate manuals after major product changes — run <code>/app/scripts/generate_manuals.py</code>.",
         ]),
         ("warn", "Anything you do here affects every company on the platform. Test new services in a draft state (uncheck Active) before going live."),
     ]},

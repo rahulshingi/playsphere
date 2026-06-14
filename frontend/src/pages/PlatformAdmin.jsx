@@ -13,6 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { CURRENCIES, fmtPrice } from "@/lib/currency";
+import { SPORTS } from "@/lib/sports";
 import ImageUpload from "@/components/ImageUpload";
 
 const CATEGORIES = ["streaming", "apparel", "merchandise", "awards", "venue", "equipment", "training", "other"];
@@ -22,12 +23,15 @@ export default function PlatformAdmin() {
   const nav = useNavigate();
   const [services, setServices] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [events, setEvents] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [listings, setListings] = useState([]);
   const [settings, setSettings] = useState({});
   const [about, setAbout] = useState({ company_description: "", mission: "", vision: "", founders: [], directors: [] });
   const [editing, setEditing] = useState(null);
+  const blankEvent = { name: "", sport: "cricket", format: "round_robin", event_type: "playsphere_organized", description: "", venue: "", banner_url: "", stream_url: "" };
+  const [newEvent, setNewEvent] = useState(blankEvent);
 
   const blankService = {
     name: "",
@@ -47,13 +51,14 @@ export default function PlatformAdmin() {
   const load = () => Promise.all([
     api.get("/services?include_inactive=true"),
     api.get("/companies"),
+    api.get("/events"),
     api.get("/bookings"),
     api.get("/vendors"),
     api.get("/admin/listings"),
     api.get("/settings"),
     api.get("/about"),
-  ]).then(([s, c, b, v, l, st, ab]) => {
-    setServices(s.data); setCompanies(c.data); setBookings(b.data);
+  ]).then(([s, c, ev, b, v, l, st, ab]) => {
+    setServices(s.data); setCompanies(c.data); setEvents(ev.data); setBookings(b.data);
     setVendors(v.data); setListings(l.data); setSettings(st.data);
     setAbout({ company_description: "", mission: "", vision: "", founders: [], directors: [], ...ab.data });
   });
@@ -83,6 +88,26 @@ export default function PlatformAdmin() {
     await api.delete(`/services/${id}`); load();
   };
 
+  const createEvent = async (e) => {
+    e.preventDefault();
+    if (!newEvent.name) return toast.error("Event name required");
+    try {
+      await api.post("/events", newEvent);
+      toast.success("Event created");
+      setNewEvent(blankEvent);
+      load();
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
+  };
+
+  const deleteEvent = async (id, name) => {
+    if (!window.confirm(`Delete ${name}? This will also delete its fixtures.`)) return;
+    try {
+      await api.delete(`/events/${id}`);
+      toast.success("Deleted");
+      load();
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
+  };
+
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white">
       <Nav />
@@ -98,6 +123,7 @@ export default function PlatformAdmin() {
         <Tabs defaultValue="services" className="mt-10">
           <TabsList className="bg-[#141414] border border-white/10 rounded-sm flex-wrap">
             <TabsTrigger value="services" data-testid="pa-tab-services" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Services ({services.length})</TabsTrigger>
+            <TabsTrigger value="events" data-testid="pa-tab-events" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Events ({events.length})</TabsTrigger>
             <TabsTrigger value="companies" data-testid="pa-tab-companies" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Companies ({companies.length})</TabsTrigger>
             <TabsTrigger value="bookings" data-testid="pa-tab-bookings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bookings ({bookings.length})</TabsTrigger>
             <TabsTrigger value="vendors" data-testid="pa-tab-vendors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Vendors ({vendors.length})</TabsTrigger>
@@ -122,6 +148,63 @@ export default function PlatformAdmin() {
                 </div>
               </div>
             ))}
+          </TabsContent>
+
+          <TabsContent value="events" className="mt-6">
+            <div className="grid md:grid-cols-2 gap-6">
+              <form onSubmit={createEvent} className="border border-white/10 rounded-sm p-6 bg-[#141414] space-y-3">
+                <div className="font-display tracking-wider text-2xl flex items-center gap-2"><Plus className="w-4 h-4 text-[#84CC16]" /> NEW EVENT</div>
+                <Input data-testid="pa-event-name" placeholder="Event name (e.g. PlaySphere Cricket League 2026)" value={newEvent.name} onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })} required className="bg-black/40 border-white/10 text-white" />
+                <Textarea data-testid="pa-event-desc" placeholder="Description" value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                <div className="grid grid-cols-2 gap-2">
+                  <Select value={newEvent.sport} onValueChange={(v) => setNewEvent({ ...newEvent, sport: v })}>
+                    <SelectTrigger data-testid="pa-event-sport" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-[#141414] text-white border-white/10">
+                      {SPORTS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <Select value={newEvent.format} onValueChange={(v) => setNewEvent({ ...newEvent, format: v })}>
+                    <SelectTrigger data-testid="pa-event-format" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
+                    <SelectContent className="bg-[#141414] text-white border-white/10">
+                      <SelectItem value="round_robin">Round-robin</SelectItem>
+                      <SelectItem value="knockout">Knockout</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Select value={newEvent.event_type} onValueChange={(v) => setNewEvent({ ...newEvent, event_type: v })}>
+                  <SelectTrigger data-testid="pa-event-type" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-[#141414] text-white border-white/10">
+                    <SelectItem value="playsphere_organized">PlaySphere organized</SelectItem>
+                    <SelectItem value="inter_company">Inter-company tournament</SelectItem>
+                    <SelectItem value="single_company">Single company tournament</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input data-testid="pa-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                <ImageUpload value={newEvent.banner_url} onChange={(v) => setNewEvent({ ...newEvent, banner_url: v })} testid="pa-event-banner" placeholder="Banner image — paste URL or upload" />
+                <Input data-testid="pa-event-stream" placeholder="Live stream URL (YouTube / Twitch / any)" value={newEvent.stream_url} onChange={(e) => setNewEvent({ ...newEvent, stream_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                <Button data-testid="pa-create-event-btn" type="submit" className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Create event</Button>
+                <p className="text-[10px] text-neutral-500 leading-relaxed">Once created, click <strong>Open</strong> on the event to add teams, assign captains, attach participating companies (inter-company), and add players.</p>
+              </form>
+
+              <div className="space-y-2">
+                {events.length === 0 && <div className="text-neutral-500 text-sm text-center py-12 border border-dashed border-white/10 rounded-sm">No events yet.</div>}
+                {events.map((e) => (
+                  <div key={e.id} data-testid={`pa-event-row-${e.id}`} className="border border-white/10 rounded-sm p-4 bg-[#141414] flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate">{e.name}</div>
+                      <div className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest mt-0.5">
+                        {e.sport} · {e.format.replace("_", " ")} · {(e.event_type || "single_company").replace("_", " ")}
+                        {e.stream_url && <span className="ml-2 text-[#FF3B30]">● LIVE LINK</span>}
+                      </div>
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button size="sm" variant="ghost" data-testid={`pa-event-open-${e.id}`} onClick={() => nav(`/events/${e.id}`)} className="text-[#84CC16]">Open</Button>
+                      <Button size="sm" variant="ghost" data-testid={`pa-event-del-${e.id}`} onClick={() => deleteEvent(e.id, e.name)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </TabsContent>
 
           <TabsContent value="companies" className="mt-6 space-y-2">

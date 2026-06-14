@@ -520,7 +520,8 @@ class VendorBookingRequest(BaseModel):
     listing_id: str
     requested_date: str
     start_time: str
-    end_time: str
+    end_time: Optional[str] = None
+    hours: Optional[int] = None
     notes: Optional[str] = ""
 
 
@@ -536,11 +537,18 @@ class VendorBooking(BaseModel):
     requested_date: str
     start_time: str
     end_time: str
+    hours: int = 1
+    sport: Optional[str] = None
+    city: Optional[str] = None
     price: float
     currency: str
+    total: float = 0
     notes: str = ""
+    admin_notes: Optional[str] = ""
     status: str = "pending"
+    notifications: List[dict] = Field(default_factory=list)
     created_by: str
+    hr_email: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -1777,11 +1785,23 @@ async def list_public_listings(
     if vendor_type:
         flt["vendor_type"] = vendor_type
     if city:
-        flt["city"] = {"$regex": city, "$options": "i"}
+        flt["city"] = {"$regex": f"^{city}$", "$options": "i"}
     if sport:
         flt["sports"] = sport
     docs = await db.vendor_listings.find(flt, {"_id": 0, "vendor_id": 0}).sort("created_at", -1).to_list(500)
     return docs
+
+
+@api.get("/vendor-listings/cities")
+async def list_listing_cities(sport: Optional[str] = None, vendor_type: Optional[str] = None):
+    """Distinct cities for HR's location picker."""
+    flt = {"approved": True, "active": True}
+    if vendor_type:
+        flt["vendor_type"] = vendor_type
+    if sport:
+        flt["sports"] = sport
+    cities = await db.vendor_listings.distinct("city", flt)
+    return sorted([c for c in cities if c])
 
 
 @api.get("/vendor-listings/{listing_id}")
@@ -1863,22 +1883,92 @@ async def approve_listing(listing_id: str, body: dict, _: dict = Depends(require
 
 
 # ---------- Vendor bookings ----------
+def _hhmm_add(start: str, hours: int) -> str:
+    """Add `hours` to a HH:MM time string, wrapping at 24h."""
+    try:
+        h, m = (int(x) for x in start.split(":")[:2])
+        total = (h * 60 + m + hours * 60) % (24 * 60)
+        return f"{total // 60:02d}:{total % 60:02d}"
+    except Exception:
+        return start
+
+
+def _hours_between(start: str, end: str) -> int:
+    """Whole hours between two HH:MM strings (assumes same day, end > start)."""
+    try:
+        sh, sm = (int(x) for x in start.split(":")[:2])
+        eh, em = (int(x) for x in end.split(":")[:2])
+        mins = max((eh * 60 + em) - (sh * 60 + sm), 60)
+        return max(1, round(mins / 60))
+    except Exception:
+        return 1
+
+
+def _booking_notification(event: str, message: str, by: dict) -> dict:
+    return {
+        "event": event,
+        "message": message,
+        "by_role": by.get("role"),
+        "by_name": by.get("name") or by.get("email"),
+        "at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+async def _log_booking_change(booking: dict, event: str, message: str, by: dict):
+    """Append a notification entry and mirror to backend logs (mocked email until integration is wired)."""
+    note = _booking_notification(event, message, by)
+    await db.vendor_bookings.update_one({"id": booking["id"]}, {"$push": {"notifications": note}})
+    hr_email = booking.get("hr_email") or booking.get("company_name") or "<unknown>"
+    logger.warning(
+        "BOOKING NOTIFICATION for %s | booking=%s | %s — %s",
+        hr_email, booking["id"], event, message,
+    )
+
+
 @api.post("/vendor-bookings", response_model=VendorBooking)
 async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depends(require_company_admin)):
     listing = await db.vendor_listings.find_one({"id": body.listing_id, "approved": True, "active": True}, {"_id": 0})
     if not listing:
         raise HTTPException(404, "Listing not available")
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+
+    # Compute hours / end_time. Either may be provided; we normalise both.
+    hours = int(body.hours) if body.hours else None
+    end_time = body.end_time
+    if hours and not end_time:
+        end_time = _hhmm_add(body.start_time, hours)
+    elif end_time and not hours:
+        hours = _hours_between(body.start_time, end_time)
+    elif not (hours or end_time):
+        hours = 1
+        end_time = _hhmm_add(body.start_time, 1)
+
+    price = float(listing["price"])
+    total = price * hours
+    sport = listing.get("sports", [None])[0] if listing.get("sports") else None
+
     booking = VendorBooking(
         listing_id=listing["id"], listing_title=listing["title"],
         vendor_id=listing["vendor_id"], vendor_type=listing["vendor_type"],
         company_id=user["company_id"], company_name=(company or {}).get("name", ""),
-        requested_date=body.requested_date, start_time=body.start_time, end_time=body.end_time,
-        price=float(listing["price"]), currency=listing.get("currency", "INR"),
+        requested_date=body.requested_date, start_time=body.start_time, end_time=end_time,
+        hours=hours, sport=sport, city=listing.get("city"),
+        price=price, currency=listing.get("currency", "INR"), total=total,
         notes=body.notes or "", created_by=user["id"],
+        hr_email=user.get("email"),
     )
-    await db.vendor_bookings.insert_one(booking.model_dump())
-    return booking
+    payload = booking.model_dump()
+    payload["notifications"] = [_booking_notification(
+        "created",
+        f"Request submitted for {listing['title']} on {body.requested_date} {body.start_time} ({hours}h).",
+        user,
+    )]
+    await db.vendor_bookings.insert_one(payload)
+    logger.warning(
+        "BOOKING NOTIFICATION for %s | booking=%s | created — Request submitted for %s on %s %s (%sh).",
+        user.get("email"), booking.id, listing["title"], body.requested_date, body.start_time, hours,
+    )
+    return VendorBooking(**payload)
 
 
 @api.get("/vendor-bookings", response_model=List[VendorBooking])
@@ -1897,28 +1987,51 @@ async def list_vendor_bookings(user: dict = Depends(get_current_user)):
     return [VendorBooking(**d) for d in docs]
 
 
+VENDOR_STATUSES = {"vendor_accepted", "vendor_declined"}
+ADMIN_STATUSES = {"confirmed", "rejected"}
+HR_STATUSES = {"cancelled"}
+
+
 @api.patch("/vendor-bookings/{booking_id}", response_model=VendorBooking)
 async def update_vendor_booking(booking_id: str, body: dict, user: dict = Depends(get_current_user)):
     doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Not found")
     role = user.get("role")
+    new_status = body.get("status")
+    admin_notes = body.get("admin_notes")
     allowed: dict = {}
+
     if role == "vendor":
         vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
         if not vendor or doc["vendor_id"] != vendor["id"]:
             raise HTTPException(403)
-        if body.get("status") in ("confirmed", "declined"):
-            allowed["status"] = body["status"]
+        # Backward compat: legacy "confirmed"/"declined" from vendor → vendor_accepted/vendor_declined
+        compat = {"confirmed": "vendor_accepted", "declined": "vendor_declined"}
+        new_status = compat.get(new_status, new_status)
+        if new_status in VENDOR_STATUSES:
+            allowed["status"] = new_status
     elif role == "company_admin" and doc["company_id"] == user.get("company_id"):
-        if body.get("status") == "cancelled":
-            allowed["status"] = "cancelled"
+        if new_status in HR_STATUSES:
+            allowed["status"] = new_status
     elif role in ("platform_admin", "admin"):
-        allowed = {k: v for k, v in body.items() if k != "id"}
+        if new_status in (VENDOR_STATUSES | ADMIN_STATUSES | HR_STATUSES):
+            allowed["status"] = new_status
+        if admin_notes is not None:
+            allowed["admin_notes"] = admin_notes
     else:
         raise HTTPException(403)
-    if allowed:
-        await db.vendor_bookings.update_one({"id": booking_id}, {"$set": allowed})
+
+    if not allowed:
+        raise HTTPException(400, "No allowed changes")
+
+    await db.vendor_bookings.update_one({"id": booking_id}, {"$set": allowed})
+    # Log notification if status changed
+    if "status" in allowed and allowed["status"] != doc.get("status"):
+        msg = f"Status changed from '{doc.get('status')}' to '{allowed['status']}'"
+        if admin_notes:
+            msg += f" — note: {admin_notes}"
+        await _log_booking_change(doc, "status_change", msg, user)
     updated = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
     return VendorBooking(**updated)
 

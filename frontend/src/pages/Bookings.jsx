@@ -8,20 +8,24 @@ import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
+import VendorBookings from "@/components/VendorBookings";
 
 const statusOptions = ["pending", "approved", "fulfilled", "cancelled"];
 
 export default function Bookings() {
-  const { ready, isCompanyAdmin, isPlatformAdmin } = useAuth();
+  const { ready, isCompanyAdmin, isPlatformAdmin, isVendor } = useAuth();
   const nav = useNavigate();
   const [items, setItems] = useState([]);
 
-  const load = () => api.get("/bookings").then((r) => setItems(r.data));
+  const load = () => {
+    if (isVendor) { setItems([]); return; } // vendors don't have service bookings
+    api.get("/bookings").then((r) => setItems(r.data));
+  };
 
   useEffect(() => {
-    if (ready && !(isCompanyAdmin || isPlatformAdmin)) { nav("/login"); return; }
+    if (ready && !(isCompanyAdmin || isPlatformAdmin || isVendor)) { nav("/login"); return; }
     if (ready) load();
-  }, [ready, isCompanyAdmin, isPlatformAdmin]);
+  }, [ready, isCompanyAdmin, isPlatformAdmin, isVendor, nav]);
 
   const updateStatus = async (id, status) => {
     try { await api.patch(`/bookings/${id}`, { status }); toast.success("Updated"); load(); } catch { toast.error("Failed"); }

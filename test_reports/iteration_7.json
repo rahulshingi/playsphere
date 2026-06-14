@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 7: Phase-1 CricHeroes-style setup chain (event-scoped teams, captains, members), inter-company HR auto-provision, live stream URL field, and player forgot/reset-password flow. BACKEND: 22 new pytest tests added across /app/backend/tests/test_event_teams.py (17) and /app/backend/tests/test_password_reset.py (5). Full regression: 123/123 pytest tests pass (101 prior + 22 new). FRONTEND e2e (Playwright on REACT_APP_BACKEND_URL): (1) Anonymous nav contains NO Teams link ([data-testid=nav-link-teams] count=0). (2) Platform admin nav also has no public Teams link (count=0). (3) Created event TEST_InterCo_Cup (event_type=inter_company, stream_url=https://youtube.com/live/xyz) — kept seeded for Phase 2 as requested. (4) On event detail: [data-testid=event-stream-link] = 'WATCH LIVE' with href=https://youtube.com/live/xyz; [data-testid=event-stream-edit] visible for admin. (5) [data-testid=tab-teams] visible to admin, NOT visible to anonymous (count=0). (6) Clicking Teams tab renders [data-testid=teams-manager] + [data-testid=event-companies] sections. (7) /players/login has [data-testid=player-forgot-link] -> /players/forgot-password -> submitting email shows [data-testid=forgot-sent] confirmation. (8) /players/reset-password?token=… renders [data-testid=reset-pwd] + [data-testid=reset-confirm] + [data-testid=reset-submit]. Backend reset-token RCA path also validated end-to-end in pytest (forgot -> log scrape -> reset -> login with new pw -> reused-token=400 -> restore).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "EventDetail header", "issues": ["React console warning: 'An empty string () was passed to the src attribute' — the <img src={event.banner_url}> renders an empty src when banner_url is '' (default). Use {event.banner_url ? <img src=…/> : null} to silence and avoid the spec-noncompliant network behavior."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_event_teams.py",
+    "/app/backend/tests/test_password_reset.py",
+    "/app/test_reports/pytest/iter7_new.xml",
+    "/app/test_reports/pytest/iter7_full.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Fix the empty <img src=''> warning on EventDetail when banner_url is empty (conditional render).",
+    "OPTIONAL HARDENING: /api/players/forgot-password leaks timing — for unknown emails the response is instant; for known emails it hashes + inserts a token, so a careful attacker can side-channel enumerate. Add a constant-time delay or async-fire-and-return.",
+    "OPTIONAL HARDENING: /api/events/{event_id}/teams/{team_id}/captain has a partial-permission branch (lines 977-980) that lets ANY company_admin past the first gate if `_can_manage_event` returns False; only the team.company_id check stops them. The logic is correct today (company_admin with wrong company_id is blocked, then `not in (platform_admin/admin/company_admin)` blocks non-admins). Worth a comment so it isn't refactored unsafely.",
+    "OPTIONAL: server.py is now 2200+ lines — splitting into routers (events/teams/players/uploads/vendors/settings) is overdue (called out in iter5 + iter6 too)."
+  ],
+  "critical_code_review_comments": [
+    "server.py L1036 (quick-add): default login_email is 'player_{mobile}@players.playsphere.app' — but mobile may contain '+' which is technically allowed in local-part yet quoted by some MTAs; downstream email-sending will eventually break. Either strip '+' or encode it.",
+    "server.py L1093 (forgot-password): token is 64 hex chars (two uuid4 hex strings concatenated). uuid4 is cryptographically random-ish but NOT a CSPRNG by spec. Use secrets.token_urlsafe(32) to be unambiguously secure.",
+    "server.py L998 (list_team_members): masks mobile correctly but pops the `mobile` field IN-PLACE on documents that came straight from MongoDB. With a future cache layer this would mutate cached docs. Use {**d, 'mobile': None, 'mobile_masked': mask} returned as new dict.",
+    "server.py L919 (slug = cname.lower().replace(\" \", \"-\")[:40]): no uniqueness check — duplicate company names will crash on the unique index if one exists, or produce duplicate slugs if not. Use _slugify + while-exists loop like /companies/signup does.",
+    "server.py L1090 (forgot-password) only finds users with role='player'. Company HR auto-created via /events/{id}/companies (role=company_admin) and the HR cannot self-serve a password reset via this endpoint. Confirm by design — otherwise add a separate /auth/forgot-password.",
+    "EventTeamsManager.jsx: credentials modal closes via [data-testid=cred-copy] which copies to clipboard and dismisses — but if the user dismisses by clicking outside before reading the password, the password is LOST (it's only in component state). Consider also logging a banner 'You will not see this password again'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_event_teams.py (NEW — 17 tests)",
+    "/app/backend/tests/test_password_reset.py (NEW — 5 tests)"
+  ],
+  "success_rate": {"backend": "100% (123/123 pytest)", "frontend": "100% on the 12 critical assertions exercised (nav gating, stream URL render+edit, teams-tab gating, teams-manager render, forgot/reset page render + submit)"},
+  "test_credentials": "admin@playsphere.com/admin123, +919000000001/player123. New HR users auto-created by /api/events/{id}/companies during pytest (emails of form hr_<unix_ts>@testco.example.com with random temp_password — logged to backend.err.log).",
+  "seed_data_creation": "Created inter-company event TEST_InterCo_Cup (id captured in test logs, persisted in db.events) with stream_url=https://youtube.com/live/xyz, plus 1 team TEST_Tigers in that event, plus 2+ HR users/companies (TEST_NewCo_<ts>), plus several quick-add player profiles (TEST_Quick, TEST_ByCaptain). All prefixed with TEST_ and intentionally LEFT IN PLACE for Phase 2 (toss / playing-XI / score cards) per the user note 'do not delete'.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Phase-1 chain is fully wired and validated. The seeded TEST_InterCo_Cup event is the canonical fixture for Phase-2 work — it already has companies attached, 1 team with members, plus a recorded captain that was deleted in a teardown test (so the team currently has captain_player_id=null but still has members). All 22 new tests are idempotent across runs (use uniq=time.time() suffixes), so re-running pytest is safe. Backend reset-password log-scrape relies on tail of /var/log/supervisor/backend.err.log — if logging is ever changed to JSON or rotated to a different path, update _read_backend_log_for_token in test_password_reset.py.",
+  "rca of the issue": "No production bug found this iteration. The implementation matches the spec across all 18 acceptance criteria. The only flagged minor: EventDetail renders <img src=''> when banner_url is empty, emitting a React warning — non-functional, not blocking."
+}

@@ -23,6 +23,8 @@ import Bookings from "@/pages/Bookings";
 import PlatformAdmin from "@/pages/PlatformAdmin";
 import PlayerSignup from "@/pages/PlayerSignup";
 import PlayerLogin from "@/pages/PlayerLogin";
+import PlayerForgotPassword from "@/pages/PlayerForgotPassword";
+import PlayerResetPassword from "@/pages/PlayerResetPassword";
 import PlayerProfile from "@/pages/PlayerProfile";
 import { PlayerSearch, PlayerProfileView } from "@/pages/PlayerDirectory";
 import VendorSignup from "@/pages/VendorSignup";
@@ -59,6 +61,8 @@ function App() {
           {/* Players */}
           <Route path="/players/signup" element={<PlayerSignup />} />
           <Route path="/players/login" element={<PlayerLogin />} />
+          <Route path="/players/forgot-password" element={<PlayerForgotPassword />} />
+          <Route path="/players/reset-password" element={<PlayerResetPassword />} />
           <Route path="/players/me" element={<PlayerProfile />} />
           <Route path="/players/profiles" element={<PlayerSearch />} />
           <Route path="/players/profiles/:id" element={<PlayerProfileView />} />

@@ -8,7 +8,6 @@ const LOGO_URL = "/playsphere-mark.png";
 const publicLinks = [
   { to: "/", label: "Home" },
   { to: "/events", label: "Events" },
-  { to: "/teams", label: "Teams" },
   { to: "/services", label: "Services" },
   { to: "/about", label: "About" },
 ];

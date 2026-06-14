@@ -189,6 +189,7 @@ SportType = Literal[
 ]
 FixtureFormat = Literal["round_robin", "knockout"]
 EventStatus = Literal["upcoming", "ongoing", "completed"]
+EventType = Literal["single_company", "inter_company", "playsphere_organized"]
 MatchStatus = Literal["scheduled", "live", "completed"]
 
 
@@ -198,6 +199,8 @@ class Team(BaseModel):
     name: str
     department: Optional[str] = ""
     captain: Optional[str] = ""
+    captain_player_id: Optional[str] = None
+    members: List[str] = Field(default_factory=list)
     color: Optional[str] = "#007AFF"
     logo_url: Optional[str] = ""
     event_id: Optional[str] = None
@@ -212,6 +215,7 @@ class TeamCreate(BaseModel):
     color: Optional[str] = "#007AFF"
     logo_url: Optional[str] = ""
     event_id: Optional[str] = None
+    company_id: Optional[str] = None
 
 
 class Player(BaseModel):
@@ -243,12 +247,15 @@ class Event(BaseModel):
     sport: SportType
     description: Optional[str] = ""
     format: FixtureFormat = "round_robin"
+    event_type: EventType = "single_company"
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     venue: Optional[str] = ""
     status: EventStatus = "upcoming"
     banner_url: Optional[str] = ""
+    stream_url: Optional[str] = ""
     company_id: Optional[str] = None
+    companies: List[str] = Field(default_factory=list)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -257,10 +264,13 @@ class EventCreate(BaseModel):
     sport: SportType
     description: Optional[str] = ""
     format: FixtureFormat = "round_robin"
+    event_type: EventType = "single_company"
     start_date: Optional[str] = None
     end_date: Optional[str] = None
     venue: Optional[str] = ""
     banner_url: Optional[str] = ""
+    stream_url: Optional[str] = ""
+    companies: List[str] = Field(default_factory=list)
 
 
 class Fixture(BaseModel):
@@ -816,6 +826,301 @@ async def update_player(player_id: str, body: dict, _: dict = Depends(require_ad
 @api.delete("/team-players/{player_id}")
 async def delete_player(player_id: str, _: dict = Depends(require_admin)):
     await db.players.delete_one({"id": player_id})
+    return {"ok": True}
+
+
+# ---------- Event-scoped team & member management (Phase 1: CricHeroes-style setup chain) ----------
+def _gen_temp_password(length: int = 10) -> str:
+    import secrets
+    import string
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+async def _can_manage_event(user: dict, event: dict) -> bool:
+    role = user.get("role")
+    if role in ("platform_admin", "admin"):
+        return True
+    if role == "company_admin":
+        cid = user.get("company_id")
+        if not cid:
+            return False
+        if event.get("company_id") == cid:
+            return True
+        if cid in (event.get("companies") or []):
+            return True
+    return False
+
+
+async def _can_manage_team(user: dict, event: dict, team: dict) -> bool:
+    if await _can_manage_event(user, event):
+        # company_admin can only manage their own company's teams in inter_company
+        if user.get("role") == "company_admin" and event.get("event_type") == "inter_company":
+            return team.get("company_id") == user.get("company_id")
+        return True
+    # captain?
+    if user.get("role") == "player":
+        prof = await db.player_profiles.find_one({"user_id": user["id"]}, {"_id": 0, "id": 1})
+        if prof and team.get("captain_player_id") == prof["id"]:
+            return True
+    return False
+
+
+async def _get_event_or_404(event_id: str) -> dict:
+    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not ev:
+        raise HTTPException(404, "Event not found")
+    return ev
+
+
+async def _get_team_or_404(team_id: str, event_id: str) -> dict:
+    t = await db.teams.find_one({"id": team_id, "event_id": event_id}, {"_id": 0})
+    if not t:
+        raise HTTPException(404, "Team not found in this event")
+    return t
+
+
+@api.patch("/events/{event_id}/stream")
+async def update_event_stream(event_id: str, body: dict, user: dict = Depends(get_current_user)):
+    ev = await _get_event_or_404(event_id)
+    if not await _can_manage_event(user, ev):
+        raise HTTPException(403, "Not allowed")
+    stream_url = (body or {}).get("stream_url", "")
+    await db.events.update_one({"id": event_id}, {"$set": {"stream_url": stream_url}})
+    return {"ok": True, "stream_url": stream_url}
+
+
+@api.get("/events/{event_id}/companies")
+async def list_event_companies(event_id: str):
+    ev = await _get_event_or_404(event_id)
+    ids = list({*(ev.get("companies") or []), *([ev["company_id"]] if ev.get("company_id") else [])})
+    if not ids:
+        return []
+    docs = await db.companies.find({"id": {"$in": ids}}, {"_id": 0}).to_list(100)
+    return docs
+
+
+@api.post("/events/{event_id}/companies")
+async def add_event_company(event_id: str, body: dict, user: dict = Depends(require_platform_admin)):
+    await _get_event_or_404(event_id)
+    body = body or {}
+    company_id = body.get("company_id")
+    new_company = body.get("new_company")
+    temp_password = None
+    hr_email = None
+    if not company_id and new_company:
+        cname = (new_company.get("name") or "").strip()
+        hr_name = (new_company.get("hr_name") or "").strip()
+        hr_email = (new_company.get("hr_email") or "").strip().lower()
+        if not (cname and hr_email):
+            raise HTTPException(400, "name and hr_email required")
+        if await db.users.find_one({"email": hr_email}):
+            raise HTTPException(400, "HR email already in use")
+        slug = cname.lower().replace(" ", "-")[:40]
+        comp = Company(name=cname, slug=slug, contact_email=hr_email)
+        await db.companies.insert_one(comp.model_dump())
+        temp_password = _gen_temp_password()
+        hr_user_id = str(uuid.uuid4())
+        await db.users.insert_one({
+            "id": hr_user_id,
+            "email": hr_email,
+            "name": hr_name or cname + " HR",
+            "role": "company_admin",
+            "company_id": comp.id,
+            "password_hash": hash_password(temp_password),
+            "must_reset": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        await db.companies.update_one({"id": comp.id}, {"$set": {"owner_user_id": hr_user_id}})
+        company_id = comp.id
+        logger.warning("HR auto-created for company %s: email=%s temp_password=%s", cname, hr_email, temp_password)
+    if not company_id:
+        raise HTTPException(400, "company_id or new_company required")
+    if not await db.companies.find_one({"id": company_id}):
+        raise HTTPException(404, "Company not found")
+    await db.events.update_one({"id": event_id}, {"$addToSet": {"companies": company_id}})
+    return {"ok": True, "company_id": company_id, "hr_email": hr_email, "temp_password": temp_password}
+
+
+@api.delete("/events/{event_id}/companies/{company_id}")
+async def remove_event_company(event_id: str, company_id: str, _: dict = Depends(require_platform_admin)):
+    await db.events.update_one({"id": event_id}, {"$pull": {"companies": company_id}})
+    return {"ok": True}
+
+
+@api.post("/events/{event_id}/teams", response_model=Team)
+async def create_event_team(event_id: str, body: TeamCreate, user: dict = Depends(get_current_user)):
+    ev = await _get_event_or_404(event_id)
+    if not await _can_manage_event(user, ev):
+        raise HTTPException(403, "Not allowed")
+    payload = body.model_dump()
+    payload["event_id"] = event_id
+    # company scoping
+    if user.get("role") == "company_admin":
+        payload["company_id"] = user.get("company_id")
+    elif not payload.get("company_id"):
+        payload["company_id"] = ev.get("company_id")
+    # inter_company: ensure company is in participating list
+    if ev.get("event_type") == "inter_company" and payload["company_id"]:
+        if payload["company_id"] not in (ev.get("companies") or []):
+            await db.events.update_one({"id": event_id}, {"$addToSet": {"companies": payload["company_id"]}})
+    t = Team(**payload)
+    await db.teams.insert_one(t.model_dump())
+    return t
+
+
+@api.post("/events/{event_id}/teams/{team_id}/captain", response_model=Team)
+async def set_team_captain(event_id: str, team_id: str, body: dict, user: dict = Depends(get_current_user)):
+    ev = await _get_event_or_404(event_id)
+    t = await _get_team_or_404(team_id, event_id)
+    if not await _can_manage_event(user, ev):
+        if user.get("role") == "company_admin" and t.get("company_id") != user.get("company_id"):
+            raise HTTPException(403, "Not your team")
+        if user.get("role") not in ("platform_admin", "admin", "company_admin"):
+            raise HTTPException(403, "Not allowed")
+    player_id = (body or {}).get("player_id")
+    if not player_id:
+        raise HTTPException(400, "player_id required")
+    prof = await db.player_profiles.find_one({"id": player_id}, {"_id": 0})
+    if not prof:
+        raise HTTPException(404, "Player not found")
+    members = list(t.get("members") or [])
+    if player_id not in members:
+        members.append(player_id)
+    await db.teams.update_one(
+        {"id": team_id},
+        {"$set": {"captain_player_id": player_id, "captain": prof.get("name", ""), "members": members}},
+    )
+    doc = await db.teams.find_one({"id": team_id}, {"_id": 0})
+    return Team(**doc)
+
+
+@api.get("/events/{event_id}/teams/{team_id}/members")
+async def list_team_members(event_id: str, team_id: str, user: dict = Depends(get_current_user)):
+    await _get_event_or_404(event_id)
+    t = await _get_team_or_404(team_id, event_id)
+    ids = t.get("members") or []
+    if not ids:
+        return []
+    docs = await db.player_profiles.find({"id": {"$in": ids}}, {"_id": 0}).to_list(200)
+    # mask mobiles for non-self
+    for d in docs:
+        if user.get("id") != d.get("user_id"):
+            m = d.get("mobile") or ""
+            d["mobile_masked"] = "•••• " + m[-4:] if len(m) >= 4 else m
+            d.pop("mobile", None)
+    return docs
+
+
+@api.post("/events/{event_id}/teams/{team_id}/members")
+async def add_team_member(event_id: str, team_id: str, body: dict, user: dict = Depends(get_current_user)):
+    ev = await _get_event_or_404(event_id)
+    t = await _get_team_or_404(team_id, event_id)
+    if not await _can_manage_team(user, ev, t):
+        raise HTTPException(403, "Not allowed")
+    body = body or {}
+    pid = body.get("player_id")
+    quick = body.get("quick")
+    temp_password = None
+    if not pid and quick:
+        name = (quick.get("name") or "").strip()
+        mobile = (quick.get("mobile") or "").strip()
+        email = (quick.get("email") or "").strip().lower() or None
+        if not (name and mobile):
+            raise HTTPException(400, "name and mobile required for quick add")
+        existing_prof = await db.player_profiles.find_one({"mobile": mobile}, {"_id": 0})
+        if existing_prof:
+            pid = existing_prof["id"]
+        else:
+            user_id = str(uuid.uuid4())
+            login_email = email or f"player_{mobile}@players.playsphere.app"
+            if await db.users.find_one({"email": login_email}):
+                raise HTTPException(400, "Email already in use")
+            temp_password = _gen_temp_password()
+            await db.users.insert_one({
+                "id": user_id,
+                "email": login_email,
+                "name": name,
+                "role": "player",
+                "company_id": t.get("company_id"),
+                "mobile": mobile,
+                "password_hash": hash_password(temp_password),
+                "must_reset": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            company_name = None
+            if t.get("company_id"):
+                c = await db.companies.find_one({"id": t["company_id"]}, {"_id": 0, "name": 1})
+                company_name = c["name"] if c else None
+            prof = PlayerProfile(
+                user_id=user_id, name=name, mobile=mobile, email=login_email,
+                company_id=t.get("company_id"), company_name=company_name,
+            )
+            await db.player_profiles.insert_one(prof.model_dump())
+            pid = prof.id
+            logger.warning("Quick-add player created: name=%s mobile=%s email=%s temp_password=%s",
+                           name, mobile, login_email, temp_password)
+    if not pid:
+        raise HTTPException(400, "player_id or quick payload required")
+    if not await db.player_profiles.find_one({"id": pid}):
+        raise HTTPException(404, "Player not found")
+    await db.teams.update_one({"id": team_id}, {"$addToSet": {"members": pid}})
+    return {"ok": True, "player_id": pid, "temp_password": temp_password}
+
+
+@api.delete("/events/{event_id}/teams/{team_id}/members/{player_id}")
+async def remove_team_member(event_id: str, team_id: str, player_id: str, user: dict = Depends(get_current_user)):
+    ev = await _get_event_or_404(event_id)
+    t = await _get_team_or_404(team_id, event_id)
+    if not await _can_manage_team(user, ev, t):
+        raise HTTPException(403, "Not allowed")
+    update = {"$pull": {"members": player_id}}
+    if t.get("captain_player_id") == player_id:
+        update["$set"] = {"captain_player_id": None, "captain": ""}
+    await db.teams.update_one({"id": team_id}, update)
+    return {"ok": True}
+
+
+# ---------- Forgot / reset password (players) ----------
+@api.post("/players/forgot-password")
+async def player_forgot_password(body: dict):
+    email = ((body or {}).get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(400, "email required")
+    user = await db.users.find_one({"email": email, "role": "player"})
+    # Don't leak whether email exists; respond OK either way
+    if user:
+        token = uuid.uuid4().hex + uuid.uuid4().hex
+        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
+        await db.password_resets.insert_one({
+            "token": token, "user_id": user["id"], "email": email,
+            "expires_at": expires_at, "used": False,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        frontend = os.environ.get("FRONTEND_URL", "")
+        reset_url = f"{frontend}/players/reset-password?token={token}" if frontend else f"/players/reset-password?token={token}"
+        logger.warning("PASSWORD RESET LINK for %s: %s", email, reset_url)
+    return {"ok": True}
+
+
+@api.post("/players/reset-password")
+async def player_reset_password(body: dict):
+    token = ((body or {}).get("token") or "").strip()
+    new_password = (body or {}).get("new_password") or ""
+    if not (token and new_password):
+        raise HTTPException(400, "token and new_password required")
+    if len(new_password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    rec = await db.password_resets.find_one({"token": token, "used": False})
+    if not rec:
+        raise HTTPException(400, "Invalid or used token")
+    if rec["expires_at"] < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(400, "Token expired")
+    await db.users.update_one(
+        {"id": rec["user_id"]},
+        {"$set": {"password_hash": hash_password(new_password), "must_reset": False}},
+    )
+    await db.password_resets.update_one({"token": token}, {"$set": {"used": True}})
     return {"ok": True}
 
 

@@ -4,22 +4,28 @@ import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { renderScore, sportColor } from "@/lib/sports";
 import { useAuth } from "@/context/AuthContext";
-import { Trophy, MapPin, Calendar, Wifi } from "lucide-react";
+import { Trophy, MapPin, Calendar, Wifi, Youtube, Edit3 } from "lucide-react";
 import LiveScorer from "@/components/LiveScorer";
+import EventTeamsManager from "@/components/EventTeamsManager";
 import useFixtureSocket from "@/lib/useFixtureSocket";
+import { toast } from "sonner";
 
 export default function EventDetail() {
   const { id } = useParams();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isPlatformAdmin, isCompanyAdmin, isPlayer, companyId } = useAuth();
   const [event, setEvent] = useState(null);
   const [teams, setTeams] = useState([]);
   const [fixtures, setFixtures] = useState([]);
   const [standings, setStandings] = useState([]);
   const [sponsors, setSponsors] = useState([]);
   const [scoringFixture, setScoringFixture] = useState(null);
+  const [editingStream, setEditingStream] = useState(false);
+  const [streamDraft, setStreamDraft] = useState("");
+  const [myPlayerId, setMyPlayerId] = useState(null);
 
   const loadAll = async () => {
     const [e, t, f, s] = await Promise.all([
@@ -32,9 +38,11 @@ export default function EventDetail() {
     setTeams(t.data);
     setFixtures(f.data);
     setStandings(s.data);
+    setStreamDraft(e.data.stream_url || "");
   };
 
   useEffect(() => { loadAll(); }, [id]);
+  useEffect(() => { if (isPlayer) api.get("/players/me").then((r) => setMyPlayerId(r.data.id)).catch(() => {}); }, [isPlayer]);
 
   // Real-time updates: merge incoming fixture changes; refresh standings on completion.
   useFixtureSocket((payload) => {
@@ -46,6 +54,12 @@ export default function EventDetail() {
   });
 
   const teamMap = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t])), [teams]);
+
+  const myCaptainTeamIds = useMemo(
+    () => (myPlayerId ? teams.filter((t) => t.captain_player_id === myPlayerId).map((t) => t.id) : []),
+    [teams, myPlayerId]
+  );
+  const canSeeTeamsTab = isAdmin || myCaptainTeamIds.length > 0;
 
   const generate = async () => {
     await api.post(`/events/${id}/generate-fixtures`);
@@ -76,15 +90,35 @@ export default function EventDetail() {
             {event.venue && <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3" /> {event.venue}</span>}
             {event.start_date && <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3" /> {event.start_date}</span>}
             <span>{teams.length} teams · {fixtures.length} matches</span>
-            <span data-testid="live-stream-indicator" className="flex items-center gap-1.5 text-[#84CC16]">
-              <Wifi className="w-3 h-3" /> LIVE STREAM ON
-            </span>
+            {event.stream_url ? (
+              <a data-testid="event-stream-link" href={event.stream_url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 text-[#FF3B30] hover:text-white">
+                <Youtube className="w-3.5 h-3.5" /> WATCH LIVE
+              </a>
+            ) : (
+              <span data-testid="event-stream-empty" className="flex items-center gap-1.5 text-neutral-600">
+                <Wifi className="w-3 h-3" /> NO STREAM SET
+              </span>
+            )}
           </div>
           {isAdmin && (
-            <div className="mt-6 flex gap-2">
+            <div className="mt-6 flex flex-wrap gap-2 items-center">
               <Button data-testid="generate-fixtures-btn" onClick={generate} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
                 Generate fixtures
               </Button>
+              {editingStream ? (
+                <div className="flex gap-2 items-center">
+                  <Input data-testid="event-stream-input" value={streamDraft} onChange={(e) => setStreamDraft(e.target.value)} placeholder="https://youtube.com/live/…" className="bg-black/40 border-white/10 text-white w-80" />
+                  <Button data-testid="event-stream-save" size="sm" onClick={async () => {
+                    try { await api.patch(`/events/${id}/stream`, { stream_url: streamDraft }); toast.success("Stream link saved"); setEditingStream(false); loadAll(); }
+                    catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+                  }} className="bg-[#FF3B30] hover:bg-[#DC2626] text-white rounded-sm">Save</Button>
+                  <Button size="sm" variant="ghost" onClick={() => setEditingStream(false)} className="text-neutral-400">Cancel</Button>
+                </div>
+              ) : (
+                <Button data-testid="event-stream-edit" size="sm" variant="outline" onClick={() => setEditingStream(true)} className="rounded-sm border-white/10 text-white">
+                  <Edit3 className="w-3.5 h-3.5 mr-1" /> {event.stream_url ? "Edit stream link" : "Add stream link"}
+                </Button>
+              )}
             </div>
           )}
         </div>
@@ -95,7 +129,7 @@ export default function EventDetail() {
           <TabsList data-testid="event-tabs" className="bg-[#141414] border border-white/10 rounded-sm">
             <TabsTrigger value="fixtures" data-testid="tab-fixtures" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Fixtures</TabsTrigger>
             <TabsTrigger value="standings" data-testid="tab-standings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Standings</TabsTrigger>
-            <TabsTrigger value="teams" data-testid="tab-teams" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Teams</TabsTrigger>
+            {canSeeTeamsTab && <TabsTrigger value="teams" data-testid="tab-teams" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Teams</TabsTrigger>}
             {event.format === "knockout" && <TabsTrigger value="bracket" data-testid="tab-bracket" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bracket</TabsTrigger>}
             <TabsTrigger value="sponsors" data-testid="tab-sponsors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sponsors ({sponsors.length})</TabsTrigger>
           </TabsList>
@@ -107,7 +141,7 @@ export default function EventDetail() {
             <StandingsTable standings={standings} />
           </TabsContent>
           <TabsContent value="teams" className="mt-6">
-            <TeamsGrid teams={teams} />
+            <EventTeamsManager event={event} teams={teams} reload={loadAll} />
           </TabsContent>
           {event.format === "knockout" && (
             <TabsContent value="bracket" className="mt-6">

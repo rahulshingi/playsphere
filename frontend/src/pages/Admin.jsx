@@ -22,7 +22,7 @@ export default function Admin() {
   const [events, setEvents] = useState([]);
   const [teams, setTeams] = useState([]);
   const [sponsors, setSponsors] = useState([]);
-  const [newEvent, setNewEvent] = useState({ name: "", sport: "football", format: "round_robin", description: "", venue: "", banner_url: "" });
+  const [newEvent, setNewEvent] = useState({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "" });
   const [newSponsor, setNewSponsor] = useState({ name: "", tier: "bronze", logo_url: "", website: "", description: "", show_in_banner: true });
 
   const loadAll = async () => {
@@ -34,7 +34,6 @@ export default function Admin() {
 
   useEffect(() => {
     if (ready && !isAdmin) nav("/login");
-    else if (ready && isPlatformAdmin) nav("/platform-admin");
     else if (ready) loadAll();
   }, [ready, isAdmin, isPlatformAdmin, companyId]);
 
@@ -45,7 +44,7 @@ export default function Admin() {
     try {
       await api.post("/events", newEvent);
       toast.success("Event created");
-      setNewEvent({ name: "", sport: "football", format: "round_robin", description: "", venue: "", banner_url: "" });
+      setNewEvent({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "" });
       loadAll();
     } catch (err) { toast.error("Failed to create event"); }
   };
@@ -111,6 +110,17 @@ export default function Admin() {
                 </div>
                 <Input data-testid="admin-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 <Input data-testid="admin-event-banner" placeholder="Banner image URL" value={newEvent.banner_url} onChange={(e) => setNewEvent({ ...newEvent, banner_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                <Input data-testid="admin-event-stream" placeholder="Live stream URL (YouTube / Twitch / any)" value={newEvent.stream_url} onChange={(e) => setNewEvent({ ...newEvent, stream_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                {isPlatformAdmin && (
+                  <Select value={newEvent.event_type} onValueChange={(v) => setNewEvent({ ...newEvent, event_type: v })}>
+                    <SelectTrigger data-testid="admin-event-type" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Event type" /></SelectTrigger>
+                    <SelectContent className="bg-[#141414] text-white border-white/10">
+                      <SelectItem value="single_company">Single company tournament</SelectItem>
+                      <SelectItem value="inter_company">Inter-company tournament</SelectItem>
+                      <SelectItem value="playsphere_organized">PlaySphere organized</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
                 <Button data-testid="admin-create-event-btn" type="submit" className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Create</Button>
               </form>
 

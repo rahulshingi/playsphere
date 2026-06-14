@@ -45,9 +45,10 @@ export default function PlayerLogin() {
           <Button data-testid="player-login-submit" disabled={busy} className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold h-12 rounded-sm">
             {busy ? "Signing in..." : "Sign in"}
           </Button>
-          <p className="text-xs text-neutral-500 text-center">
-            New here? <Link to="/players/signup" className="text-[#84CC16] hover:underline">Create player account</Link>
-          </p>
+          <div className="text-xs text-neutral-500 text-center space-y-1">
+            <p>New here? <Link to="/players/signup" className="text-[#84CC16] hover:underline">Create player account</Link></p>
+            <p><Link data-testid="player-forgot-link" to="/players/forgot-password" className="text-[#06B6D4] hover:underline">Forgot password?</Link></p>
+          </div>
         </form>
       </div>
     </div>

@@ -25,6 +25,7 @@ export default function PlatformAdmin() {
   const [vendors, setVendors] = useState([]);
   const [listings, setListings] = useState([]);
   const [settings, setSettings] = useState({});
+  const [about, setAbout] = useState({ company_description: "", mission: "", vision: "", founders: [], directors: [] });
   const [editing, setEditing] = useState(null);
 
   const blankService = {

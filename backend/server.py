@@ -1636,12 +1636,9 @@ async def root():
     return {"name": "PlaySphere API", "tagline": "Where Teams Compete, Connect & Grow"}
 
 
-app.include_router(api)
-
-# Uploads (mount once)
+# Uploads (define route + mount BEFORE including router)
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
-app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 
 @api.post("/upload")
@@ -1660,6 +1657,10 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_cu
         raise HTTPException(400, "File too large (max 5 MB)")
     dest.write_bytes(contents)
     return {"url": f"/api/uploads/{name}", "filename": name, "size": len(contents)}
+
+
+app.include_router(api)
+app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 
 app.add_middleware(
     CORSMiddleware,

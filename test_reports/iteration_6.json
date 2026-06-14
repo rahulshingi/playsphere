@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 6: end-to-end validation of the new `/api/upload` flow after the route-ordering fix (moved @api.post('/upload') + StaticFiles mount BEFORE app.include_router). BACKEND: 8/8 new upload tests pass (auth required -> 401, PNG/JPEG/WEBP all return 200 with absolute /api/uploads/<uuid>.<ext> path + size, non-image content-type -> 400, >5MB -> 400, served file returns 200 with image/* content-type). Full regression: 101/101 pytest tests pass across backend_test.py, test_multitenant.py, test_currency_catalog.py, test_vendor_player_settings.py, test_upload.py. FRONTEND E2E (Playwright): (1) Vendor login (ravi@turf.in) -> /vendor/dashboard -> click [data-testid=vendor-new-listing] -> upload via [data-testid=vl-img-0-file] -> URL field populated with absolute https://.../api/uploads/<uuid>.png; preview thumb visible. (2) Platform admin (admin@playsphere.com) -> /platform-admin -> [data-testid=platform-new-service] -> upload via [data-testid=svc-image-file] -> URL populated; in-page fetch of returned URL = 200 image/png. (3) Registered new player (+919000000001/player123 via POST /api/players/register) -> player login -> /players/me -> [data-testid=pp-photo-file] upload -> URL populated -> Save profile -> reload -> URL persists in [data-testid=pp-photo-url] (PERSISTENCE PASS).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PlayerProfile photo block", "issue": "Left column has a large empty preview box (~234x234) but the uploaded image is only shown as a tiny 36x36 thumbnail next to the Upload button (rendered by ImageUpload.jsx line 47). The big preview slot above the URL/Upload row stays empty even after a successful upload — confusing UX.", "selector": "[data-testid=pp-photo-url] ~ img", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_upload.py",
+    "/app/test_reports/pytest/iter6_upload.xml",
+    "/app/test_reports/pytest/iter6_full.xml"
+  ],
+  "action_items": [
+    "OPTIONAL UX: PlayerProfile renders a large empty preview area that is never populated by ImageUpload's 36px thumbnail. Either remove the empty slot or pass a larger preview size from PlayerProfile so the upload result is visible.",
+    "OPTIONAL HARDENING: /api/upload reads the entire file into memory before checking 5MB limit; large adversarial uploads could OOM the worker. Consider streaming + size check during chunked read.",
+    "OPTIONAL HARDENING: /api/upload only checks Content-Type header (trivially spoofed). Consider sniffing magic bytes (imghdr / Pillow.open) to confirm the file is really an image.",
+    "OPTIONAL: filename is replaced with uuid.hex but original filename never sanitized — fine today since we don't use it, but worth a comment.",
+    "Doc tip: the seeded player +919000000001 did NOT exist on this env before this iteration; testing agent registered it as part of this run. Add to /app/memory/test_credentials.md (mobile +919000000001 / player123, name 'Test Player')."
+  ],
+  "critical_code_review_comments": [
+    "server.py line 1656: file size check happens AFTER `await file.read()` — entire payload is in memory before the 5MB guard runs. For a public endpoint this is a memory-amplification vector. Stream via `while chunk := await file.read(64*1024)` and short-circuit if size exceeds limit.",
+    "server.py line 1648: only Content-Type is validated for image type. A client can send `Content-Type: image/png` with arbitrary bytes (incl. HTML/JS) and the server will store it under .png and StaticFiles will serve it with image/png — XSS-via-mime-sniffing is mostly mitigated by content-type override but still worth adding magic-byte check.",
+    "server.py line 1663: StaticFiles is mounted at /api/uploads with no CORS-friendly Cache-Control or Content-Disposition: attachment. Consider 'Cache-Control: public, max-age=31536000, immutable' since filenames are uuid hashes (effectively immutable).",
+    "Frontend ImageUpload.jsx hard-codes Content-Type: 'multipart/form-data' header on axios — this strips the boundary in some axios versions; it currently works because axios + FormData auto-sets boundary but the override is fragile. Drop the header entirely and let axios/browser set it.",
+    "ImageUpload.jsx line 47 — preview <img> is fixed at 36x36 which is too small to be useful in PlayerProfile (which has a large dedicated photo slot). Make preview size configurable via prop.",
+    "server.py is now 2158 lines — Iteration-5 already flagged a refactor; the upload endpoint adds ~25 more lines. Splitting into routers (uploads, players, vendors, settings) is overdue."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_upload.py (NEW — 8 tests covering auth, validation, static serving)"
+  ],
+  "success_rate": {"backend": "100% (101/101 pytest + 8/8 upload)", "frontend": "100% (3/3 upload flows: vendor + svc + player including persistence)"},
+  "test_credentials": "admin@playsphere.com/admin123, ravi@turf.in/vendor123, +919000000001/player123 (Test Player) — last one was created during this iteration via /api/players/register",
+  "seed_data_creation": "Registered player +919000000001/player123 'Test Player' (was missing from this env). Uploaded ~9 ephemeral PNG/JPEG/WEBP test files into /app/backend/uploads (5 from pytest + 3 from playwright + 1 oversized file rejected). One vendor listing photo, one platform-admin service image, and one player profile photo URL now reference these files; safe to cleanup but harmless.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Upload flow is fully working end-to-end. The route-ordering fix in server.py L1639-1663 (upload route + StaticFiles mount BEFORE app.include_router(api)) is correct. If anyone re-introduces app.include_router(api) BEFORE @api.post('/upload'), the endpoint will silently 404 again — consider extracting to /app/backend/routers/uploads.py and importing the router to make ordering explicit. test_upload.py is the regression guard.",
+  "rca of the issue": "ROOT CAUSE: FastAPI's APIRouter is copied into the main app at app.include_router() time. Any @api.<method> decorators added AFTER that call are NOT propagated to the live app — they remain on the router-prototype only. The previous iteration registered /upload after include_router, so it never surfaced under /api/upload and returned 404. FIX (already applied by main agent): define /upload BEFORE app.include_router(api) and mount StaticFiles BEFORE the include_router as well. VERIFIED at code level (server.py L1644-1663) and at runtime via 8 new pytest assertions + 3 frontend flows."
+}

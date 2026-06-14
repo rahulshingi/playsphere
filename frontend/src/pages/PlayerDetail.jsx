@@ -10,7 +10,7 @@ export default function PlayerDetail() {
   const [team, setTeam] = useState(null);
 
   useEffect(() => {
-    api.get(`/players/${id}`).then(async (r) => {
+    api.get(`/team-players/${id}`).then(async (r) => {
       setPlayer(r.data);
       if (r.data.team_id) {
         const t = await api.get(`/teams/${r.data.team_id}`);

@@ -77,10 +77,10 @@ export default function PlayerProfile() {
             </div>
             <Field label="Photo URL"><Input data-testid="pp-photo" value={profile.photo_url || ""} onChange={(e) => upd({ photo_url: e.target.value })} className="bg-black/40 border-white/10 text-white" /></Field>
             <Field label="Company (universal — change any time)">
-              <Select value={profile.company_id || ""} onValueChange={(v) => upd({ company_id: v || null })}>
+              <Select value={profile.company_id || "__none__"} onValueChange={(v) => upd({ company_id: v === "__none__" ? null : v })}>
                 <SelectTrigger data-testid="pp-company" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Independent" /></SelectTrigger>
                 <SelectContent className="bg-[#141414] text-white border-white/10 max-h-80">
-                  <SelectItem value="">Independent</SelectItem>
+                  <SelectItem value="__none__">Independent</SelectItem>
                   {companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                 </SelectContent>
               </Select>

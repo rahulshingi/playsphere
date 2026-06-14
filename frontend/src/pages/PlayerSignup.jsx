@@ -23,7 +23,8 @@ export default function PlayerSignup() {
     try {
       await api.post("/players/register", form);
       toast.success("Welcome to PlaySphere!");
-      nav("/players/me");
+      // hard reload to refresh auth context (matches PlayerLogin pattern)
+      window.location.href = "/players/me";
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Sign up failed");
     } finally { setBusy(false); }

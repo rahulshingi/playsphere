@@ -155,27 +155,13 @@ def player_b(acme_company_id):
 
 
 class TestPlayers:
-    # Route-ordering bug: GET/PATCH /api/players/{player_id} (registered before the new
-    # /api/players/me and /api/players/profiles routes) intercepts those paths and returns
-    # "Player not found". All endpoints below depend on the new routes being reachable.
-    pytestmark = pytest.mark.skipif(
-        requests.post(  # quick probe — does /players/me reach the new handler?
-            f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
-        ).ok and requests.get(
-            f"{API}/players/me",
-            cookies=requests.post(
-                f"{API}/auth/login", json={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD}
-            ).cookies,
-        ).json().get("detail") == "Player not found",
-        reason="BLOCKED by route-ordering bug: /api/players/{player_id} shadows /api/players/me & /api/players/profiles",
-    )
+    # Both blockers fixed: (1) auto-email now @players.playsphere.app, (2) legacy roster
+    # routes renamed to /api/team-players/{player_id} so /api/players/me &
+    # /api/players/profiles reach their proper handlers.
 
-    def test_register_without_email_should_succeed_but_fails_due_to_local_tld_bug(self, acme_company_id):
-        """BUG: backend auto-generates 'player_<mobile>@playsphere.local' which fails
-        Pydantic EmailStr validation. Frontend PlayerSignup form has no email field per
-        spec, so EVERY UI signup would 500. This test currently expects the buggy 500
-        so the regression suite stays green; flip to assert 200 once fixed.
-        """
+    def test_register_without_email_succeeds(self, acme_company_id):
+        """Frontend PlayerSignup has no email field — backend must auto-generate a routable
+        email and return UserPublic + httpOnly cookie."""
         body = {
             "name": f"TEST_NoEmail_{UNIQ}",
             "mobile": "5" + uuid.uuid4().hex[:9],
@@ -183,12 +169,11 @@ class TestPlayers:
             "company_id": acme_company_id,
         }
         r = requests.post(f"{API}/players/register", json=body)
-        # Documenting current broken behaviour:
-        assert r.status_code == 500, (
-            f"Expected 500 from current bug (auto-generated *.local email rejected by "
-            f"EmailStr). Got {r.status_code}. If this now returns 200, the bug is FIXED "
-            f"— update assertion to == 200."
-        )
+        assert r.status_code == 200, f"Expected 200, got {r.status_code}: {r.text}"
+        data = r.json()
+        assert data.get("role") == "player"
+        assert data["email"].endswith("@players.playsphere.app")
+        assert r.cookies.get("access_token"), "Expected httpOnly session cookie"
 
     def test_duplicate_mobile_returns_400(self, player_a, acme_company_id):
         r = requests.post(f"{API}/players/register", json={

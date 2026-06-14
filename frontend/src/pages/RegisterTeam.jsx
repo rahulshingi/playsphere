@@ -35,7 +35,7 @@ export default function RegisterTeam() {
     try {
       const { data: team } = await api.post("/teams", { ...form, event_id: form.event_id || null });
       for (const p of players.filter((x) => x.name.trim())) {
-        await api.post("/players", {
+        await api.post("/team-players", {
           name: p.name,
           team_id: team.id,
           role: p.role || "",

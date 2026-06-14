@@ -776,15 +776,15 @@ async def delete_team(team_id: str, _: dict = Depends(require_admin)):
     return {"ok": True}
 
 
-# ---------- Players ----------
-@api.get("/players", response_model=List[Player])
+# ---------- Players (team roster — legacy, distinct from player accounts) ----------
+@api.get("/team-players", response_model=List[Player])
 async def list_players(team_id: Optional[str] = None):
     q = {"team_id": team_id} if team_id else {}
     docs = await db.players.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return [Player(**d) for d in docs]
 
 
-@api.get("/players/{player_id}", response_model=Player)
+@api.get("/team-players/{player_id}", response_model=Player)
 async def get_player(player_id: str):
     doc = await db.players.find_one({"id": player_id}, {"_id": 0})
     if not doc:
@@ -792,14 +792,14 @@ async def get_player(player_id: str):
     return Player(**doc)
 
 
-@api.post("/players", response_model=Player)
+@api.post("/team-players", response_model=Player)
 async def create_player(body: PlayerCreate):
     p = Player(**body.model_dump())
     await db.players.insert_one(p.model_dump())
     return p
 
 
-@api.patch("/players/{player_id}", response_model=Player)
+@api.patch("/team-players/{player_id}", response_model=Player)
 async def update_player(player_id: str, body: dict, _: dict = Depends(require_admin)):
     body.pop("id", None)
     await db.players.update_one({"id": player_id}, {"$set": body})
@@ -809,7 +809,7 @@ async def update_player(player_id: str, body: dict, _: dict = Depends(require_ad
     return Player(**doc)
 
 
-@api.delete("/players/{player_id}")
+@api.delete("/team-players/{player_id}")
 async def delete_player(player_id: str, _: dict = Depends(require_admin)):
     await db.players.delete_one({"id": player_id})
     return {"ok": True}
@@ -1261,7 +1261,7 @@ async def update_settings(body: dict, _: dict = Depends(require_platform_admin))
 async def player_register(body: PlayerSignupBody, response: Response):
     if await db.player_profiles.find_one({"mobile": body.mobile}):
         raise HTTPException(400, "Mobile already registered")
-    email = (body.email or f"player_{body.mobile}@playsphere.local").lower()
+    email = (body.email or f"player_{body.mobile}@players.playsphere.app").lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(400, "Email already in use")
     user_id = str(uuid.uuid4())

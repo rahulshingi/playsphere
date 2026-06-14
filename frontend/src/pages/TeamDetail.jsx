@@ -11,7 +11,7 @@ export default function TeamDetail() {
 
   useEffect(() => {
     api.get(`/teams/${id}`).then((r) => setTeam(r.data));
-    api.get(`/players?team_id=${id}`).then((r) => setPlayers(r.data));
+    api.get(`/team-players?team_id=${id}`).then((r) => setPlayers(r.data));
   }, [id]);
 
   if (!team) return <div className="bg-[#0a0a0a] min-h-screen text-white"><Nav /><div className="p-20 text-center">Loading…</div></div>;

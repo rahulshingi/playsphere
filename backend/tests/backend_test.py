@@ -200,28 +200,28 @@ class TestTeams:
         assert r3.status_code == 200
 
 
-# ---------- Players ----------
-class TestPlayers:
-    def test_list_players(self, anon_session):
-        r = anon_session.get(f"{API}/players")
+# ---------- Team Players (legacy roster — renamed from /players/* to /team-players/*) ----------
+class TestTeamPlayers:
+    def test_list_team_players(self, anon_session):
+        r = anon_session.get(f"{API}/team-players")
         assert r.status_code == 200
         assert isinstance(r.json(), list)
 
-    def test_create_get_player(self, admin_session):
+    def test_create_get_team_player(self, admin_session):
         team = requests.post(f"{API}/teams", json={"name": "TEST_PlayersTeam"}).json()
-        r = requests.post(f"{API}/players", json={"name": "TEST_Player", "team_id": team["id"], "role": "GK"})
+        r = requests.post(f"{API}/team-players", json={"name": "TEST_Player", "team_id": team["id"], "role": "GK"})
         assert r.status_code == 200
         pid = r.json()["id"]
-        r2 = requests.get(f"{API}/players/{pid}")
+        r2 = requests.get(f"{API}/team-players/{pid}")
         assert r2.status_code == 200 and r2.json()["name"] == "TEST_Player"
         # cleanup admin delete player & team
-        admin_session.delete(f"{API}/players/{pid}")
+        admin_session.delete(f"{API}/team-players/{pid}")
         admin_session.delete(f"{API}/teams/{team['id']}")
 
-    def test_player_patch_requires_admin(self, viewer_session):
+    def test_team_player_patch_requires_admin(self, viewer_session):
         team = requests.post(f"{API}/teams", json={"name": "TEST_PlayerRBAC"}).json()
-        p = requests.post(f"{API}/players", json={"name": "TEST_P", "team_id": team["id"]}).json()
-        r = viewer_session.patch(f"{API}/players/{p['id']}", json={"name": "Hack"})
+        p = requests.post(f"{API}/team-players", json={"name": "TEST_P", "team_id": team["id"]}).json()
+        r = viewer_session.patch(f"{API}/team-players/{p['id']}", json={"name": "Hack"})
         assert r.status_code == 403
 
 

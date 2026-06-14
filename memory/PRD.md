@@ -38,6 +38,22 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **Image upload (`POST /api/upload`, GET `/api/uploads/<name>`)** — works across Vendor Listings, Player Profile photo, and Platform Admin Service image. Auth via cookie, 5MB cap, JPEG/PNG/WEBP/GIF allowed.
   - Fix: route + StaticFiles mount were defined AFTER `app.include_router(api)` (silent 404). Moved BEFORE the include_router call. Regression-guarded by `/app/backend/tests/test_upload.py` (8 tests).
 
+## Implemented (Feb 14, 2026 — Iteration 7) Phase 1: CricHeroes-style event setup chain
+- **Public nav:** Teams link removed; Teams now a tab inside `/events/:id`, gated to platform_admin / company_admin / captains.
+- **Event model extended:** `event_type` (single_company / inter_company / playsphere_organized), `stream_url`, `companies[]`.
+- **Inter-company events:** Platform admin can pick existing companies OR create a new company on the fly — auto-creates HR `company_admin` user with a temp password (returned in API + shown in a credentials modal to the inviter).
+- **Team setup chain:** Admin/HR create teams scoped to the event → assign captain (links to a registered PlayerProfile) → add members via "pick registered" OR "quick add" (creates PlayerProfile + temp password shown in modal).
+- **Captain permissions:** A player whose PlayerProfile.id matches `team.captain_player_id` can manage that team's members.
+- **Live streaming URL** on every event — `PATCH /api/events/{id}/stream`. "WATCH LIVE" CTA + admin inline editor.
+- **Forgot / reset password (players):** `POST /api/players/forgot-password` generates a token, logs reset URL to backend log (email integration pending user's provider choice). `POST /api/players/reset-password` validates and rotates the password. New UI: `/players/forgot-password` + `/players/reset-password?token=…`.
+- 22 new pytest tests (event teams + password reset), 123/123 total backend tests pass.
+
+## Phase 2 — CricHeroes match flow (next iteration)
+- Toss (winner, elected to bat / bowl)
+- Playing XI selection per team per match
+- Per-innings batting card (R, B, 4s, 6s, SR) + bowling card (O, R, W, Eco)
+- Wire LiveScorer to lineup so each run/wicket attributes to a specific player
+
 ## Backlog
 ### P0
 - (none open) — MVP complete & tested (31/31 backend, all critical UI flows pass)

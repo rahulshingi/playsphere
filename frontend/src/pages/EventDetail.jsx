@@ -74,7 +74,7 @@ export default function EventDetail() {
       {/* HERO */}
       <section className="relative">
         <div className="absolute inset-0 h-72">
-          <img src={event.banner_url} className="w-full h-full object-cover opacity-40" alt="" />
+          {event.banner_url && <img src={event.banner_url} className="w-full h-full object-cover opacity-40" alt="" />}
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0a0a0a]/60 to-[#0a0a0a]" />
         </div>
         <div className="relative max-w-7xl mx-auto px-6 pt-16 pb-10">

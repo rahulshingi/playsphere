@@ -493,6 +493,7 @@ class VendorListingCreate(BaseModel):
     description: Optional[str] = ""
     images: List[str] = Field(default_factory=list)
     city: str
+    vendor_type: Optional[VendorType] = None
     sports: List[str] = Field(default_factory=list)
     price: float
     currency: str = "INR"
@@ -1457,9 +1458,12 @@ async def create_listing(body: VendorListingCreate, user: dict = Depends(get_cur
     vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
     if not vendor:
         raise HTTPException(404, "Vendor not registered")
+    payload = body.model_dump()
+    # Use body.vendor_type when provided, else fall back to vendor's primary registered type
+    listing_type = payload.pop("vendor_type", None) or vendor["vendor_type"]
     listing = VendorListing(
-        vendor_id=vendor["id"], vendor_type=vendor["vendor_type"],
-        **body.model_dump(), approved=False,
+        vendor_id=vendor["id"], vendor_type=listing_type,
+        **payload, approved=False,
     )
     await db.vendor_listings.insert_one(listing.model_dump())
     return listing
@@ -1474,6 +1478,9 @@ async def update_vendor_listing(listing_id: str, body: dict, user: dict = Depend
     if not vendor or not listing or listing["vendor_id"] != vendor["id"]:
         raise HTTPException(404, "Not found")
     body.pop("id", None); body.pop("vendor_id", None); body.pop("approved", None)
+    # Changing vendor_type requires re-approval
+    if body.get("vendor_type") and body["vendor_type"] != listing.get("vendor_type"):
+        body["approved"] = False
     await db.vendor_listings.update_one({"id": listing_id}, {"$set": body})
     return await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
 

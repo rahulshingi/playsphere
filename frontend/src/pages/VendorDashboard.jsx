@@ -15,6 +15,31 @@ import { CURRENCIES, fmtPrice } from "@/lib/currency";
 
 const SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
 
+const LISTING_TYPES = [
+  { v: "ground", l: "Cricket / Football Ground" },
+  { v: "court", l: "Badminton / Tennis / Basketball Court" },
+  { v: "coach", l: "Coach" },
+  { v: "referee", l: "Referee" },
+  { v: "umpire", l: "Umpire" },
+  { v: "trainer", l: "Trainer" },
+  { v: "photographer", l: "Photographer" },
+  { v: "videographer", l: "Videographer" },
+];
+
+const NEEDS_SPORTS = new Set(["ground", "court", "coach", "referee", "umpire", "trainer"]);
+const NEEDS_CAPACITY = new Set(["ground", "court"]);
+const LISTING_TITLE_LABEL = {
+  ground: "Venue name", court: "Court / venue name",
+  coach: "Coach name & specialty", referee: "Referee profile title",
+  umpire: "Umpire profile title", trainer: "Trainer profile title",
+  photographer: "Photography package name", videographer: "Videography package name",
+};
+const PRICE_UNIT_HINT = {
+  ground: "per hour", court: "per hour", coach: "per session",
+  referee: "per match", umpire: "per match", trainer: "per session",
+  photographer: "per event", videographer: "per event",
+};
+
 export default function VendorDashboard() {
   const { user, ready } = useAuth();
   const nav = useNavigate();
@@ -34,7 +59,7 @@ export default function VendorDashboard() {
     if (ready) load();
   }, [ready, user]);
 
-  const blank = { title: "", description: "", images: [""], city: vendor?.city || "", sports: [], price: 0, currency: "INR", price_unit: "per hour", capacity: null, facilities: [], active: true };
+  const blank = { title: "", description: "", images: [""], city: vendor?.city || "", vendor_type: vendor?.vendor_type || "ground", sports: [], price: 0, currency: "INR", price_unit: "per hour", capacity: null, facilities: [], active: true };
 
   const save = async () => {
     const payload = { ...editing };
@@ -93,7 +118,7 @@ export default function VendorDashboard() {
                 </div>
                 <div className="p-4">
                   <div className="font-semibold">{l.title}</div>
-                  <div className="text-xs font-mono text-neutral-500 mt-1 uppercase">{l.city} · {fmtPrice(l.price, l.currency)} {l.price_unit}</div>
+                  <div className="text-xs font-mono text-neutral-500 mt-1 uppercase">{l.vendor_type} · {l.city} · {fmtPrice(l.price, l.currency)} {l.price_unit}</div>
                   <div className="flex gap-2 mt-3">
                     <Button size="sm" variant="ghost" onClick={() => setEditing({ ...l, images: l.images?.length ? l.images : [""] })} className="text-[#84CC16]">Edit</Button>
                     <Button size="sm" variant="ghost" onClick={() => remove(l.id)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
@@ -151,6 +176,9 @@ function ListingEditor({ listing, setListing, onSave, onClose }) {
   const delImage = (i) => upd({ images: listing.images.filter((_, idx) => idx !== i) });
   const toggleSport = (s) => upd({ sports: listing.sports?.includes(s) ? listing.sports.filter((x) => x !== s) : [...(listing.sports || []), s] });
 
+  const t = listing.vendor_type || "ground";
+  const titleLabel = LISTING_TITLE_LABEL[t] || "Title";
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-start justify-center overflow-auto p-6">
       <div className="bg-[#0c0c0c] border border-white/10 rounded-sm w-full max-w-2xl my-10 p-6 space-y-4 text-white">
@@ -159,23 +187,36 @@ function ListingEditor({ listing, setListing, onSave, onClose }) {
           <Button variant="ghost" onClick={onClose} className="text-neutral-400">Close</Button>
         </div>
 
+        <div>
+          <Label className="text-xs font-mono uppercase text-neutral-500">What are you listing? *</Label>
+          <Select value={t} onValueChange={(v) => upd({ vendor_type: v, price_unit: PRICE_UNIT_HINT[v] || listing.price_unit })}>
+            <SelectTrigger data-testid="vl-type" className="mt-2 bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
+            <SelectContent className="bg-[#141414] text-white border-white/10">
+              {LISTING_TYPES.map((x) => <SelectItem key={x.v} value={x.v}>{x.l}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <p className="text-[10px] text-neutral-500 mt-1">You can run multiple grounds, courts, coaches etc. under one vendor account. Each new entry goes back to platform admin for approval.</p>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div className="col-span-2">
-            <Label className="text-xs font-mono uppercase text-neutral-500">Title *</Label>
-            <Input data-testid="vl-title" value={listing.title} onChange={(e) => upd({ title: e.target.value })} placeholder="e.g., Whitefield Cricket Turf — Floodlit" className="mt-2 bg-black/40 border-white/10 text-white" />
+            <Label className="text-xs font-mono uppercase text-neutral-500">{titleLabel} *</Label>
+            <Input data-testid="vl-title" value={listing.title} onChange={(e) => upd({ title: e.target.value })} placeholder={t === "ground" ? "e.g., Whitefield Cricket Turf — Floodlit" : t === "coach" ? "e.g., Rajesh K — Cricket batting coach" : "e.g., HDR Match Photography"} className="mt-2 bg-black/40 border-white/10 text-white" />
           </div>
           <div className="col-span-2">
             <Label className="text-xs font-mono uppercase text-neutral-500">Description</Label>
-            <Textarea data-testid="vl-desc" value={listing.description} onChange={(e) => upd({ description: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
+            <Textarea data-testid="vl-desc" value={listing.description} onChange={(e) => upd({ description: e.target.value })} placeholder={t === "ground" ? "Pitches, surface, floodlights, parking…" : "What's included, experience, languages, equipment…"} className="mt-2 bg-black/40 border-white/10 text-white" />
           </div>
           <div>
             <Label className="text-xs font-mono uppercase text-neutral-500">City *</Label>
             <Input data-testid="vl-city" value={listing.city} onChange={(e) => upd({ city: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
           </div>
-          <div>
-            <Label className="text-xs font-mono uppercase text-neutral-500">Capacity</Label>
-            <Input type="number" value={listing.capacity || ""} onChange={(e) => upd({ capacity: e.target.value ? Number(e.target.value) : null })} className="mt-2 bg-black/40 border-white/10 text-white" />
-          </div>
+          {NEEDS_CAPACITY.has(t) && (
+            <div>
+              <Label className="text-xs font-mono uppercase text-neutral-500">Capacity / spectators</Label>
+              <Input data-testid="vl-capacity" type="number" value={listing.capacity || ""} onChange={(e) => upd({ capacity: e.target.value ? Number(e.target.value) : null })} className="mt-2 bg-black/40 border-white/10 text-white" />
+            </div>
+          )}
           <div>
             <Label className="text-xs font-mono uppercase text-neutral-500">Price *</Label>
             <Input data-testid="vl-price" type="number" min={0} value={listing.price} onChange={(e) => upd({ price: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
@@ -191,25 +232,27 @@ function ListingEditor({ listing, setListing, onSave, onClose }) {
           </div>
           <div className="col-span-2">
             <Label className="text-xs font-mono uppercase text-neutral-500">Price unit</Label>
-            <Input data-testid="vl-price-unit" value={listing.price_unit} onChange={(e) => upd({ price_unit: e.target.value })} placeholder="per hour" className="mt-2 bg-black/40 border-white/10 text-white" />
+            <Input data-testid="vl-price-unit" value={listing.price_unit} onChange={(e) => upd({ price_unit: e.target.value })} placeholder={PRICE_UNIT_HINT[t] || "per hour"} className="mt-2 bg-black/40 border-white/10 text-white" />
           </div>
         </div>
 
-        <div>
-          <Label className="text-xs font-mono uppercase text-neutral-500">Suitable sports</Label>
-          <div className="flex flex-wrap gap-2 mt-2">
-            {SPORTS.map((s) => (
-              <button key={s} type="button" onClick={() => toggleSport(s)} data-testid={`vl-sport-${s}`}
-                className={`px-3 py-1.5 text-xs font-mono uppercase rounded-sm border ${listing.sports?.includes(s) ? "bg-[#84CC16] text-black border-[#84CC16]" : "border-white/10 text-neutral-400"}`}>
-                {s}
-              </button>
-            ))}
+        {NEEDS_SPORTS.has(t) && (
+          <div>
+            <Label className="text-xs font-mono uppercase text-neutral-500">{t === "ground" || t === "court" ? "Suitable sports" : "Specialises in"}</Label>
+            <div className="flex flex-wrap gap-2 mt-2">
+              {SPORTS.map((s) => (
+                <button key={s} type="button" onClick={() => toggleSport(s)} data-testid={`vl-sport-${s}`}
+                  className={`px-3 py-1.5 text-xs font-mono uppercase rounded-sm border ${listing.sports?.includes(s) ? "bg-[#84CC16] text-black border-[#84CC16]" : "border-white/10 text-neutral-400"}`}>
+                  {s}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
           <div className="flex items-center justify-between">
-            <Label className="text-xs font-mono uppercase text-neutral-500">Images (5–10 recommended)</Label>
+            <Label className="text-xs font-mono uppercase text-neutral-500">{t === "ground" || t === "court" ? "Photos (5–10 of the venue)" : "Portfolio / profile photos"}</Label>
             <Button size="sm" variant="ghost" onClick={addImage} className="text-[#84CC16]">+ Add</Button>
           </div>
           <div className="space-y-2 mt-2">

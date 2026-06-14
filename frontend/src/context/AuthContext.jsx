@@ -66,6 +66,8 @@ export const AuthProvider = ({ children }) => {
       isAdmin: !!user && (user.role === "admin" || user.role === "platform_admin" || user.role === "company_admin"),
       isPlatformAdmin: !!user && (user.role === "platform_admin" || user.role === "admin"),
       isCompanyAdmin: !!user && user.role === "company_admin",
+      isPlayer: !!user && user.role === "player",
+      isVendor: !!user && user.role === "vendor",
       companyId: user && user.company_id,
       companyName: user && user.company_name,
     }}>

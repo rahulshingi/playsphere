@@ -402,6 +402,143 @@ class BookingCreate(BaseModel):
     notes: Optional[str] = ""
 
 
+# ---------- Player profiles ----------
+VendorType = Literal["ground", "court", "coach", "referee", "umpire", "trainer", "photographer", "videographer"]
+
+
+class PlayerSignupBody(BaseModel):
+    name: str
+    mobile: str
+    password: str
+    company_id: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+
+class PlayerLoginBody(BaseModel):
+    mobile: str
+    password: str
+
+
+class PlayerProfile(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    name: str
+    mobile: str
+    email: Optional[str] = None
+    company_id: Optional[str] = None
+    company_name: Optional[str] = None
+    photo_url: Optional[str] = ""
+    dob: Optional[str] = None
+    city: Optional[str] = ""
+    role: Optional[str] = "any"
+    batting_hand: Optional[str] = "right"
+    bowling_style: Optional[str] = "none"
+    jersey_number: Optional[int] = None
+    height_cm: Optional[int] = None
+    weight_kg: Optional[int] = None
+    bio: Optional[str] = ""
+    cricheroes_url: Optional[str] = ""
+    view_count: int = 0
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+# ---------- Vendors ----------
+class VendorSignupBody(BaseModel):
+    business_name: str
+    vendor_type: VendorType
+    contact_name: str
+    mobile: str
+    email: EmailStr
+    password: str
+    city: str
+
+
+class Vendor(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    business_name: str
+    vendor_type: VendorType
+    contact_name: str
+    mobile: str
+    email: str
+    city: str
+    approved: bool = False
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class VendorListing(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_id: str
+    vendor_type: VendorType
+    title: str
+    description: str = ""
+    images: List[str] = Field(default_factory=list)
+    city: str
+    sports: List[str] = Field(default_factory=list)
+    price: float
+    currency: str = "INR"
+    price_unit: str = "per hour"
+    capacity: Optional[int] = None
+    facilities: List[str] = Field(default_factory=list)
+    approved: bool = False
+    active: bool = True
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class VendorListingCreate(BaseModel):
+    title: str
+    description: Optional[str] = ""
+    images: List[str] = Field(default_factory=list)
+    city: str
+    sports: List[str] = Field(default_factory=list)
+    price: float
+    currency: str = "INR"
+    price_unit: Optional[str] = "per hour"
+    capacity: Optional[int] = None
+    facilities: List[str] = Field(default_factory=list)
+    active: bool = True
+
+
+class VendorBookingRequest(BaseModel):
+    listing_id: str
+    requested_date: str
+    start_time: str
+    end_time: str
+    notes: Optional[str] = ""
+
+
+class VendorBooking(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    listing_id: str
+    listing_title: str
+    vendor_id: str
+    vendor_type: str
+    company_id: str
+    company_name: str
+    requested_date: str
+    start_time: str
+    end_time: str
+    price: float
+    currency: str
+    notes: str = ""
+    status: str = "pending"
+    created_by: str
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+# ---------- Site settings (singleton) ----------
+class SiteSettings(BaseModel):
+    facebook_url: Optional[str] = ""
+    instagram_url: Optional[str] = ""
+    linkedin_url: Optional[str] = ""
+    twitter_url: Optional[str] = ""
+    youtube_url: Optional[str] = ""
+
+
 async def _user_with_company(user: dict) -> dict:
     """Attach company_name (if any) and strip password fields."""
     out = {k: user.get(k) for k in ["id", "email", "name", "role", "company_id"]}
@@ -1093,6 +1230,341 @@ async def delete_booking(booking_id: str, user: dict = Depends(get_current_user)
     return {"ok": True}
 
 
+# ---------- Public companies (for player signup picker) ----------
+@api.get("/companies/public")
+async def list_public_companies():
+    docs = await db.companies.find({}, {"_id": 0, "id": 1, "name": 1, "slug": 1, "logo_url": 1}).sort("name", 1).to_list(500)
+    return docs
+
+
+# ---------- Site settings ----------
+@api.get("/settings")
+async def get_settings():
+    doc = await db.settings.find_one({"id": "site"}, {"_id": 0}) or {}
+    out = SiteSettings(**doc).model_dump()
+    out["id"] = "site"
+    return out
+
+
+@api.patch("/settings")
+async def update_settings(body: dict, _: dict = Depends(require_platform_admin)):
+    body.pop("id", None)
+    await db.settings.update_one({"id": "site"}, {"$set": body}, upsert=True)
+    doc = await db.settings.find_one({"id": "site"}, {"_id": 0}) or {}
+    out = SiteSettings(**doc).model_dump()
+    out["id"] = "site"
+    return out
+
+
+# ---------- Player accounts (mobile + password) ----------
+@api.post("/players/register", response_model=UserPublic)
+async def player_register(body: PlayerSignupBody, response: Response):
+    if await db.player_profiles.find_one({"mobile": body.mobile}):
+        raise HTTPException(400, "Mobile already registered")
+    email = (body.email or f"player_{body.mobile}@playsphere.local").lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "Email already in use")
+    user_id = str(uuid.uuid4())
+    await db.users.insert_one({
+        "id": user_id,
+        "email": email,
+        "name": body.name,
+        "role": "player",
+        "company_id": body.company_id,
+        "mobile": body.mobile,
+        "password_hash": hash_password(body.password),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    company_name = None
+    if body.company_id:
+        c = await db.companies.find_one({"id": body.company_id}, {"_id": 0, "name": 1})
+        company_name = c["name"] if c else None
+    profile = PlayerProfile(
+        user_id=user_id, name=body.name, mobile=body.mobile, email=email,
+        company_id=body.company_id, company_name=company_name,
+    )
+    await db.player_profiles.insert_one(profile.model_dump())
+    token = create_access_token(user_id, email, "player", body.company_id)
+    set_auth_cookie(response, token)
+    return UserPublic(id=user_id, email=email, name=body.name, role="player",
+                      company_id=body.company_id, company_name=company_name)
+
+
+@api.post("/players/login", response_model=UserPublic)
+async def player_login(body: PlayerLoginBody, response: Response):
+    user = await db.users.find_one({"mobile": body.mobile, "role": "player"})
+    if not user or not verify_password(body.password, user["password_hash"]):
+        raise HTTPException(401, "Invalid mobile or password")
+    token = create_access_token(user["id"], user["email"], user["role"], user.get("company_id"))
+    set_auth_cookie(response, token)
+    return UserPublic(**await _user_with_company(user))
+
+
+@api.get("/players/me")
+async def get_my_player_profile(user: dict = Depends(get_current_user)):
+    if user.get("role") != "player":
+        raise HTTPException(403, "Player only")
+    doc = await db.player_profiles.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Profile not found")
+    return doc
+
+
+@api.patch("/players/me")
+async def update_my_profile(body: dict, user: dict = Depends(get_current_user)):
+    if user.get("role") != "player":
+        raise HTTPException(403, "Player only")
+    body.pop("id", None); body.pop("user_id", None); body.pop("mobile", None); body.pop("view_count", None)
+    if "company_id" in body:
+        cid = body["company_id"]
+        company_name = None
+        if cid:
+            c = await db.companies.find_one({"id": cid}, {"_id": 0, "name": 1})
+            company_name = c["name"] if c else None
+        body["company_name"] = company_name
+        await db.users.update_one({"id": user["id"]}, {"$set": {"company_id": cid}})
+    await db.player_profiles.update_one({"user_id": user["id"]}, {"$set": body})
+    return await db.player_profiles.find_one({"user_id": user["id"]}, {"_id": 0})
+
+
+@api.get("/players/profiles")
+async def list_player_profiles(
+    company_id: Optional[str] = None,
+    q: Optional[str] = None,
+    user: dict = Depends(get_current_user),
+):
+    flt = {}
+    if company_id:
+        flt["company_id"] = company_id
+    if q:
+        flt["$or"] = [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"city": {"$regex": q, "$options": "i"}},
+            {"mobile": {"$regex": q, "$options": "i"}},
+        ]
+    docs = await db.player_profiles.find(flt, {"_id": 0}).sort("name", 1).to_list(500)
+    # Mask mobile for non-self viewers (keep last 4 digits)
+    for d in docs:
+        if user.get("id") != d.get("user_id"):
+            m = d.get("mobile") or ""
+            d["mobile_masked"] = "•••• " + m[-4:] if len(m) >= 4 else m
+            d.pop("mobile", None)
+    return docs
+
+
+@api.get("/players/profiles/{profile_id}")
+async def get_player_profile(profile_id: str, user: dict = Depends(get_current_user)):
+    doc = await db.player_profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Profile not found")
+    if user.get("id") != doc.get("user_id"):
+        await db.player_profiles.update_one({"id": profile_id}, {"$inc": {"view_count": 1}})
+        doc["view_count"] = (doc.get("view_count", 0) or 0) + 1
+        m = doc.get("mobile") or ""
+        doc["mobile_masked"] = "•••• " + m[-4:] if len(m) >= 4 else m
+        doc.pop("mobile", None)
+    return doc
+
+
+# ---------- Vendors ----------
+@api.post("/vendors/signup", response_model=UserPublic)
+async def vendor_signup(body: VendorSignupBody, response: Response):
+    email = body.email.lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "Email already in use")
+    user_id = str(uuid.uuid4())
+    await db.users.insert_one({
+        "id": user_id, "email": email, "name": body.contact_name, "role": "vendor",
+        "company_id": None, "mobile": body.mobile,
+        "password_hash": hash_password(body.password),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    vendor = Vendor(
+        user_id=user_id, business_name=body.business_name, vendor_type=body.vendor_type,
+        contact_name=body.contact_name, mobile=body.mobile, email=email, city=body.city,
+    )
+    await db.vendors.insert_one(vendor.model_dump())
+    token = create_access_token(user_id, email, "vendor", None)
+    set_auth_cookie(response, token)
+    return UserPublic(id=user_id, email=email, name=body.contact_name, role="vendor",
+                      company_id=None, company_name=None)
+
+
+@api.get("/vendors/me")
+async def get_my_vendor(user: dict = Depends(get_current_user)):
+    if user.get("role") != "vendor":
+        raise HTTPException(403, "Vendor only")
+    doc = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Vendor not found")
+    return doc
+
+
+@api.get("/vendors")
+async def list_vendors(approved: Optional[bool] = None, _: dict = Depends(require_platform_admin)):
+    flt = {}
+    if approved is not None:
+        flt["approved"] = approved
+    return await db.vendors.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.patch("/vendors/{vendor_id}/approve")
+async def approve_vendor(vendor_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+    approved = bool(body.get("approved", True))
+    await db.vendors.update_one({"id": vendor_id}, {"$set": {"approved": approved}})
+    return {"ok": True, "approved": approved}
+
+
+@api.get("/vendor-listings")
+async def list_public_listings(
+    vendor_type: Optional[str] = None,
+    city: Optional[str] = None,
+    sport: Optional[str] = None,
+):
+    flt = {"approved": True, "active": True}
+    if vendor_type:
+        flt["vendor_type"] = vendor_type
+    if city:
+        flt["city"] = {"$regex": city, "$options": "i"}
+    if sport:
+        flt["sports"] = sport
+    docs = await db.vendor_listings.find(flt, {"_id": 0, "vendor_id": 0}).sort("created_at", -1).to_list(500)
+    return docs
+
+
+@api.get("/vendor-listings/{listing_id}")
+async def get_public_listing(listing_id: str):
+    doc = await db.vendor_listings.find_one({"id": listing_id, "approved": True, "active": True}, {"_id": 0, "vendor_id": 0})
+    if not doc:
+        raise HTTPException(404, "Listing not available")
+    return doc
+
+
+@api.get("/vendors/me/listings")
+async def vendor_my_listings(user: dict = Depends(get_current_user)):
+    if user.get("role") != "vendor":
+        raise HTTPException(403, "Vendor only")
+    vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(404, "Vendor not registered")
+    return await db.vendor_listings.find({"vendor_id": vendor["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.post("/vendors/me/listings", response_model=VendorListing)
+async def create_listing(body: VendorListingCreate, user: dict = Depends(get_current_user)):
+    if user.get("role") != "vendor":
+        raise HTTPException(403, "Vendor only")
+    vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(404, "Vendor not registered")
+    listing = VendorListing(
+        vendor_id=vendor["id"], vendor_type=vendor["vendor_type"],
+        **body.model_dump(), approved=False,
+    )
+    await db.vendor_listings.insert_one(listing.model_dump())
+    return listing
+
+
+@api.patch("/vendors/me/listings/{listing_id}")
+async def update_vendor_listing(listing_id: str, body: dict, user: dict = Depends(get_current_user)):
+    if user.get("role") != "vendor":
+        raise HTTPException(403, "Vendor only")
+    vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+    listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
+    if not vendor or not listing or listing["vendor_id"] != vendor["id"]:
+        raise HTTPException(404, "Not found")
+    body.pop("id", None); body.pop("vendor_id", None); body.pop("approved", None)
+    await db.vendor_listings.update_one({"id": listing_id}, {"$set": body})
+    return await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
+
+
+@api.delete("/vendors/me/listings/{listing_id}")
+async def delete_vendor_listing(listing_id: str, user: dict = Depends(get_current_user)):
+    if user.get("role") != "vendor":
+        raise HTTPException(403, "Vendor only")
+    vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+    listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
+    if vendor and listing and listing["vendor_id"] == vendor["id"]:
+        await db.vendor_listings.delete_one({"id": listing_id})
+    return {"ok": True}
+
+
+@api.get("/admin/listings")
+async def admin_list_listings(approved: Optional[bool] = None, _: dict = Depends(require_platform_admin)):
+    flt = {}
+    if approved is not None:
+        flt["approved"] = approved
+    return await db.vendor_listings.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.patch("/admin/listings/{listing_id}/approve")
+async def approve_listing(listing_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+    approved = bool(body.get("approved", True))
+    await db.vendor_listings.update_one({"id": listing_id}, {"$set": {"approved": approved}})
+    return {"ok": True, "approved": approved}
+
+
+# ---------- Vendor bookings ----------
+@api.post("/vendor-bookings", response_model=VendorBooking)
+async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depends(require_company_admin)):
+    listing = await db.vendor_listings.find_one({"id": body.listing_id, "approved": True, "active": True}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not available")
+    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+    booking = VendorBooking(
+        listing_id=listing["id"], listing_title=listing["title"],
+        vendor_id=listing["vendor_id"], vendor_type=listing["vendor_type"],
+        company_id=user["company_id"], company_name=(company or {}).get("name", ""),
+        requested_date=body.requested_date, start_time=body.start_time, end_time=body.end_time,
+        price=float(listing["price"]), currency=listing.get("currency", "INR"),
+        notes=body.notes or "", created_by=user["id"],
+    )
+    await db.vendor_bookings.insert_one(booking.model_dump())
+    return booking
+
+
+@api.get("/vendor-bookings", response_model=List[VendorBooking])
+async def list_vendor_bookings(user: dict = Depends(get_current_user)):
+    role = user.get("role")
+    if role == "vendor":
+        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+        flt = {"vendor_id": vendor["id"]} if vendor else {"vendor_id": "__none__"}
+    elif role == "company_admin":
+        flt = {"company_id": user.get("company_id")}
+    elif role in ("platform_admin", "admin"):
+        flt = {}
+    else:
+        raise HTTPException(403, "Forbidden")
+    docs = await db.vendor_bookings.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [VendorBooking(**d) for d in docs]
+
+
+@api.patch("/vendor-bookings/{booking_id}", response_model=VendorBooking)
+async def update_vendor_booking(booking_id: str, body: dict, user: dict = Depends(get_current_user)):
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Not found")
+    role = user.get("role")
+    allowed: dict = {}
+    if role == "vendor":
+        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+        if not vendor or doc["vendor_id"] != vendor["id"]:
+            raise HTTPException(403)
+        if body.get("status") in ("confirmed", "declined"):
+            allowed["status"] = body["status"]
+    elif role == "company_admin" and doc["company_id"] == user.get("company_id"):
+        if body.get("status") == "cancelled":
+            allowed["status"] = "cancelled"
+    elif role in ("platform_admin", "admin"):
+        allowed = {k: v for k, v in body.items() if k != "id"}
+    else:
+        raise HTTPException(403)
+    if allowed:
+        await db.vendor_bookings.update_one({"id": booking_id}, {"$set": allowed})
+    updated = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    return VendorBooking(**updated)
+
+
 # ---------- Stats ----------
 @api.get("/stats")
 async def get_stats():
@@ -1610,6 +2082,13 @@ async def on_startup():
     await db.fixtures.create_index("event_id")
     await db.players.create_index("team_id")
     await db.bookings.create_index("company_id")
+    await db.player_profiles.create_index("mobile", unique=True)
+    await db.player_profiles.create_index("user_id", unique=True)
+    await db.player_profiles.create_index("company_id")
+    await db.vendors.create_index("user_id", unique=True)
+    await db.vendor_listings.create_index("vendor_id")
+    await db.vendor_bookings.create_index("company_id")
+    await db.vendor_bookings.create_index("vendor_id")
     await seed_admin()
     await seed_demo_data()
     await seed_services()

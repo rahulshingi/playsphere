@@ -21,11 +21,11 @@ export default function Login() {
     setBusy(false);
     if (r.ok) {
       toast.success("Welcome back");
-      // Role-aware redirect happens here; r contains user (returned from /auth/login via context)
-      // Re-fetch user from /me would be slow; rely on local state via reloading after a tick.
       const role = r.user?.role || (r && r.user ? r.user.role : null);
       if (role === "platform_admin" || role === "admin") nav("/platform-admin");
       else if (role === "company_admin") nav("/dashboard");
+      else if (role === "vendor") nav("/vendor/dashboard");
+      else if (role === "player") nav("/players/me");
       else nav("/");
     }
     else toast.error(r.error);

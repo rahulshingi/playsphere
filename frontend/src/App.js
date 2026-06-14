@@ -21,6 +21,13 @@ import ServiceDetail from "@/pages/ServiceDetail";
 import Dashboard from "@/pages/Dashboard";
 import Bookings from "@/pages/Bookings";
 import PlatformAdmin from "@/pages/PlatformAdmin";
+import PlayerSignup from "@/pages/PlayerSignup";
+import PlayerLogin from "@/pages/PlayerLogin";
+import PlayerProfile from "@/pages/PlayerProfile";
+import { PlayerSearch, PlayerProfileView } from "@/pages/PlayerDirectory";
+import VendorSignup from "@/pages/VendorSignup";
+import VendorDashboard from "@/pages/VendorDashboard";
+import VendorMarket from "@/pages/VendorMarket";
 
 function App() {
   return (
@@ -32,11 +39,12 @@ function App() {
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/teams" element={<Teams />} />
           <Route path="/teams/:id" element={<TeamDetail />} />
-          <Route path="/players/:id" element={<PlayerDetail />} />
+          <Route path="/team-players/:id" element={<PlayerDetail />} />
           <Route path="/standings" element={<Standings />} />
           <Route path="/sponsors" element={<Sponsors />} />
           <Route path="/services" element={<Services />} />
           <Route path="/services/:id" element={<ServiceDetail />} />
+          <Route path="/hire" element={<VendorMarket />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/bookings" element={<Bookings />} />
           <Route path="/admin" element={<Admin />} />
@@ -45,6 +53,17 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/register-team" element={<RegisterTeam />} />
           <Route path="/signup-company" element={<SignupCompany />} />
+
+          {/* Players */}
+          <Route path="/players/signup" element={<PlayerSignup />} />
+          <Route path="/players/login" element={<PlayerLogin />} />
+          <Route path="/players/me" element={<PlayerProfile />} />
+          <Route path="/players/profiles" element={<PlayerSearch />} />
+          <Route path="/players/profiles/:id" element={<PlayerProfileView />} />
+
+          {/* Vendors */}
+          <Route path="/vendor/signup" element={<VendorSignup />} />
+          <Route path="/vendor/dashboard" element={<VendorDashboard />} />
         </Routes>
       </BrowserRouter>
       <Toaster position="top-right" theme="dark" />

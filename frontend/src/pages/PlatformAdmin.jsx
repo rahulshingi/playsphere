@@ -22,6 +22,9 @@ export default function PlatformAdmin() {
   const [services, setServices] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [vendors, setVendors] = useState([]);
+  const [listings, setListings] = useState([]);
+  const [settings, setSettings] = useState({});
   const [editing, setEditing] = useState(null);
 
   const blankService = {
@@ -43,7 +46,13 @@ export default function PlatformAdmin() {
     api.get("/services?include_inactive=true"),
     api.get("/companies"),
     api.get("/bookings"),
-  ]).then(([s, c, b]) => { setServices(s.data); setCompanies(c.data); setBookings(b.data); });
+    api.get("/vendors"),
+    api.get("/admin/listings"),
+    api.get("/settings"),
+  ]).then(([s, c, b, v, l, st]) => {
+    setServices(s.data); setCompanies(c.data); setBookings(b.data);
+    setVendors(v.data); setListings(l.data); setSettings(st.data);
+  });
 
   useEffect(() => {
     if (ready && !isPlatformAdmin) { nav("/login"); return; }
@@ -83,10 +92,13 @@ export default function PlatformAdmin() {
         </div>
 
         <Tabs defaultValue="services" className="mt-10">
-          <TabsList className="bg-[#141414] border border-white/10 rounded-sm">
+          <TabsList className="bg-[#141414] border border-white/10 rounded-sm flex-wrap">
             <TabsTrigger value="services" data-testid="pa-tab-services" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Services ({services.length})</TabsTrigger>
             <TabsTrigger value="companies" data-testid="pa-tab-companies" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Companies ({companies.length})</TabsTrigger>
             <TabsTrigger value="bookings" data-testid="pa-tab-bookings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bookings ({bookings.length})</TabsTrigger>
+            <TabsTrigger value="vendors" data-testid="pa-tab-vendors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Vendors ({vendors.length})</TabsTrigger>
+            <TabsTrigger value="listings" data-testid="pa-tab-listings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Listings ({listings.length})</TabsTrigger>
+            <TabsTrigger value="settings" data-testid="pa-tab-settings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Settings</TabsTrigger>
           </TabsList>
 
           <TabsContent value="services" className="mt-6 space-y-2">
@@ -126,6 +138,61 @@ export default function PlatformAdmin() {
                   <div className="text-xs text-neutral-400 mt-1">qty {b.quantity} · {fmtPrice(b.total_price, b.currency)} · {b.status}</div>
                 </div>
               ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="vendors" className="mt-6 space-y-2">
+            {vendors.map((v) => (
+              <div key={v.id} className="border border-white/10 rounded-sm p-4 bg-[#141414] flex items-center justify-between">
+                <div>
+                  <div className="font-semibold">{v.business_name} <span className="text-[10px] font-mono uppercase text-neutral-500 ml-2">{v.vendor_type}</span></div>
+                  <div className="text-xs font-mono text-neutral-500">{v.contact_name} · {v.city} · {v.mobile} · {v.email}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-mono uppercase border rounded-sm px-2 py-0.5 ${v.approved ? "text-[#84CC16] border-[#84CC16]/40" : "text-amber-400 border-amber-500/40"}`}>{v.approved ? "APPROVED" : "PENDING"}</span>
+                  <Button size="sm" data-testid={`pa-approve-vendor-${v.id}`} onClick={async () => { await api.patch(`/vendors/${v.id}/approve`, { approved: !v.approved }); load(); toast.success(v.approved ? "Revoked" : "Approved"); }}
+                    className={v.approved ? "bg-white/10 hover:bg-white/20 text-white rounded-sm" : "bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm"}>
+                    {v.approved ? "Revoke" : "Approve"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {vendors.length === 0 && <div className="text-neutral-500 text-sm text-center py-12">No vendors registered.</div>}
+          </TabsContent>
+
+          <TabsContent value="listings" className="mt-6 space-y-2">
+            {listings.map((l) => (
+              <div key={l.id} className="border border-white/10 rounded-sm p-4 bg-[#141414] flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {l.images?.[0] && <img src={l.images[0]} alt="" className="w-14 h-14 object-cover rounded-sm" />}
+                  <div>
+                    <div className="font-semibold">{l.title} <span className="text-[10px] font-mono uppercase text-neutral-500 ml-2">{l.vendor_type}</span></div>
+                    <div className="text-xs font-mono text-neutral-500 uppercase">{l.city} · {fmtPrice(l.price, l.currency)} {l.price_unit}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-mono uppercase border rounded-sm px-2 py-0.5 ${l.approved ? "text-[#84CC16] border-[#84CC16]/40" : "text-amber-400 border-amber-500/40"}`}>{l.approved ? "LIVE" : "PENDING"}</span>
+                  <Button size="sm" data-testid={`pa-approve-listing-${l.id}`} onClick={async () => { await api.patch(`/admin/listings/${l.id}/approve`, { approved: !l.approved }); load(); toast.success(l.approved ? "Hidden" : "Approved"); }}
+                    className={l.approved ? "bg-white/10 hover:bg-white/20 text-white rounded-sm" : "bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm"}>
+                    {l.approved ? "Unpublish" : "Approve"}
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {listings.length === 0 && <div className="text-neutral-500 text-sm text-center py-12">No listings yet.</div>}
+          </TabsContent>
+
+          <TabsContent value="settings" className="mt-6">
+            <div className="border border-white/10 rounded-sm bg-[#141414] p-6 max-w-2xl space-y-3">
+              <div className="font-display tracking-wider text-2xl">SITE SETTINGS</div>
+              <p className="text-xs text-neutral-500 font-mono">Social media links shown in footer.</p>
+              {["facebook_url", "instagram_url", "linkedin_url", "twitter_url", "youtube_url"].map((k) => (
+                <div key={k}>
+                  <Label className="text-xs font-mono uppercase text-neutral-500">{k.replace("_url", "")}</Label>
+                  <Input data-testid={`setting-${k}`} value={settings[k] || ""} onChange={(e) => setSettings({ ...settings, [k]: e.target.value })} placeholder={`https://${k.split("_")[0]}.com/playsphere`} className="mt-2 bg-black/40 border-white/10 text-white" />
+                </div>
+              ))}
+              <Button data-testid="settings-save" onClick={async () => { await api.patch("/settings", settings); toast.success("Saved"); load(); }} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Save settings</Button>
             </div>
           </TabsContent>
         </Tabs>

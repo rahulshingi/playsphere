@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 
@@ -14,12 +14,19 @@ const COLORS = ["#84CC16", "#FF3B30", "#10B981", "#F59E0B", "#A855F7", "#EC4899"
 
 export default function RegisterTeam() {
   const nav = useNavigate();
+  const { isCompanyAdmin, companyId } = useAuth();
   const [events, setEvents] = useState([]);
+  const [registered, setRegistered] = useState([]);
   const [form, setForm] = useState({ name: "", department: "", captain: "", color: "#84CC16", event_id: "", logo_url: "" });
   const [players, setPlayers] = useState([{ name: "", role: "", jersey: "" }]);
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { api.get("/events").then((r) => setEvents(r.data)); }, []);
+  useEffect(() => {
+    api.get("/events").then((r) => setEvents(r.data));
+    if (isCompanyAdmin && companyId) {
+      api.get(`/players/profiles?company_id=${companyId}`).then((r) => setRegistered(r.data));
+    }
+  }, [isCompanyAdmin, companyId]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -88,6 +95,24 @@ export default function RegisterTeam() {
               <Label className="text-xs font-mono uppercase text-neutral-500">Roster (optional)</Label>
               <Button type="button" size="sm" variant="ghost" data-testid="rt-add-player" onClick={() => setPlayers([...players, { name: "", role: "", jersey: "" }])} className="text-[#84CC16]">+ Add player</Button>
             </div>
+            {isCompanyAdmin && registered.length > 0 && (
+              <div className="border border-[#84CC16]/30 rounded-sm bg-[#84CC16]/5 p-3 mb-3">
+                <div className="text-[10px] font-mono uppercase tracking-widest text-[#84CC16] mb-2">/ Pick from registered company players ({registered.length})</div>
+                <div className="flex flex-wrap gap-2">
+                  {registered.map((rp) => (
+                    <button key={rp.id} type="button" data-testid={`rt-pick-${rp.id}`} onClick={() => {
+                      const next = [...players];
+                      const empty = next.findIndex((x) => !x.name.trim());
+                      const row = { name: rp.name, role: rp.role || "", jersey: rp.jersey_number ? String(rp.jersey_number) : "" };
+                      if (empty >= 0) next[empty] = row; else next.push(row);
+                      setPlayers(next);
+                    }} className="px-2.5 py-1 text-xs rounded-sm border border-white/10 bg-black/30 hover:border-[#84CC16]/60">
+                      {rp.name} <span className="text-neutral-500 ml-1 text-[10px]">{rp.role}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               {players.map((p, i) => (
                 <div key={i} className="grid grid-cols-12 gap-2">

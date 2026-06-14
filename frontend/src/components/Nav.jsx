@@ -1,7 +1,7 @@
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, Shield, Briefcase, Crown } from "lucide-react";
+import { LogOut, Shield, Briefcase, Crown, User, Store } from "lucide-react";
 
 const LOGO_URL = "/playsphere-mark.png";
 
@@ -9,13 +9,12 @@ const publicLinks = [
   { to: "/", label: "Home" },
   { to: "/events", label: "Events" },
   { to: "/teams", label: "Teams" },
-  { to: "/standings", label: "Standings" },
   { to: "/services", label: "Services" },
   { to: "/sponsors", label: "Sponsors" },
 ];
 
 export default function Nav() {
-  const { user, isCompanyAdmin, isPlatformAdmin, companyName, logout } = useAuth();
+  const { user, isCompanyAdmin, isPlatformAdmin, isPlayer, isVendor, companyName, logout } = useAuth();
   const navigate = useNavigate();
   const isAuthed = user && user !== false;
 
@@ -62,10 +61,28 @@ export default function Nav() {
               <NavLink to="/dashboard" data-testid="nav-link-dashboard" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#84CC16]" : "text-[#84CC16]/80 hover:text-[#84CC16]"}`}>
                 <Briefcase className="w-3.5 h-3.5" /> Dashboard
               </NavLink>
+              <NavLink to="/hire" data-testid="nav-link-hire" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm ${isActive ? "text-white bg-white/5" : "text-neutral-400 hover:text-white"}`}>
+                Hire
+              </NavLink>
               <NavLink to="/admin" data-testid="nav-link-admin" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#84CC16]" : "text-[#84CC16]/80 hover:text-[#84CC16]"}`}>
                 <Shield className="w-3.5 h-3.5" /> Manage
               </NavLink>
             </>
+          )}
+          {isPlayer && (
+            <>
+              <NavLink to="/players/me" data-testid="nav-link-my-profile" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#84CC16]" : "text-[#84CC16]/80 hover:text-[#84CC16]"}`}>
+                <User className="w-3.5 h-3.5" /> My profile
+              </NavLink>
+              <NavLink to="/players/profiles" data-testid="nav-link-find-players" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm ${isActive ? "text-white bg-white/5" : "text-neutral-400 hover:text-white"}`}>
+                Find players
+              </NavLink>
+            </>
+          )}
+          {isVendor && (
+            <NavLink to="/vendor/dashboard" data-testid="nav-link-vendor" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#EC4899]" : "text-[#EC4899]/80 hover:text-[#EC4899]"}`}>
+              <Store className="w-3.5 h-3.5" /> Vendor
+            </NavLink>
           )}
           {isPlatformAdmin && (
             <NavLink to="/platform-admin" data-testid="nav-link-platform-admin" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#FF3B30]" : "text-[#FF3B30]/80 hover:text-[#FF3B30]"}`}>

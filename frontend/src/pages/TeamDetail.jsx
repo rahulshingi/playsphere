@@ -38,7 +38,7 @@ export default function TeamDetail() {
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {players.map((p) => (
-                <Link to={`/players/${p.id}`} key={p.id} data-testid={`player-card-${p.id}`} className="border border-white/10 rounded-sm bg-[#141414] overflow-hidden hover-lift">
+                <Link to={`/team-players/${p.id}`} key={p.id} data-testid={`player-card-${p.id}`} className="border border-white/10 rounded-sm bg-[#141414] overflow-hidden hover-lift">
                   <div className="aspect-[4/3] relative">
                     <img src={p.avatar_url || "https://images.pexels.com/photos/2216610/pexels-photo-2216610.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"} alt="" className="w-full h-full object-cover opacity-80" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent" />

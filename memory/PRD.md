@@ -34,6 +34,10 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - Landing page with hero, live zone, features bento, upcoming events
 - Routes: /, /events, /events/:id, /teams, /teams/:id, /players/:id, /standings, /sponsors, /admin, /login, /register, /register-team
 
+## Implemented (Feb 14, 2026 — Iteration 6)
+- **Image upload (`POST /api/upload`, GET `/api/uploads/<name>`)** — works across Vendor Listings, Player Profile photo, and Platform Admin Service image. Auth via cookie, 5MB cap, JPEG/PNG/WEBP/GIF allowed.
+  - Fix: route + StaticFiles mount were defined AFTER `app.include_router(api)` (silent 404). Moved BEFORE the include_router call. Regression-guarded by `/app/backend/tests/test_upload.py` (8 tests).
+
 ## Backlog
 ### P0
 - (none open) — MVP complete & tested (31/31 backend, all critical UI flows pass)

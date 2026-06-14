@@ -900,8 +900,42 @@ async def list_event_companies(event_id: str):
     return docs
 
 
+async def _unique_company_slug(base: str) -> str:
+    slug = base.lower().strip().replace(" ", "-")[:40] or "company"
+    candidate = slug
+    n = 0
+    while await db.companies.find_one({"slug": candidate}):
+        n += 1
+        candidate = f"{slug}-{n}"
+    return candidate
+
+
+async def _create_company_with_hr(name: str, hr_name: str, hr_email: str) -> tuple:
+    """Create a Company + a company_admin HR user. Returns (company_id, hr_email, temp_password)."""
+    if await db.users.find_one({"email": hr_email}):
+        raise HTTPException(400, "HR email already in use")
+    slug = await _unique_company_slug(name)
+    comp = Company(name=name, slug=slug, contact_email=hr_email)
+    await db.companies.insert_one(comp.model_dump())
+    temp_password = _gen_temp_password()
+    hr_user_id = str(uuid.uuid4())
+    await db.users.insert_one({
+        "id": hr_user_id,
+        "email": hr_email,
+        "name": hr_name or f"{name} HR",
+        "role": "company_admin",
+        "company_id": comp.id,
+        "password_hash": hash_password(temp_password),
+        "must_reset": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    await db.companies.update_one({"id": comp.id}, {"$set": {"owner_user_id": hr_user_id}})
+    logger.warning("HR auto-created for company %s: email=%s temp_password=%s", name, hr_email, temp_password)
+    return comp.id, hr_email, temp_password
+
+
 @api.post("/events/{event_id}/companies")
-async def add_event_company(event_id: str, body: dict, user: dict = Depends(require_platform_admin)):
+async def add_event_company(event_id: str, body: dict, _: dict = Depends(require_platform_admin)):
     await _get_event_or_404(event_id)
     body = body or {}
     company_id = body.get("company_id")
@@ -914,26 +948,7 @@ async def add_event_company(event_id: str, body: dict, user: dict = Depends(requ
         hr_email = (new_company.get("hr_email") or "").strip().lower()
         if not (cname and hr_email):
             raise HTTPException(400, "name and hr_email required")
-        if await db.users.find_one({"email": hr_email}):
-            raise HTTPException(400, "HR email already in use")
-        slug = cname.lower().replace(" ", "-")[:40]
-        comp = Company(name=cname, slug=slug, contact_email=hr_email)
-        await db.companies.insert_one(comp.model_dump())
-        temp_password = _gen_temp_password()
-        hr_user_id = str(uuid.uuid4())
-        await db.users.insert_one({
-            "id": hr_user_id,
-            "email": hr_email,
-            "name": hr_name or cname + " HR",
-            "role": "company_admin",
-            "company_id": comp.id,
-            "password_hash": hash_password(temp_password),
-            "must_reset": True,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-        await db.companies.update_one({"id": comp.id}, {"$set": {"owner_user_id": hr_user_id}})
-        company_id = comp.id
-        logger.warning("HR auto-created for company %s: email=%s temp_password=%s", cname, hr_email, temp_password)
+        company_id, hr_email, temp_password = await _create_company_with_hr(cname, hr_name, hr_email)
     if not company_id:
         raise HTTPException(400, "company_id or new_company required")
     if not await db.companies.find_one({"id": company_id}):
@@ -1012,6 +1027,42 @@ async def list_team_members(event_id: str, team_id: str, user: dict = Depends(ge
     return docs
 
 
+async def _quick_add_player(quick: dict, team: dict) -> tuple:
+    """Quick-create a player profile. Returns (player_id, temp_password)."""
+    name = (quick.get("name") or "").strip()
+    mobile = (quick.get("mobile") or "").strip()
+    email = (quick.get("email") or "").strip().lower() or None
+    if not (name and mobile):
+        raise HTTPException(400, "name and mobile required for quick add")
+    existing = await db.player_profiles.find_one({"mobile": mobile}, {"_id": 0})
+    if existing:
+        return existing["id"], None
+    login_email = email or f"player_{mobile}@players.playsphere.app"
+    if await db.users.find_one({"email": login_email}):
+        raise HTTPException(400, "Email already in use")
+    temp_password = _gen_temp_password()
+    user_id = str(uuid.uuid4())
+    company_id = team.get("company_id")
+    company_name = None
+    if company_id:
+        c = await db.companies.find_one({"id": company_id}, {"_id": 0, "name": 1})
+        company_name = c["name"] if c else None
+    await db.users.insert_one({
+        "id": user_id, "email": login_email, "name": name, "role": "player",
+        "company_id": company_id, "mobile": mobile,
+        "password_hash": hash_password(temp_password), "must_reset": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    prof = PlayerProfile(
+        user_id=user_id, name=name, mobile=mobile, email=login_email,
+        company_id=company_id, company_name=company_name,
+    )
+    await db.player_profiles.insert_one(prof.model_dump())
+    logger.warning("Quick-add player created: name=%s mobile=%s email=%s temp_password=%s",
+                   name, mobile, login_email, temp_password)
+    return prof.id, temp_password
+
+
 @api.post("/events/{event_id}/teams/{team_id}/members")
 async def add_team_member(event_id: str, team_id: str, body: dict, user: dict = Depends(get_current_user)):
     ev = await _get_event_or_404(event_id)
@@ -1023,43 +1074,7 @@ async def add_team_member(event_id: str, team_id: str, body: dict, user: dict = 
     quick = body.get("quick")
     temp_password = None
     if not pid and quick:
-        name = (quick.get("name") or "").strip()
-        mobile = (quick.get("mobile") or "").strip()
-        email = (quick.get("email") or "").strip().lower() or None
-        if not (name and mobile):
-            raise HTTPException(400, "name and mobile required for quick add")
-        existing_prof = await db.player_profiles.find_one({"mobile": mobile}, {"_id": 0})
-        if existing_prof:
-            pid = existing_prof["id"]
-        else:
-            user_id = str(uuid.uuid4())
-            login_email = email or f"player_{mobile}@players.playsphere.app"
-            if await db.users.find_one({"email": login_email}):
-                raise HTTPException(400, "Email already in use")
-            temp_password = _gen_temp_password()
-            await db.users.insert_one({
-                "id": user_id,
-                "email": login_email,
-                "name": name,
-                "role": "player",
-                "company_id": t.get("company_id"),
-                "mobile": mobile,
-                "password_hash": hash_password(temp_password),
-                "must_reset": True,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-            company_name = None
-            if t.get("company_id"):
-                c = await db.companies.find_one({"id": t["company_id"]}, {"_id": 0, "name": 1})
-                company_name = c["name"] if c else None
-            prof = PlayerProfile(
-                user_id=user_id, name=name, mobile=mobile, email=login_email,
-                company_id=t.get("company_id"), company_name=company_name,
-            )
-            await db.player_profiles.insert_one(prof.model_dump())
-            pid = prof.id
-            logger.warning("Quick-add player created: name=%s mobile=%s email=%s temp_password=%s",
-                           name, mobile, login_email, temp_password)
+        pid, temp_password = await _quick_add_player(quick, t)
     if not pid:
         raise HTTPException(400, "player_id or quick payload required")
     if not await db.player_profiles.find_one({"id": pid}):
@@ -1090,7 +1105,8 @@ async def player_forgot_password(body: dict):
     user = await db.users.find_one({"email": email, "role": "player"})
     # Don't leak whether email exists; respond OK either way
     if user:
-        token = uuid.uuid4().hex + uuid.uuid4().hex
+        import secrets as _secrets
+        token = _secrets.token_urlsafe(32)
         expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
         await db.password_resets.insert_one({
             "token": token, "user_id": user["id"], "email": email,

@@ -29,12 +29,12 @@ assert _url, "REACT_APP_BACKEND_URL must be set"
 BASE_URL = _url.rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = "admin@playsphere.com"
-ADMIN_PASSWORD = "admin123"
-ACME_EMAIL = "acme@example.com"
-ACME_PASSWORD = "acme123"
-VENDOR_EMAIL = "ravi@turf.in"
-VENDOR_PASSWORD = "vendor123"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@playsphere.com")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
+ACME_EMAIL = os.environ.get("TEST_ACME_EMAIL", "acme@example.com")
+ACME_PASSWORD = os.environ.get("TEST_ACME_PASSWORD", "acme123")
+VENDOR_EMAIL = os.environ.get("TEST_VENDOR_EMAIL", "ravi@turf.in")
+VENDOR_PASSWORD = os.environ.get("TEST_VENDOR_PASSWORD", "vendor123")
 
 UNIQ = uuid.uuid4().hex[:6]
 

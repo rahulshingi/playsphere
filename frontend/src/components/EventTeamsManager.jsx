@@ -11,16 +11,16 @@ import { useAuth } from "@/context/AuthContext";
 const COLOR_OPTIONS = ["#84CC16", "#EC4899", "#06B6D4", "#F59E0B", "#A855F7", "#3B82F6", "#EF4444"];
 
 export default function EventTeamsManager({ event, teams, reload }) {
-  const { user, isPlatformAdmin, isCompanyAdmin, isPlayer, companyId } = useAuth();
+  const { isPlatformAdmin, isCompanyAdmin, isPlayer, companyId } = useAuth();
   const [myPlayerId, setMyPlayerId] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [allPlayers, setAllPlayers] = useState([]);
   const [creds, setCreds] = useState(null); // { kind, email, password, name }
 
   useEffect(() => {
-    if (isPlayer) api.get("/players/me").then((r) => setMyPlayerId(r.data.id)).catch(() => {});
-    api.get(`/events/${event.id}/companies`).then((r) => setCompanies(r.data)).catch(() => {});
-    api.get("/players/profiles").then((r) => setAllPlayers(r.data)).catch(() => {});
+    if (isPlayer) api.get("/players/me").then((r) => setMyPlayerId(r.data.id)).catch((e) => console.debug("[teams-mgr] /players/me", e));
+    api.get(`/events/${event.id}/companies`).then((r) => setCompanies(r.data)).catch((e) => console.debug("[teams-mgr] event companies", e));
+    api.get("/players/profiles").then((r) => setAllPlayers(r.data)).catch((e) => console.debug("[teams-mgr] /players/profiles", e));
   }, [event.id, isPlayer]);
 
   const myCaptainTeamIds = useMemo(
@@ -37,21 +37,22 @@ export default function EventTeamsManager({ event, teams, reload }) {
     return false;
   };
   const canSeeTab = canManageEvent || myCaptainTeamIds.length > 0;
-  if (!canSeeTab) return null;
 
-  // Filter teams visible to current user:
-  // - admin sees all
-  // - HR (company_admin) in inter_company sees only their company's teams
-  // - captain sees only their team(s)
-  const visibleTeams = teams.filter((t) => {
-    if (isPlatformAdmin) return true;
-    if (isCompanyAdmin) {
-      if (event.event_type === "inter_company") return t.company_id === companyId;
-      return event.company_id === companyId;
-    }
-    if (isPlayer) return myCaptainTeamIds.includes(t.id);
-    return false;
-  });
+  // Memoized visible teams: avoids re-filtering on unrelated renders
+  const visibleTeams = useMemo(() => {
+    if (!canSeeTab) return [];
+    return teams.filter((t) => {
+      if (isPlatformAdmin) return true;
+      if (isCompanyAdmin) {
+        if (event.event_type === "inter_company") return t.company_id === companyId;
+        return event.company_id === companyId;
+      }
+      if (isPlayer) return myCaptainTeamIds.includes(t.id);
+      return false;
+    });
+  }, [teams, canSeeTab, isPlatformAdmin, isCompanyAdmin, isPlayer, event.event_type, event.company_id, companyId, myCaptainTeamIds]);
+
+  if (!canSeeTab) return null;
 
   return (
     <div data-testid="teams-manager" className="space-y-8">
@@ -216,104 +217,195 @@ function NewTeamForm({ event, companies, isPlatformAdmin, companyId, reload }) {
   );
 }
 
-function TeamCard({ team, event, companies, allPlayers, canManage, reload, setCreds }) {
+function useTeamMembers(eventId, teamId) {
   const [members, setMembers] = useState([]);
-  const [open, setOpen] = useState(false);
-  const [pickerMode, setPickerMode] = useState("existing");
-  const [pickedPlayerId, setPickedPlayerId] = useState("");
-  const [quick, setQuick] = useState({ name: "", mobile: "", email: "" });
-  const [captainPick, setCaptainPick] = useState("");
-  const company = companies.find((c) => c.id === team.company_id);
-
-  const loadMembers = async () => {
+  const refresh = useMemo(() => async () => {
     try {
-      const r = await api.get(`/events/${event.id}/teams/${team.id}/members`);
+      const r = await api.get(`/events/${eventId}/teams/${teamId}/members`);
       setMembers(r.data);
-    } catch (e) { /* ignore */ }
-  };
+    } catch (e) { console.debug("[teams-mgr] members load", e); }
+  }, [eventId, teamId]);
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const r = await api.get(`/events/${event.id}/teams/${team.id}/members`);
+        const r = await api.get(`/events/${eventId}/teams/${teamId}/members`);
         if (!cancelled) setMembers(r.data);
-      } catch (e) { /* ignore */ }
+      } catch (e) { console.debug("[teams-mgr] members load", e); }
     })();
     return () => { cancelled = true; };
-  }, [event.id, team.id]);
+  }, [eventId, teamId]);
+  return [members, refresh];
+}
 
-  const assignCaptain = async () => {
+function TeamCardHeader({ team, company }) {
+  return (
+    <div className="flex items-start justify-between mb-3">
+      <div className="flex items-center gap-3">
+        <span className="w-2 h-10 rounded-sm" style={{ background: team.color }} />
+        <div>
+          <div className="font-semibold text-base">{team.name}</div>
+          <div className="text-[10px] font-mono uppercase text-neutral-500 tracking-widest">
+            {team.department || "team"}{company && ` · ${company.name}`}
+          </div>
+        </div>
+      </div>
+      {team.captain && (
+        <div className="flex items-center gap-1 text-xs font-mono text-[#F59E0B]">
+          <Crown className="w-3.5 h-3.5" /> {team.captain}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CaptainAssigner({ team, allPlayers, onAssign }) {
+  const [captainPick, setCaptainPick] = useState("");
+  const submit = () => {
     if (!captainPick) return toast.error("Pick a player");
+    onAssign(captainPick).then(() => setCaptainPick(""));
+  };
+  return (
+    <div className="flex gap-2 mb-3">
+      <Select value={captainPick} onValueChange={setCaptainPick}>
+        <SelectTrigger data-testid={`tc-captain-pick-${team.id}`} className="bg-black/40 border-white/10 text-white">
+          <SelectValue placeholder="Assign captain (registered player)" />
+        </SelectTrigger>
+        <SelectContent className="bg-[#141414] text-white border-white/10 max-h-[260px]">
+          {allPlayers.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name} {p.company_name ? `· ${p.company_name}` : ""}</SelectItem>))}
+        </SelectContent>
+      </Select>
+      <Button data-testid={`tc-captain-set-${team.id}`} onClick={submit} className="bg-[#F59E0B] hover:bg-[#D97706] text-black rounded-sm">Set</Button>
+    </div>
+  );
+}
+
+function MemberRow({ team, member, canManage, onRemove }) {
+  return (
+    <div data-testid={`tc-member-${member.id}`} className="flex items-center justify-between gap-2 px-3 py-2 rounded-sm bg-black/30 border border-white/5">
+      <div className="flex items-center gap-2 min-w-0">
+        {member.photo_url ? <img src={member.photo_url} alt="" className="w-7 h-7 rounded-full object-cover" /> : <div className="w-7 h-7 rounded-full bg-white/5" />}
+        <div className="min-w-0">
+          <div className="text-sm truncate">{member.name}{team.captain_player_id === member.id && <span className="ml-2 text-[10px] font-mono text-[#F59E0B]">CAPTAIN</span>}</div>
+          <div className="text-[10px] font-mono text-neutral-500 truncate">{member.mobile_masked || member.mobile} · {member.role || "any"}</div>
+        </div>
+      </div>
+      {canManage && (
+        <button data-testid={`tc-member-del-${member.id}`} onClick={() => onRemove(member.id)} className="text-[#FF3B30] hover:text-white p-1" aria-label="remove"><Trash2 className="w-3.5 h-3.5" /></button>
+      )}
+    </div>
+  );
+}
+
+function AddMemberDialog({ team, allPlayers, members, open, onOpenChange, onPick, onQuick }) {
+  const [mode, setMode] = useState("existing");
+  const [pickedPlayerId, setPickedPlayerId] = useState("");
+  const [quick, setQuick] = useState({ name: "", mobile: "", email: "" });
+  const memberIds = useMemo(() => new Set(members.map((m) => m.id)), [members]);
+  const candidates = useMemo(() => allPlayers.filter((p) => !memberIds.has(p.id)), [allPlayers, memberIds]);
+
+  const submit = async () => {
+    if (mode === "existing") {
+      if (!pickedPlayerId) return toast.error("Pick a player");
+      await onPick(pickedPlayerId);
+      setPickedPlayerId("");
+    } else {
+      if (!(quick.name && quick.mobile)) return toast.error("Name and mobile required");
+      await onQuick(quick);
+      setQuick({ name: "", mobile: "", email: "" });
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-[#141414] text-white border-white/10">
+        <DialogHeader><DialogTitle>Add player to {team.name}</DialogTitle></DialogHeader>
+        <div className="flex gap-2 mb-3">
+          <Button size="sm" variant={mode === "existing" ? "default" : "outline"} onClick={() => setMode("existing")} className="rounded-sm" data-testid={`tc-mode-existing-${team.id}`}>Pick registered</Button>
+          <Button size="sm" variant={mode === "quick" ? "default" : "outline"} onClick={() => setMode("quick")} className="rounded-sm" data-testid={`tc-mode-quick-${team.id}`}>Quick add (creates profile)</Button>
+        </div>
+        {mode === "existing" ? (
+          <Select value={pickedPlayerId} onValueChange={setPickedPlayerId}>
+            <SelectTrigger data-testid={`tc-existing-pick-${team.id}`} className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Pick from registered players" /></SelectTrigger>
+            <SelectContent className="bg-[#141414] text-white border-white/10 max-h-[280px]">
+              {candidates.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name} {p.company_name ? `· ${p.company_name}` : ""}</SelectItem>))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="grid grid-cols-1 gap-2">
+            <Input data-testid={`tc-quick-name-${team.id}`} placeholder="Full name" value={quick.name} onChange={(e) => setQuick({ ...quick, name: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+            <Input data-testid={`tc-quick-mobile-${team.id}`} placeholder="Mobile (e.g. +91…)" value={quick.mobile} onChange={(e) => setQuick({ ...quick, mobile: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+            <Input data-testid={`tc-quick-email-${team.id}`} placeholder="Email (for login + reset)" value={quick.email} onChange={(e) => setQuick({ ...quick, email: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+            <p className="text-[10px] text-neutral-500">A profile will be created with a temporary password. The credentials will be shown to you so you can share with the player.</p>
+          </div>
+        )}
+        <DialogFooter>
+          <Button onClick={submit} data-testid={`tc-confirm-add-${team.id}`} className="bg-[#84CC16] hover:bg-[#65A30D] text-black rounded-sm">Add</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function TeamCard({ team, event, companies, allPlayers, canManage, reload, setCreds }) {
+  const [members, refreshMembers] = useTeamMembers(event.id, team.id);
+  const [open, setOpen] = useState(false);
+  const company = useMemo(() => companies.find((c) => c.id === team.company_id), [companies, team.company_id]);
+
+  const handleAssignCaptain = async (playerId) => {
     try {
-      await api.post(`/events/${event.id}/teams/${team.id}/captain`, { player_id: captainPick });
+      await api.post(`/events/${event.id}/teams/${team.id}/captain`, { player_id: playerId });
       toast.success("Captain assigned");
-      setCaptainPick("");
-      await loadMembers();
+      await refreshMembers();
       reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
 
-  const addMember = async () => {
+  const handlePick = async (playerId) => {
     try {
-      if (pickerMode === "existing") {
-        if (!pickedPlayerId) return toast.error("Pick a player");
-        await api.post(`/events/${event.id}/teams/${team.id}/members`, { player_id: pickedPlayerId });
-        toast.success("Player added");
-        setPickedPlayerId("");
-      } else {
-        if (!(quick.name && quick.mobile)) return toast.error("Name and mobile required");
-        const { data } = await api.post(`/events/${event.id}/teams/${team.id}/members`, { quick });
-        toast.success("Player added");
-        if (data.temp_password) setCreds({ kind: "Player", email: quick.email || `player_${quick.mobile}@players.playsphere.app`, password: data.temp_password, name: quick.name });
-        setQuick({ name: "", mobile: "", email: "" });
-      }
+      await api.post(`/events/${event.id}/teams/${team.id}/members`, { player_id: playerId });
+      toast.success("Player added");
       setOpen(false);
-      await loadMembers();
+      await refreshMembers();
     } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
 
-  const removeMember = async (pid) => {
+  const handleQuick = async (quick) => {
+    try {
+      const { data } = await api.post(`/events/${event.id}/teams/${team.id}/members`, { quick });
+      toast.success("Player added");
+      if (data.temp_password) {
+        setCreds({
+          kind: "Player",
+          email: quick.email || `player_${quick.mobile}@players.playsphere.app`,
+          password: data.temp_password,
+          name: quick.name,
+        });
+      }
+      setOpen(false);
+      await refreshMembers();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+  };
+
+  const handleRemove = async (pid) => {
     if (!window.confirm("Remove player from team?")) return;
     try {
       await api.delete(`/events/${event.id}/teams/${team.id}/members/${pid}`);
-      await loadMembers();
+      await refreshMembers();
       reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
 
   return (
     <div data-testid={`team-card-${team.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-5">
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <span className="w-2 h-10 rounded-sm" style={{ background: team.color }} />
-          <div>
-            <div className="font-semibold text-base">{team.name}</div>
-            <div className="text-[10px] font-mono uppercase text-neutral-500 tracking-widest">
-              {team.department || "team"}{company && ` · ${company.name}`}
-            </div>
-          </div>
-        </div>
-        {team.captain && (
-          <div className="flex items-center gap-1 text-xs font-mono text-[#F59E0B]">
-            <Crown className="w-3.5 h-3.5" /> {team.captain}
-          </div>
-        )}
-      </div>
-
+      <TeamCardHeader team={team} company={company} />
       {canManage && !team.captain_player_id && (
-        <div className="flex gap-2 mb-3">
-          <Select value={captainPick} onValueChange={setCaptainPick}>
-            <SelectTrigger data-testid={`tc-captain-pick-${team.id}`} className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Assign captain (registered player)" /></SelectTrigger>
-            <SelectContent className="bg-[#141414] text-white border-white/10 max-h-[260px]">
-              {allPlayers.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name} {p.company_name ? `· ${p.company_name}` : ""}</SelectItem>))}
-            </SelectContent>
-          </Select>
-          <Button data-testid={`tc-captain-set-${team.id}`} onClick={assignCaptain} className="bg-[#F59E0B] hover:bg-[#D97706] text-black rounded-sm">Set</Button>
-        </div>
+        <CaptainAssigner team={team} allPlayers={allPlayers} onAssign={handleAssignCaptain} />
       )}
-
       <div className="flex items-center justify-between mb-2">
-        <div className="text-xs font-mono uppercase tracking-widest text-neutral-500 flex items-center gap-1.5"><Users className="w-3 h-3" />Roster ({members.length})</div>
+        <div className="text-xs font-mono uppercase tracking-widest text-neutral-500 flex items-center gap-1.5">
+          <Users className="w-3 h-3" />Roster ({members.length})
+        </div>
         {canManage && (
           <Button data-testid={`tc-add-member-${team.id}`} size="sm" variant="outline" onClick={() => setOpen(true)} className="rounded-sm border-white/10 text-white">
             <UserPlus className="w-3.5 h-3.5 mr-1" /> Add player
@@ -323,50 +415,18 @@ function TeamCard({ team, event, companies, allPlayers, canManage, reload, setCr
       <div className="space-y-1.5">
         {members.length === 0 && <div className="text-xs text-neutral-600 py-2">No players yet.</div>}
         {members.map((m) => (
-          <div key={m.id} data-testid={`tc-member-${m.id}`} className="flex items-center justify-between gap-2 px-3 py-2 rounded-sm bg-black/30 border border-white/5">
-            <div className="flex items-center gap-2 min-w-0">
-              {m.photo_url ? <img src={m.photo_url} alt="" className="w-7 h-7 rounded-full object-cover" /> : <div className="w-7 h-7 rounded-full bg-white/5" />}
-              <div className="min-w-0">
-                <div className="text-sm truncate">{m.name}{team.captain_player_id === m.id && <span className="ml-2 text-[10px] font-mono text-[#F59E0B]">CAPTAIN</span>}</div>
-                <div className="text-[10px] font-mono text-neutral-500 truncate">{m.mobile_masked || m.mobile} · {m.role || "any"}</div>
-              </div>
-            </div>
-            {canManage && (
-              <button data-testid={`tc-member-del-${m.id}`} onClick={() => removeMember(m.id)} className="text-[#FF3B30] hover:text-white p-1" aria-label="remove"><Trash2 className="w-3.5 h-3.5" /></button>
-            )}
-          </div>
+          <MemberRow key={m.id} team={team} member={m} canManage={canManage} onRemove={handleRemove} />
         ))}
       </div>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="bg-[#141414] text-white border-white/10">
-          <DialogHeader><DialogTitle>Add player to {team.name}</DialogTitle></DialogHeader>
-          <div className="flex gap-2 mb-3">
-            <Button size="sm" variant={pickerMode === "existing" ? "default" : "outline"} onClick={() => setPickerMode("existing")} className="rounded-sm" data-testid={`tc-mode-existing-${team.id}`}>Pick registered</Button>
-            <Button size="sm" variant={pickerMode === "quick" ? "default" : "outline"} onClick={() => setPickerMode("quick")} className="rounded-sm" data-testid={`tc-mode-quick-${team.id}`}>Quick add (creates profile)</Button>
-          </div>
-          {pickerMode === "existing" ? (
-            <Select value={pickedPlayerId} onValueChange={setPickedPlayerId}>
-              <SelectTrigger data-testid={`tc-existing-pick-${team.id}`} className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Pick from registered players" /></SelectTrigger>
-              <SelectContent className="bg-[#141414] text-white border-white/10 max-h-[280px]">
-                {allPlayers.filter((p) => !members.find((m) => m.id === p.id)).map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name} {p.company_name ? `· ${p.company_name}` : ""}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <div className="grid grid-cols-1 gap-2">
-              <Input data-testid={`tc-quick-name-${team.id}`} placeholder="Full name" value={quick.name} onChange={(e) => setQuick({ ...quick, name: e.target.value })} className="bg-black/40 border-white/10 text-white" />
-              <Input data-testid={`tc-quick-mobile-${team.id}`} placeholder="Mobile (e.g. +91…)" value={quick.mobile} onChange={(e) => setQuick({ ...quick, mobile: e.target.value })} className="bg-black/40 border-white/10 text-white" />
-              <Input data-testid={`tc-quick-email-${team.id}`} placeholder="Email (for login + reset)" value={quick.email} onChange={(e) => setQuick({ ...quick, email: e.target.value })} className="bg-black/40 border-white/10 text-white" />
-              <p className="text-[10px] text-neutral-500">A profile will be created with a temporary password. The credentials will be shown to you so you can share with the player.</p>
-            </div>
-          )}
-          <DialogFooter>
-            <Button onClick={addMember} data-testid={`tc-confirm-add-${team.id}`} className="bg-[#84CC16] hover:bg-[#65A30D] text-black rounded-sm">Add</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AddMemberDialog
+        team={team}
+        allPlayers={allPlayers}
+        members={members}
+        open={open}
+        onOpenChange={setOpen}
+        onPick={handlePick}
+        onQuick={handleQuick}
+      />
     </div>
   );
 }

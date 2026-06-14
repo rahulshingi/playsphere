@@ -31,8 +31,8 @@ def _read_backend_log_for_token(email: str, since: int = 0):
                 latest = m.group(1)
     if not latest:
         return None
-    # extract token=...
-    tm = re.search(r"token=([0-9a-fA-F]+)", latest)
+    # extract token=...  (token is URL-safe base64; may contain a-zA-Z0-9_-)
+    tm = re.search(r"token=([A-Za-z0-9_\-]+)", latest)
     return tm.group(1) if tm else None
 
 

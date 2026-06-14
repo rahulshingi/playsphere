@@ -56,6 +56,9 @@ export default function Login() {
         <p className="text-xs text-neutral-500 mt-6 text-center">
           New here? <Link to="/register" className="text-[#84CC16] hover:underline">Create account</Link>
         </p>
+        <p className="text-xs text-neutral-500 mt-1 text-center">
+          <Link data-testid="login-forgot-link" to="/forgot-password" className="text-[#06B6D4] hover:underline">Forgot password?</Link>
+        </p>
         <div className="mt-6 p-3 border border-white/10 rounded-sm text-[11px] font-mono text-neutral-400 leading-relaxed">
           Demo admin · admin@playsphere.com / admin123
         </div>

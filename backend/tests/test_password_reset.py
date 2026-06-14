@@ -101,3 +101,48 @@ def test_reset_password_short_password_400():
     r = requests.post(f"{API}/players/reset-password",
                       json={"token": "x" * 64, "new_password": "abc"})
     assert r.status_code == 400
+
+
+def test_auth_forgot_reset_works_for_company_admin():
+    """HR / company_admin can use /auth/forgot-password + /auth/reset-password."""
+    hr_email = os.environ.get("TEST_ACME_EMAIL", "acme@example.com")
+    hr_pw = os.environ.get("TEST_ACME_PASSWORD", "acme123")
+
+    # Baseline: HR can log in with current password
+    base = requests.post(f"{API}/auth/login", json={"email": hr_email, "password": hr_pw})
+    assert base.status_code == 200, base.text
+
+    # Trigger forgot via /auth/* (not /players/*)
+    r = requests.post(f"{API}/auth/forgot-password", json={"email": hr_email})
+    assert r.status_code == 200
+    assert r.json().get("ok") is True
+
+    time.sleep(0.5)
+    token = _read_backend_log_for_token(hr_email)
+    assert token, f"Reset token for {hr_email} not found in backend logs"
+
+    new_pw = "newhr2026"
+    rr = requests.post(f"{API}/auth/reset-password", json={"token": token, "new_password": new_pw})
+    assert rr.status_code == 200, rr.text
+
+    # Login with new password
+    li = requests.post(f"{API}/auth/login", json={"email": hr_email, "password": new_pw})
+    assert li.status_code == 200, li.text
+
+    # Restore
+    r2 = requests.post(f"{API}/auth/forgot-password", json={"email": hr_email})
+    assert r2.status_code == 200
+    time.sleep(0.5)
+    t2 = _read_backend_log_for_token(hr_email)
+    assert t2 and t2 != token
+    rr2 = requests.post(f"{API}/auth/reset-password",
+                        json={"token": t2, "new_password": hr_pw})
+    assert rr2.status_code == 200
+
+
+def test_auth_forgot_password_unknown_email_returns_ok():
+    """Generic /auth/forgot-password also does not leak existence."""
+    r = requests.post(f"{API}/auth/forgot-password",
+                      json={"email": f"nope_{int(time.time())}@nowhere.test"})
+    assert r.status_code == 200
+    assert r.json().get("ok") is True

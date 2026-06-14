@@ -1096,13 +1096,14 @@ async def remove_team_member(event_id: str, team_id: str, player_id: str, user: 
     return {"ok": True}
 
 
-# ---------- Forgot / reset password (players) ----------
+# ---------- Forgot / reset password (all roles) ----------
 @api.post("/players/forgot-password")
-async def player_forgot_password(body: dict):
+@api.post("/auth/forgot-password")
+async def forgot_password(body: dict):
     email = ((body or {}).get("email") or "").strip().lower()
     if not email:
         raise HTTPException(400, "email required")
-    user = await db.users.find_one({"email": email, "role": "player"})
+    user = await db.users.find_one({"email": email})
     # Don't leak whether email exists; respond OK either way
     if user:
         import secrets as _secrets
@@ -1110,17 +1111,19 @@ async def player_forgot_password(body: dict):
         expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
         await db.password_resets.insert_one({
             "token": token, "user_id": user["id"], "email": email,
+            "role": user.get("role", ""),
             "expires_at": expires_at, "used": False,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         frontend = os.environ.get("FRONTEND_URL", "")
-        reset_url = f"{frontend}/players/reset-password?token={token}" if frontend else f"/players/reset-password?token={token}"
+        reset_url = f"{frontend}/reset-password?token={token}" if frontend else f"/reset-password?token={token}"
         logger.warning("PASSWORD RESET LINK for %s: %s", email, reset_url)
     return {"ok": True}
 
 
 @api.post("/players/reset-password")
-async def player_reset_password(body: dict):
+@api.post("/auth/reset-password")
+async def reset_password(body: dict):
     token = ((body or {}).get("token") or "").strip()
     new_password = (body or {}).get("new_password") or ""
     if not (token and new_password):

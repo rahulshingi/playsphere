@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useSearchParams, useNavigate } from "react-router-dom";
+import { Link, useLocation, useSearchParams, useNavigate } from "react-router-dom";
 import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 
-export default function PlayerResetPassword() {
+export default function ResetPassword() {
   const [params] = useSearchParams();
+  const loc = useLocation();
   const nav = useNavigate();
+  const isPlayerFlow = loc.pathname.startsWith("/players/");
+  const backTo = isPlayerFlow ? "/players/login" : "/login";
   const token = params.get("token") || "";
   const [pwd, setPwd] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -22,9 +25,9 @@ export default function PlayerResetPassword() {
     if (pwd !== confirm) return toast.error("Passwords do not match");
     setBusy(true);
     try {
-      await api.post("/players/reset-password", { token, new_password: pwd });
+      await api.post("/auth/reset-password", { token, new_password: pwd });
       toast.success("Password updated. You can sign in now.");
-      nav("/players/login");
+      nav(backTo);
     } catch (err) {
       toast.error(err.response?.data?.detail || "Reset failed");
     } finally { setBusy(false); }
@@ -49,7 +52,7 @@ export default function PlayerResetPassword() {
           <Button data-testid="reset-submit" disabled={busy || !token} className="w-full bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold h-12 rounded-sm">
             {busy ? "Saving…" : "Update password"}
           </Button>
-          <p className="text-xs text-neutral-500 text-center"><Link to="/players/login" className="text-[#84CC16] hover:underline">← Back to sign in</Link></p>
+          <p className="text-xs text-neutral-500 text-center"><Link to={backTo} className="text-[#84CC16] hover:underline">← Back to sign in</Link></p>
         </form>
       </div>
     </div>

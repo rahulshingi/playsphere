@@ -58,6 +58,15 @@ export default function Footer() {
           </ul>
         </div>
         <div>
+          <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Guides</div>
+          <ul className="space-y-2 text-sm">
+            <li><a className="hover:text-[#84CC16]" href="/manuals/playsphere-company-manual.pdf" target="_blank" rel="noopener noreferrer" data-testid="manual-company">Company / HR manual</a></li>
+            <li><a className="hover:text-[#84CC16]" href="/manuals/playsphere-player-manual.pdf" target="_blank" rel="noopener noreferrer" data-testid="manual-player">Player manual</a></li>
+            <li><a className="hover:text-[#84CC16]" href="/manuals/playsphere-vendor-manual.pdf" target="_blank" rel="noopener noreferrer" data-testid="manual-vendor">Vendor manual</a></li>
+            <li><a className="hover:text-[#84CC16]" href="/manuals/playsphere-platform-admin-manual.pdf" target="_blank" rel="noopener noreferrer" data-testid="manual-admin">Platform admin manual</a></li>
+          </ul>
+        </div>
+        <div>
           <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Contact</div>
           <p className="text-sm text-neutral-400">hello@playsphere.io</p>
           <p className="text-sm text-neutral-400">+1 (415) 555-0142</p>

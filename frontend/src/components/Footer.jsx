@@ -14,7 +14,7 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6 py-12 grid md:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-3">
-            <img src="/playsphere-mark.png" alt="Kreeda Nation" className="w-12 h-12 object-contain" />
+            <img src="/kreeda-mark.png" alt="Kreeda Nation" className="w-12 h-12 object-contain" />
             <div className="font-brand text-3xl">
               <span className="text-white">KREEDA</span><span className="text-[#84CC16]"> NATION</span>
             </div>

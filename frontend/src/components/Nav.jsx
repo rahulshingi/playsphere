@@ -3,7 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { LogOut, Shield, Briefcase, Crown, User, Store } from "lucide-react";
 
-const LOGO_URL = "/playsphere-mark.png";
+const LOGO_URL = "/kreeda-mark.png";
 
 const publicLinks = [
   { to: "/", label: "Home" },

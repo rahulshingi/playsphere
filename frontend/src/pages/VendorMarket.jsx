@@ -73,6 +73,7 @@ export default function VendorMarket() {
         requested_date: form.requested_date,
         start_time: form.start_time,
         hours: Number(form.hours),
+        sport,
         notes: form.notes,
       });
       toast.success("Booking request sent — admin will confirm with the vendor");

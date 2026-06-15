@@ -41,8 +41,12 @@ export default function Bookings() {
       <div className="max-w-7xl mx-auto px-6 pt-12 pb-24">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Bookings</div>
         <div className="flex items-end justify-between">
-          <h1 className="font-display text-6xl tracking-wide mt-3">{isPlatformAdmin ? "ALL BOOKINGS" : "YOUR BOOKINGS"}</h1>
-          <Link to="/services"><Button data-testid="bookings-browse" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Browse services</Button></Link>
+          <h1 className="font-display text-6xl tracking-wide mt-3">
+            {isVendor ? "INCOMING REQUESTS" : isPlatformAdmin ? "ALL BOOKINGS" : "YOUR BOOKINGS"}
+          </h1>
+          {!isVendor && (
+            <Link to="/services"><Button data-testid="bookings-browse" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Browse services</Button></Link>
+          )}
         </div>
 
         {!isVendor && (

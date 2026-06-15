@@ -38,6 +38,19 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **Image upload (`POST /api/upload`, GET `/api/uploads/<name>`)** — works across Vendor Listings, Player Profile photo, and Platform Admin Service image. Auth via cookie, 5MB cap, JPEG/PNG/WEBP/GIF allowed.
   - Fix: route + StaticFiles mount were defined AFTER `app.include_router(api)` (silent 404). Moved BEFORE the include_router call. Regression-guarded by `/app/backend/tests/test_upload.py` (8 tests).
 
+## Implemented (Feb 15, 2026 — Iteration 8) Ground booking wizard + state machine
+- **HR booking wizard** at `/hire`: Sport → City → Listings → Date+Start+Hours modal with live total. Drops the old vendor-type tabs as the primary nav.
+- **`GET /api/vendor-listings/cities`** — distinct cities for a sport+vendor_type (powers the location chips).
+- **`VendorBooking` model extended** — `hours`, `total`, `sport`, `city`, `admin_notes`, `notifications[]`, `hr_email`. POST accepts either `hours` OR `end_time` (server derives the other); explicit 400 if neither.
+- **State machine** (vendor + admin both act):
+  - HR creates → `pending`
+  - Vendor PATCH 'confirmed'/'declined' → remapped to `vendor_accepted`/`vendor_declined`. **Terminal states (confirmed/rejected/cancelled) are 409 for vendor** (audit guard).
+  - Admin PATCH → can set `vendor_accepted` | `vendor_declined` | `confirmed` | `rejected` | `cancelled` + `admin_notes`. Override of vendor decision supported.
+  - HR PATCH → only `cancelled`, allowed at any non-terminal state.
+  - Every status change appends `notifications[]` entry + writes `BOOKING NOTIFICATION for <hr_email> | …` to backend log (mocked email).
+- **`VendorBookings` panel** rendered inside `/bookings` — role-aware actions: vendor accept/decline, admin confirm/reject with note, HR cancel. Latest notification surfaces as an inline banner. Vendor nav now has a `Requests` link.
+- **20 new pytest tests** in `test_vendor_bookings.py` + state-machine updates to legacy test. Total: 145/145 pass.
+
 ## Implemented (Feb 14, 2026 — Iteration 7) Phase 1: CricHeroes-style event setup chain
 - **Platform admin event creation:** New "Events" tab in `/platform-admin` with the same form HR uses — sport/format/event_type/venue/banner (upload)/stream URL. "Open" routes to the event detail page where the Teams tab handles team/captain/member management.
 - **Public nav:** Teams link removed; Teams now a tab inside `/events/:id`, gated to platform_admin / company_admin / captains.

@@ -522,6 +522,7 @@ class VendorBookingRequest(BaseModel):
     start_time: str
     end_time: Optional[str] = None
     hours: Optional[int] = None
+    sport: Optional[str] = None
     notes: Optional[str] = ""
 
 
@@ -1932,7 +1933,7 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         raise HTTPException(404, "Listing not available")
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
 
-    # Compute hours / end_time. Either may be provided; we normalise both.
+    # Compute hours / end_time. Either may be provided.
     hours = int(body.hours) if body.hours else None
     end_time = body.end_time
     if hours and not end_time:
@@ -1940,12 +1941,13 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
     elif end_time and not hours:
         hours = _hours_between(body.start_time, end_time)
     elif not (hours or end_time):
-        hours = 1
-        end_time = _hhmm_add(body.start_time, 1)
+        raise HTTPException(400, "Either 'hours' or 'end_time' is required")
 
     price = float(listing["price"])
     total = price * hours
-    sport = listing.get("sports", [None])[0] if listing.get("sports") else None
+    listing_sports = listing.get("sports") or []
+    # Respect HR's selected sport when present, else fall back to first listed sport
+    sport = body.sport if (body.sport and body.sport in listing_sports) else (listing_sports[0] if listing_sports else None)
 
     booking = VendorBooking(
         listing_id=listing["id"], listing_title=listing["title"],
@@ -2006,6 +2008,9 @@ async def update_vendor_booking(booking_id: str, body: dict, user: dict = Depend
         vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
         if not vendor or doc["vendor_id"] != vendor["id"]:
             raise HTTPException(403)
+        # Terminal states cannot be overridden by vendor
+        if doc.get("status") in ("confirmed", "rejected", "cancelled"):
+            raise HTTPException(409, f"Booking is already {doc['status']}; only PlaySphere admin can change it.")
         # Backward compat: legacy "confirmed"/"declined" from vendor → vendor_accepted/vendor_declined
         compat = {"confirmed": "vendor_accepted", "declined": "vendor_declined"}
         new_status = compat.get(new_status, new_status)

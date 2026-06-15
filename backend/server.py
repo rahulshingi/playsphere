@@ -1926,6 +1926,25 @@ async def _log_booking_change(booking: dict, event: str, message: str, by: dict)
     )
 
 
+def _normalize_booking_time(start: str, end_time: Optional[str], hours: Optional[int]) -> tuple:
+    """Return (end_time, hours). Raises 400 if neither hours nor end_time is provided."""
+    h = int(hours) if hours else None
+    e = end_time
+    if h and not e:
+        return _hhmm_add(start, h), h
+    if e and not h:
+        return e, _hours_between(start, e)
+    if not (h or e):
+        raise HTTPException(400, "Either 'hours' or 'end_time' is required")
+    return e, h
+
+
+def _resolve_booking_sport(body_sport: Optional[str], listing_sports: list) -> Optional[str]:
+    if body_sport and body_sport in listing_sports:
+        return body_sport
+    return listing_sports[0] if listing_sports else None
+
+
 @api.post("/vendor-bookings", response_model=VendorBooking)
 async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depends(require_company_admin)):
     listing = await db.vendor_listings.find_one({"id": body.listing_id, "approved": True, "active": True}, {"_id": 0})
@@ -1933,21 +1952,9 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         raise HTTPException(404, "Listing not available")
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
 
-    # Compute hours / end_time. Either may be provided.
-    hours = int(body.hours) if body.hours else None
-    end_time = body.end_time
-    if hours and not end_time:
-        end_time = _hhmm_add(body.start_time, hours)
-    elif end_time and not hours:
-        hours = _hours_between(body.start_time, end_time)
-    elif not (hours or end_time):
-        raise HTTPException(400, "Either 'hours' or 'end_time' is required")
-
+    end_time, hours = _normalize_booking_time(body.start_time, body.end_time, body.hours)
     price = float(listing["price"])
-    total = price * hours
-    listing_sports = listing.get("sports") or []
-    # Respect HR's selected sport when present, else fall back to first listed sport
-    sport = body.sport if (body.sport and body.sport in listing_sports) else (listing_sports[0] if listing_sports else None)
+    sport = _resolve_booking_sport(body.sport, listing.get("sports") or [])
 
     booking = VendorBooking(
         listing_id=listing["id"], listing_title=listing["title"],
@@ -1955,9 +1962,8 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         company_id=user["company_id"], company_name=(company or {}).get("name", ""),
         requested_date=body.requested_date, start_time=body.start_time, end_time=end_time,
         hours=hours, sport=sport, city=listing.get("city"),
-        price=price, currency=listing.get("currency", "INR"), total=total,
-        notes=body.notes or "", created_by=user["id"],
-        hr_email=user.get("email"),
+        price=price, currency=listing.get("currency", "INR"), total=price * hours,
+        notes=body.notes or "", created_by=user["id"], hr_email=user.get("email"),
     )
     payload = booking.model_dump()
     payload["notifications"] = [_booking_notification(
@@ -1992,6 +1998,36 @@ async def list_vendor_bookings(user: dict = Depends(get_current_user)):
 VENDOR_STATUSES = {"vendor_accepted", "vendor_declined"}
 ADMIN_STATUSES = {"confirmed", "rejected"}
 HR_STATUSES = {"cancelled"}
+TERMINAL_STATUSES = {"confirmed", "rejected", "cancelled"}
+
+
+async def _vendor_changes(doc: dict, user: dict, new_status: Optional[str]) -> dict:
+    vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not vendor or doc["vendor_id"] != vendor["id"]:
+        raise HTTPException(403)
+    if doc.get("status") in TERMINAL_STATUSES:
+        raise HTTPException(409, f"Booking is already {doc['status']}; only Kreeda Nation admin can change it.")
+    # Backward compat: legacy "confirmed"/"declined" → vendor_accepted/vendor_declined
+    compat = {"confirmed": "vendor_accepted", "declined": "vendor_declined"}
+    mapped = compat.get(new_status, new_status)
+    return {"status": mapped} if mapped in VENDOR_STATUSES else {}
+
+
+def _hr_changes(doc: dict, user: dict, new_status: Optional[str]) -> dict:
+    if doc["company_id"] != user.get("company_id"):
+        raise HTTPException(403)
+    if new_status == "cancelled" and doc.get("status") not in ("cancelled", "rejected"):
+        return {"status": "cancelled"}
+    return {}
+
+
+def _admin_changes(new_status: Optional[str], admin_notes) -> dict:
+    out: dict = {}
+    if new_status in (VENDOR_STATUSES | ADMIN_STATUSES | HR_STATUSES):
+        out["status"] = new_status
+    if admin_notes is not None:
+        out["admin_notes"] = admin_notes
+    return out
 
 
 @api.patch("/vendor-bookings/{booking_id}", response_model=VendorBooking)
@@ -2002,29 +2038,13 @@ async def update_vendor_booking(booking_id: str, body: dict, user: dict = Depend
     role = user.get("role")
     new_status = body.get("status")
     admin_notes = body.get("admin_notes")
-    allowed: dict = {}
 
     if role == "vendor":
-        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
-        if not vendor or doc["vendor_id"] != vendor["id"]:
-            raise HTTPException(403)
-        # Terminal states cannot be overridden by vendor
-        if doc.get("status") in ("confirmed", "rejected", "cancelled"):
-            raise HTTPException(409, f"Booking is already {doc['status']}; only Kreeda Nation admin can change it.")
-        # Backward compat: legacy "confirmed"/"declined" from vendor → vendor_accepted/vendor_declined
-        compat = {"confirmed": "vendor_accepted", "declined": "vendor_declined"}
-        new_status = compat.get(new_status, new_status)
-        if new_status in VENDOR_STATUSES:
-            allowed["status"] = new_status
-    elif role == "company_admin" and doc["company_id"] == user.get("company_id"):
-        # HR can cancel anytime except already terminal
-        if new_status == "cancelled" and doc.get("status") not in ("cancelled", "rejected"):
-            allowed["status"] = "cancelled"
+        allowed = await _vendor_changes(doc, user, new_status)
+    elif role == "company_admin":
+        allowed = _hr_changes(doc, user, new_status)
     elif role in ("platform_admin", "admin"):
-        if new_status in (VENDOR_STATUSES | ADMIN_STATUSES | HR_STATUSES):
-            allowed["status"] = new_status
-        if admin_notes is not None:
-            allowed["admin_notes"] = admin_notes
+        allowed = _admin_changes(new_status, admin_notes)
     else:
         raise HTTPException(403)
 
@@ -2032,7 +2052,6 @@ async def update_vendor_booking(booking_id: str, body: dict, user: dict = Depend
         raise HTTPException(400, "No allowed changes")
 
     await db.vendor_bookings.update_one({"id": booking_id}, {"$set": allowed})
-    # Log notification if status changed
     if "status" in allowed and allowed["status"] != doc.get("status"):
         msg = f"Status changed from '{doc.get('status')}' to '{allowed['status']}'"
         if admin_notes:

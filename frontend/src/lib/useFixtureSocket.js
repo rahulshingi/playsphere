@@ -27,7 +27,7 @@ export default function useFixtureSocket(onUpdate) {
       ws.onopen = () => {
         retry = 0;
         pingTimer = setInterval(() => {
-          try { ws.send("ping"); } catch (e) { console.debug("[ws] ping failed", e); }
+          try { ws.send("ping"); } catch (e) { /* ignore */ }
         }, 25000);
       };
       ws.onmessage = (event) => {
@@ -36,14 +36,14 @@ export default function useFixtureSocket(onUpdate) {
           if (data && data.type === "fixture_update") {
             onUpdateRef.current && onUpdateRef.current(data);
           }
-        } catch (e) { console.debug("[ws] bad message", e); }
+        } catch (e) { /* ignore */ }
       };
       ws.onclose = () => {
         clearInterval(pingTimer);
         scheduleReconnect();
       };
       ws.onerror = () => {
-        try { ws.close(); } catch (e) { console.debug("[ws] close failed", e); }
+        try { ws.close(); } catch (e) { /* ignore */ }
       };
     };
 
@@ -58,7 +58,7 @@ export default function useFixtureSocket(onUpdate) {
     return () => {
       stopped = true;
       clearInterval(pingTimer);
-      try { ws && ws.close(); } catch (e) { console.debug("[ws] cleanup close failed", e); }
+      try { ws && ws.close(); } catch (e) { /* ignore */ }
     };
   }, []);
 }

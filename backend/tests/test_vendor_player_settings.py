@@ -316,7 +316,7 @@ class TestVendorsListingsBookings:
         assert r.json()["role"] == "vendor"
         r2 = s.get(f"{API}/vendors/me")
         assert r2.status_code == 200
-        assert r2.json()["approved"] is False
+        assert r2.json()["approved"] == False
         assert r2.json()["business_name"] == body["business_name"]
 
     def test_public_listings_strip_vendor_id_and_only_approved(self):
@@ -326,8 +326,8 @@ class TestVendorsListingsBookings:
         assert isinstance(rows, list)
         for row in rows:
             assert "vendor_id" not in row, "vendor_id must be stripped from public response"
-            assert row.get("approved") is True
-            assert row.get("active") is True
+            assert row.get("approved") == True
+            assert row.get("active") == True
 
     def test_public_listings_filters(self):
         r = requests.get(f"{API}/vendor-listings", params={"vendor_type": "ground", "city": "Bangalore"})
@@ -350,7 +350,7 @@ class TestVendorsListingsBookings:
         assert r.status_code == 200, r.text
         listing = r.json()
         listing_id = listing["id"]
-        assert listing["approved"] is False
+        assert listing["approved"] == False
         assert listing["vendor_type"] == "ground"  # inherited
         # public list must NOT contain it yet
         pub = requests.get(f"{API}/vendor-listings").json()
@@ -379,7 +379,7 @@ class TestVendorsListingsBookings:
         r2 = vendor_session.patch(f"{API}/vendors/me/listings/{listing_id}",
                                   json={"approved": True, "title": "Renamed"})
         assert r2.status_code == 200
-        assert r2.json()["approved"] is False  # ignored
+        assert r2.json()["approved"] == False  # ignored
         assert r2.json()["title"] == "Renamed"
         vendor_session.delete(f"{API}/vendors/me/listings/{listing_id}")
 
@@ -482,7 +482,7 @@ class TestAdminVendorApproval:
         r = admin_session.get(f"{API}/vendors", params={"approved": "false"})
         assert r.status_code == 200
         for v in r.json():
-            assert v["approved"] is False
+            assert v["approved"] == False
 
     def test_non_admin_cannot_list_vendors(self, acme_session):
         r = acme_session.get(f"{API}/vendors")

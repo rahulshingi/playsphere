@@ -44,7 +44,7 @@ export default function VendorMarket() {
     if (!sport) { setCities([]); setCity(""); setListings([]); return; }
     api.get(`/vendor-listings/cities?sport=${encodeURIComponent(sport)}&vendor_type=${vendorType}`)
       .then((r) => setCities(r.data))
-      .catch((e) => console.debug("[vm] cities", e));
+      .catch(() => {});
     setCity("");
     setListings([]);
   }, [sport, vendorType]);
@@ -54,7 +54,7 @@ export default function VendorMarket() {
     if (!(sport && city)) { setListings([]); return; }
     api.get(`/vendor-listings?vendor_type=${vendorType}&sport=${encodeURIComponent(sport)}&city=${encodeURIComponent(city)}`)
       .then((r) => setListings(r.data))
-      .catch((e) => console.debug("[vm] listings", e));
+      .catch(() => {});
   }, [sport, city, vendorType]);
 
   const step = useMemo(() => {

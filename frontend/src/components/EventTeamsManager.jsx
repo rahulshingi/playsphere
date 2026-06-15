@@ -18,9 +18,9 @@ export default function EventTeamsManager({ event, teams, reload }) {
   const [creds, setCreds] = useState(null); // { kind, email, password, name }
 
   useEffect(() => {
-    if (isPlayer) api.get("/players/me").then((r) => setMyPlayerId(r.data.id)).catch((e) => console.debug("[teams-mgr] /players/me", e));
-    api.get(`/events/${event.id}/companies`).then((r) => setCompanies(r.data)).catch((e) => console.debug("[teams-mgr] event companies", e));
-    api.get("/players/profiles").then((r) => setAllPlayers(r.data)).catch((e) => console.debug("[teams-mgr] /players/profiles", e));
+    if (isPlayer) api.get("/players/me").then((r) => setMyPlayerId(r.data.id)).catch(() => {});
+    api.get(`/events/${event.id}/companies`).then((r) => setCompanies(r.data)).catch(() => {});
+    api.get("/players/profiles").then((r) => setAllPlayers(r.data)).catch(() => {});
   }, [event.id, isPlayer]);
 
   const myCaptainTeamIds = useMemo(
@@ -223,7 +223,7 @@ function useTeamMembers(eventId, teamId) {
     try {
       const r = await api.get(`/events/${eventId}/teams/${teamId}/members`);
       setMembers(r.data);
-    } catch (e) { console.debug("[teams-mgr] members load", e); }
+    } catch (e) { /* ignore */ }
   }, [eventId, teamId]);
   useEffect(() => {
     let cancelled = false;
@@ -231,7 +231,7 @@ function useTeamMembers(eventId, teamId) {
       try {
         const r = await api.get(`/events/${eventId}/teams/${teamId}/members`);
         if (!cancelled) setMembers(r.data);
-      } catch (e) { console.debug("[teams-mgr] members load", e); }
+      } catch (e) { /* ignore */ }
     })();
     return () => { cancelled = true; };
   }, [eventId, teamId]);

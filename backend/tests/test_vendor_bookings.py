@@ -159,8 +159,8 @@ class TestListingFilter:
             assert row["vendor_type"] == "ground"
             assert "cricket" in row.get("sports", [])
             assert row["city"].lower() == "bangalore"
-            assert row.get("approved") is True
-            assert row.get("active") is True
+            assert row.get("approved") == True
+            assert row.get("active") == True
 
 
 # =====================================================================

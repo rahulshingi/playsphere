@@ -45,6 +45,7 @@ export default function Bookings() {
           <Link to="/services"><Button data-testid="bookings-browse" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Browse services</Button></Link>
         </div>
 
+        {!isVendor && (
         <div className="mt-10 border border-white/10 rounded-sm overflow-hidden">
           <table data-testid="bookings-table" className="w-full text-sm">
             <thead className="bg-[#141414] font-mono text-[10px] uppercase tracking-widest text-neutral-500">
@@ -88,6 +89,9 @@ export default function Bookings() {
             </tbody>
           </table>
         </div>
+        )}
+
+        <VendorBookings />
       </div>
       <Footer />
     </div>

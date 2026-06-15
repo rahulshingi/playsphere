@@ -79,9 +79,14 @@ export default function Nav() {
             </>
           )}
           {isVendor && (
-            <NavLink to="/vendor/dashboard" data-testid="nav-link-vendor" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#EC4899]" : "text-[#EC4899]/80 hover:text-[#EC4899]"}`}>
-              <Store className="w-3.5 h-3.5" /> Vendor
-            </NavLink>
+            <>
+              <NavLink to="/vendor/dashboard" data-testid="nav-link-vendor" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#EC4899]" : "text-[#EC4899]/80 hover:text-[#EC4899]"}`}>
+                <Store className="w-3.5 h-3.5" /> Vendor
+              </NavLink>
+              <NavLink to="/bookings" data-testid="nav-link-vendor-bookings" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm ${isActive ? "text-white bg-white/5" : "text-neutral-400 hover:text-white"}`}>
+                Requests
+              </NavLink>
+            </>
           )}
           {isPlatformAdmin && (
             <NavLink to="/platform-admin" data-testid="nav-link-platform-admin" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#FF3B30]" : "text-[#FF3B30]/80 hover:text-[#FF3B30]"}`}>

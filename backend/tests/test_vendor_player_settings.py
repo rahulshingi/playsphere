@@ -437,10 +437,18 @@ class TestVendorBookings:
         # vendor sees it (Whitefield vendor)
         vrows = vendor_session.get(f"{API}/vendor-bookings").json()
         assert any(x["id"] == bid for x in vrows), "Vendor should see bookings on own listings"
-        # vendor confirms
+        # vendor accepts (new state machine — admin still needs to confirm)
         r2 = vendor_session.patch(f"{API}/vendor-bookings/{bid}", json={"status": "confirmed"})
         assert r2.status_code == 200
-        assert r2.json()["status"] == "confirmed"
+        assert r2.json()["status"] == "vendor_accepted", "vendor PATCH 'confirmed' is remapped to 'vendor_accepted' (admin must confirm)"
+        # platform admin finalizes
+        r2b = admin_session.patch(f"{API}/vendor-bookings/{bid}", json={"status": "confirmed", "admin_notes": "ok"})
+        assert r2b.status_code == 200
+        assert r2b.json()["status"] == "confirmed"
+        assert r2b.json()["admin_notes"] == "ok"
+        # there should be at least one status_change notification
+        notes = r2b.json().get("notifications") or []
+        assert any(n.get("event") == "status_change" for n in notes)
         # company_admin cancels own
         r3 = acme_session.patch(f"{API}/vendor-bookings/{bid}", json={"status": "cancelled"})
         assert r3.status_code == 200

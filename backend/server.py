@@ -2012,8 +2012,9 @@ async def update_vendor_booking(booking_id: str, body: dict, user: dict = Depend
         if new_status in VENDOR_STATUSES:
             allowed["status"] = new_status
     elif role == "company_admin" and doc["company_id"] == user.get("company_id"):
-        if new_status in HR_STATUSES:
-            allowed["status"] = new_status
+        # HR can cancel anytime except already terminal
+        if new_status == "cancelled" and doc.get("status") not in ("cancelled", "rejected"):
+            allowed["status"] = "cancelled"
     elif role in ("platform_admin", "admin"):
         if new_status in (VENDOR_STATUSES | ADMIN_STATUSES | HR_STATUSES):
             allowed["status"] = new_status

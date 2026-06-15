@@ -117,7 +117,7 @@ export default function Admin() {
                     <SelectContent className="bg-[#141414] text-white border-white/10">
                       <SelectItem value="single_company">Single company tournament</SelectItem>
                       <SelectItem value="inter_company">Inter-company tournament</SelectItem>
-                      <SelectItem value="playsphere_organized">PlaySphere organized</SelectItem>
+                      <SelectItem value="playsphere_organized">Kreeda Nation organized</SelectItem>
                     </SelectContent>
                   </Select>
                 )}

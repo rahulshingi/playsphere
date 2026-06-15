@@ -14,9 +14,9 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6 py-12 grid md:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-3">
-            <img src="/playsphere-mark.png" alt="PlaySphere" className="w-12 h-12 object-contain" />
-            <div className="font-display text-3xl tracking-wider">
-              <span className="text-white">PLAY</span><span className="text-[#84CC16]">SPHERE</span>
+            <img src="/playsphere-mark.png" alt="Kreeda Nation" className="w-12 h-12 object-contain" />
+            <div className="font-brand text-3xl">
+              <span className="text-white">KREEDA</span><span className="text-[#84CC16]"> NATION</span>
             </div>
           </div>
           <p className="text-xs font-mono mt-3 tracking-wide">
@@ -68,12 +68,12 @@ export default function Footer() {
         </div>
         <div>
           <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Contact</div>
-          <p className="text-sm text-neutral-400">hello@playsphere.io</p>
+          <p className="text-sm text-neutral-400">hello@kreedanation.io</p>
           <p className="text-sm text-neutral-400">+1 (415) 555-0142</p>
         </div>
       </div>
       <div className="border-t border-white/5 py-5 text-center text-xs text-neutral-500 font-mono">
-        © 2026 PLAYSPHERE · ALL RIGHTS RESERVED
+        © 2026 KREEDA NATION · ALL RIGHTS RESERVED
       </div>
     </footer>
   );

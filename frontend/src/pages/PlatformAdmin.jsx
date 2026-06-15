@@ -112,7 +112,7 @@ export default function PlatformAdmin() {
     <div className="bg-[#0a0a0a] min-h-screen text-white">
       <Nav />
       <div className="max-w-7xl mx-auto px-6 pt-12 pb-24">
-        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#FF3B30]">/ PlaySphere HQ</div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#FF3B30]">/ Kreeda Nation HQ</div>
         <div className="flex items-end justify-between">
           <h1 className="font-display text-6xl tracking-wide mt-3">PLATFORM ADMIN</h1>
           <Button data-testid="platform-new-service" onClick={() => setEditing(blankService)} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
@@ -154,7 +154,7 @@ export default function PlatformAdmin() {
             <div className="grid md:grid-cols-2 gap-6">
               <form onSubmit={createEvent} className="border border-white/10 rounded-sm p-6 bg-[#141414] space-y-3">
                 <div className="font-display tracking-wider text-2xl flex items-center gap-2"><Plus className="w-4 h-4 text-[#84CC16]" /> NEW EVENT</div>
-                <Input data-testid="pa-event-name" placeholder="Event name (e.g. PlaySphere Cricket League 2026)" value={newEvent.name} onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })} required className="bg-black/40 border-white/10 text-white" />
+                <Input data-testid="pa-event-name" placeholder="Event name (e.g. Kreeda Nation Cricket League 2026)" value={newEvent.name} onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })} required className="bg-black/40 border-white/10 text-white" />
                 <Textarea data-testid="pa-event-desc" placeholder="Description" value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 <div className="grid grid-cols-2 gap-2">
                   <Select value={newEvent.sport} onValueChange={(v) => setNewEvent({ ...newEvent, sport: v })}>
@@ -174,7 +174,7 @@ export default function PlatformAdmin() {
                 <Select value={newEvent.event_type} onValueChange={(v) => setNewEvent({ ...newEvent, event_type: v })}>
                   <SelectTrigger data-testid="pa-event-type" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-[#141414] text-white border-white/10">
-                    <SelectItem value="playsphere_organized">PlaySphere organized</SelectItem>
+                    <SelectItem value="playsphere_organized">Kreeda Nation organized</SelectItem>
                     <SelectItem value="inter_company">Inter-company tournament</SelectItem>
                     <SelectItem value="single_company">Single company tournament</SelectItem>
                   </SelectContent>

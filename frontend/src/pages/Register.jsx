@@ -18,7 +18,7 @@ export default function Register() {
     setBusy(true);
     const r = await register(form.email, form.password, form.name);
     setBusy(false);
-    if (r.ok) { toast.success("Welcome to PlaySphere"); nav("/"); }
+    if (r.ok) { toast.success("Welcome to Kreeda Nation"); nav("/"); }
     else toast.error(r.error);
   };
 
@@ -27,7 +27,7 @@ export default function Register() {
       <Nav />
       <div className="max-w-md mx-auto px-6 py-20">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Create account</div>
-        <h1 className="font-display text-5xl tracking-wide mt-2">JOIN PLAYSPHERE</h1>
+        <h1 className="font-display text-5xl tracking-wide mt-2">JOIN KREEDA NATION</h1>
         <form onSubmit={submit} className="mt-10 space-y-4">
           <div>
             <Label className="text-xs font-mono uppercase text-neutral-500">Name</Label>

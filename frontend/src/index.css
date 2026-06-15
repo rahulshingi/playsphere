@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Russo+One&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -45,6 +45,11 @@ body {
 .font-display {
   font-family: "Bebas Neue", sans-serif;
   letter-spacing: 0.01em;
+}
+.font-brand {
+  font-family: "Russo One", "Bebas Neue", sans-serif;
+  letter-spacing: 0.04em;
+  font-weight: 400;
 }
 .font-mono {
   font-family: "JetBrains Mono", monospace;

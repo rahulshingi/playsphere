@@ -22,7 +22,7 @@ export default function PlayerSignup() {
     setBusy(true);
     try {
       await api.post("/players/register", form);
-      toast.success("Welcome to PlaySphere!");
+      toast.success("Welcome to Kreeda Nation!");
       // hard reload to refresh auth context (matches PlayerLogin pattern)
       window.location.href = "/players/me";
     } catch (err) {

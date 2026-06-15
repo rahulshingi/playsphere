@@ -36,7 +36,7 @@ assert _url, "REACT_APP_BACKEND_URL must be set"
 BASE_URL = _url.rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN = ("admin@playsphere.com", "admin123")
+ADMIN = ("admin@kreedanation.com", "admin123")
 ACME = ("acme@example.com", "acme123")
 VENDOR = ("ravi@turf.in", "vendor123")
 LOG_PATH = "/var/log/supervisor/backend.err.log"

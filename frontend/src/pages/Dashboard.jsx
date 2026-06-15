@@ -36,7 +36,7 @@ export default function Dashboard() {
       <div className="max-w-7xl mx-auto px-6 pt-12 pb-24">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ {companyName}</div>
         <div className="flex items-end justify-between flex-wrap gap-4">
-          <h1 className="font-display text-6xl tracking-wide mt-3">YOUR PLAYSPHERE</h1>
+          <h1 className="font-display text-6xl tracking-wide mt-3">YOUR KREEDA NATION</h1>
           <div className="flex gap-2">
             <Button data-testid="dashboard-new-event" onClick={() => nav("/admin")} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
               <Plus className="w-4 h-4 mr-1" /> New tournament

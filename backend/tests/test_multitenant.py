@@ -15,11 +15,11 @@ import pytest
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://live-scoring-hub-5.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@playsphere.com")
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@kreedanation.com")
 ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
 ACME_EMAIL = os.environ.get("TEST_ACME_EMAIL", "acme@example.com")
 ACME_PASSWORD = os.environ.get("TEST_ACME_PASSWORD", "acme123")
-VIEWER_EMAIL = os.environ.get("TEST_VIEWER_EMAIL", "viewer@playsphere.com")
+VIEWER_EMAIL = os.environ.get("TEST_VIEWER_EMAIL", "viewer@kreedanation.com")
 VIEWER_PASSWORD = os.environ.get("TEST_VIEWER_PASSWORD", "viewer123")
 
 

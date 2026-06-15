@@ -44,7 +44,7 @@ export default function VendorSignup() {
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#EC4899]">/ Service partners</div>
         <h1 className="font-display text-5xl tracking-wide mt-2">JOIN AS A VENDOR</h1>
         <p className="text-neutral-400 mt-3 text-sm">
-          List your ground, court or services on PlaySphere. Companies discover and book you — your contact details stay private until you confirm.
+          List your ground, court or services on Kreeda Nation. Companies discover and book you — your contact details stay private until you confirm.
         </p>
         <form onSubmit={submit} className="mt-10 space-y-4">
           <div className="grid grid-cols-2 gap-3">

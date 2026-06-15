@@ -10,7 +10,7 @@ import { toast } from "sonner";
 export default function Login() {
   const { login } = useAuth();
   const nav = useNavigate();
-  const [email, setEmail] = useState("admin@playsphere.com");
+  const [email, setEmail] = useState("admin@kreedanation.com");
   const [password, setPassword] = useState("admin123");
   const [busy, setBusy] = useState(false);
 
@@ -60,7 +60,7 @@ export default function Login() {
           <Link data-testid="login-forgot-link" to="/forgot-password" className="text-[#06B6D4] hover:underline">Forgot password?</Link>
         </p>
         <div className="mt-6 p-3 border border-white/10 rounded-sm text-[11px] font-mono text-neutral-400 leading-relaxed">
-          Demo admin · admin@playsphere.com / admin123
+          Demo admin · admin@kreedanation.com / admin123
         </div>
       </div>
     </div>

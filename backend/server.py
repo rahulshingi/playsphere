@@ -26,7 +26,7 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ["DB_NAME"]]
 
 # ---------- App ----------
-app = FastAPI(title="PlaySphere API")
+app = FastAPI(title="Kreeda Nation API")
 api = APIRouter(prefix="/api")
 
 JWT_ALGORITHM = "HS256"
@@ -2010,7 +2010,7 @@ async def update_vendor_booking(booking_id: str, body: dict, user: dict = Depend
             raise HTTPException(403)
         # Terminal states cannot be overridden by vendor
         if doc.get("status") in ("confirmed", "rejected", "cancelled"):
-            raise HTTPException(409, f"Booking is already {doc['status']}; only PlaySphere admin can change it.")
+            raise HTTPException(409, f"Booking is already {doc['status']}; only Kreeda Nation admin can change it.")
         # Backward compat: legacy "confirmed"/"declined" from vendor → vendor_accepted/vendor_declined
         compat = {"confirmed": "vendor_accepted", "declined": "vendor_declined"}
         new_status = compat.get(new_status, new_status)
@@ -2076,7 +2076,7 @@ async def get_company_stats(user: dict = Depends(require_company_admin)):
 
 @api.get("/")
 async def root():
-    return {"name": "PlaySphere API", "tagline": "Where Teams Compete, Connect & Grow"}
+    return {"name": "Kreeda Nation API", "tagline": "Where Teams Compete, Connect & Grow"}
 
 
 # Uploads (define route + mount BEFORE including router)
@@ -2119,14 +2119,20 @@ logger = logging.getLogger("playsphere")
 
 
 async def seed_admin():
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@playsphere.com").lower()
+    admin_email = os.environ.get("ADMIN_EMAIL", "admin@kreedanation.com").lower()
     admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
+    # One-time migration: rename legacy @playsphere.com → @kreedanation.com when target is free
+    legacy_admin = "admin@playsphere.com"
+    if admin_email != legacy_admin:
+        if await db.users.find_one({"email": legacy_admin}) and not await db.users.find_one({"email": admin_email}):
+            await db.users.update_one({"email": legacy_admin}, {"$set": {"email": admin_email}})
+            logger.info(f"Migrated platform admin email: {legacy_admin} -> {admin_email}")
     existing = await db.users.find_one({"email": admin_email})
     if not existing:
         await db.users.insert_one({
             "id": str(uuid.uuid4()),
             "email": admin_email,
-            "name": "PlaySphere Admin",
+            "name": "Kreeda Nation Admin",
             "role": "platform_admin",
             "company_id": None,
             "password_hash": hash_password(admin_password),
@@ -2134,20 +2140,27 @@ async def seed_admin():
         })
         logger.info(f"Seeded platform admin: {admin_email}")
     else:
-        # ensure role is set correctly and password matches
+        # ensure role, password, name are all correct
         updates = {}
         if existing.get("role") not in ("platform_admin",):
             updates["role"] = "platform_admin"
         if not verify_password(admin_password, existing["password_hash"]):
             updates["password_hash"] = hash_password(admin_password)
+        if existing.get("name") in ("PlaySphere Admin", "PLAYSPHERE Admin"):
+            updates["name"] = "Kreeda Nation Admin"
         if updates:
             await db.users.update_one({"email": admin_email}, {"$set": updates})
 
-    viewer = await db.users.find_one({"email": "viewer@playsphere.com"})
+    viewer_email = "viewer@kreedanation.com"
+    # Migrate legacy viewer
+    if await db.users.find_one({"email": "viewer@playsphere.com"}) and not await db.users.find_one({"email": viewer_email}):
+        await db.users.update_one({"email": "viewer@playsphere.com"}, {"$set": {"email": viewer_email}})
+        logger.info(f"Migrated viewer email: viewer@playsphere.com -> {viewer_email}")
+    viewer = await db.users.find_one({"email": viewer_email})
     if not viewer:
         await db.users.insert_one({
             "id": str(uuid.uuid4()),
-            "email": "viewer@playsphere.com",
+            "email": viewer_email,
             "name": "Viewer",
             "role": "viewer",
             "company_id": None,

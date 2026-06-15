@@ -41,7 +41,7 @@ export default function PlayerDetail() {
             <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ Player</div>
             <h1 data-testid="player-name" className="font-display text-6xl tracking-wide mt-2">{player.name}</h1>
             <div className="text-xl text-neutral-400 mt-2">{player.role}</div>
-            <p className="mt-6 text-neutral-300 leading-relaxed">{player.bio || "A rising star in the PlaySphere arena. Stats unlock once the season starts."}</p>
+            <p className="mt-6 text-neutral-300 leading-relaxed">{player.bio || "A rising star in the Kreeda Nation arena. Stats unlock once the season starts."}</p>
 
             <div className="mt-10 grid grid-cols-3 gap-px bg-white/10 border border-white/10 rounded-sm overflow-hidden">
               {[

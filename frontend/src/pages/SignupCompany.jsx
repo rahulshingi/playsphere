@@ -30,7 +30,7 @@ export default function SignupCompany() {
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ For HR teams</div>
         <h1 className="font-display text-5xl tracking-wide mt-2">ONBOARD YOUR COMPANY</h1>
         <p className="text-neutral-400 mt-3 text-sm">
-          Spin up your own private PlaySphere — run internal tournaments, hire services, and bring your teams together. Free to start.
+          Spin up your own private Kreeda Nation — run internal tournaments, hire services, and bring your teams together. Free to start.
         </p>
 
         <form onSubmit={submit} className="mt-10 space-y-4">

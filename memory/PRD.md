@@ -85,5 +85,5 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - Payments for paid tournaments (Stripe) or sponsor billing
 
 ## Test Credentials
-- Admin: admin@playsphere.com / admin123
-- Viewer: viewer@playsphere.com / viewer123
+- Admin: admin@kreedanation.com / admin123
+- Viewer: viewer@kreedanation.com / viewer123

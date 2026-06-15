@@ -24,7 +24,7 @@ export default function Sponsors() {
       <div className="max-w-7xl mx-auto px-6 pt-16 pb-24">
         <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ Partners</div>
         <h1 className="font-display text-6xl tracking-wide mt-3">OUR SPONSORS</h1>
-        <p className="text-neutral-400 mt-3 max-w-2xl">PlaySphere stands on the shoulders of brands that believe in workplace play.</p>
+        <p className="text-neutral-400 mt-3 max-w-2xl">Kreeda Nation stands on the shoulders of brands that believe in workplace play.</p>
 
         {grouped.map(({ tier, list }) => list.length > 0 && (
           <section key={tier} className="mt-16">
@@ -63,7 +63,7 @@ export default function Sponsors() {
         <div className="mt-24 border border-white/10 rounded-sm p-10 bg-gradient-to-r from-[#84CC16]/10 to-transparent">
           <div className="font-mono text-[10px] uppercase tracking-widest text-[#84CC16]">/ Become a sponsor</div>
           <h2 className="font-display text-4xl tracking-wide mt-3">PUT YOUR BRAND IN THE GAME</h2>
-          <p className="text-neutral-300 mt-3 max-w-xl">Reach engaged professionals across every tournament. Email partnerships@playsphere.io</p>
+          <p className="text-neutral-300 mt-3 max-w-xl">Reach engaged professionals across every tournament. Email partnerships@kreedanation.io</p>
         </div>
       </div>
       <Footer />

@@ -81,7 +81,7 @@ export default function Home() {
             &amp; <span className="text-[#06B6D4]">GROW.</span>
           </h1>
           <p className="mt-8 max-w-xl text-neutral-300 text-lg leading-relaxed">
-            PlaySphere turns workplace tournaments into rituals — sports, quizzes, hackathons, all in one
+            Kreeda Nation turns workplace tournaments into rituals — sports, quizzes, hackathons, all in one
             command center. Register a team, follow live scoring, climb the standings.
           </p>
           <div className="mt-10 flex flex-wrap gap-3">

@@ -30,7 +30,7 @@ export function PlayerSearch() {
       <div className="max-w-6xl mx-auto px-6 pt-12 pb-24">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Players</div>
         <h1 className="font-display text-5xl tracking-wide mt-2">FIND PLAYERS</h1>
-        <p className="text-neutral-400 mt-2 text-sm">Search across every player registered on PlaySphere.</p>
+        <p className="text-neutral-400 mt-2 text-sm">Search across every player registered on Kreeda Nation.</p>
 
         <form onSubmit={(e) => { e.preventDefault(); load(); }} className="mt-8 flex gap-2 max-w-xl">
           <Input data-testid="player-search-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, city or mobile" className="bg-[#141414] border-white/10 text-white" />

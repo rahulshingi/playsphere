@@ -21,7 +21,7 @@ def _login(session, email, password):
 @pytest.fixture
 def admin_session():
     s = requests.Session()
-    _login(s, "admin@playsphere.com", "admin123")
+    _login(s, "admin@kreedanation.com", "admin123")
     return s
 
 

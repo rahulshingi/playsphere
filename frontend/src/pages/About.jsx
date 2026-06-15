@@ -13,7 +13,7 @@ export default function About() {
     <div className="bg-[#0a0a0a] min-h-screen text-white">
       <Nav />
       <div className="max-w-6xl mx-auto px-6 pt-16 pb-24">
-        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ About PlaySphere</div>
+        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ About Kreeda Nation</div>
         <h1 className="font-display text-6xl tracking-wide mt-3">WHO WE ARE</h1>
         {a.company_description && <p className="text-neutral-300 mt-5 max-w-3xl text-lg leading-relaxed">{a.company_description}</p>}
 
@@ -35,7 +35,7 @@ export default function About() {
         {(a.founders?.length > 0) && (
           <section className="mt-20">
             <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Founders</div>
-            <h2 className="font-display text-4xl tracking-wide mt-2 mb-8">THE PEOPLE BEHIND PLAYSPHERE</h2>
+            <h2 className="font-display text-4xl tracking-wide mt-2 mb-8">THE PEOPLE BEHIND KREEDA NATION</h2>
             <PeopleGrid people={a.founders} />
           </section>
         )}

@@ -93,7 +93,7 @@ export default function VendorMarket() {
       <div className="max-w-7xl mx-auto px-6 pt-12 pb-24">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Hire</div>
         <h1 className="font-display text-5xl tracking-wide mt-2">BOOK A GROUND OR HIRE TALENT</h1>
-        <p className="text-neutral-400 mt-2 text-sm max-w-2xl">Pick a sport and city to see verified PlaySphere venues with live rates. Submit a request — admin confirms with the vendor and you'll see the status update on your bookings page.</p>
+        <p className="text-neutral-400 mt-2 text-sm max-w-2xl">Pick a sport and city to see verified Kreeda Nation venues with live rates. Submit a request — admin confirms with the vendor and you'll see the status update on your bookings page.</p>
 
         {/* Vendor type selector — top bar */}
         <div className="mt-8 flex flex-wrap gap-2">

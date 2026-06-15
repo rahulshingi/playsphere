@@ -7,7 +7,7 @@ import pytest
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "http://localhost:8001").rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN = {"email": "admin@playsphere.com", "password": "admin123"}
+ADMIN = {"email": "admin@kreedanation.com", "password": "admin123"}
 ACME = {"email": "acme@example.com", "password": "acme123"}
 PLAYER = {"mobile": "+919000000001", "password": "player123"}
 

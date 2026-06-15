@@ -10,9 +10,9 @@ import pytest
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://live-scoring-hub-5.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@playsphere.com")
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@kreedanation.com")
 ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
-VIEWER_EMAIL = os.environ.get("TEST_VIEWER_EMAIL", "viewer@playsphere.com")
+VIEWER_EMAIL = os.environ.get("TEST_VIEWER_EMAIL", "viewer@kreedanation.com")
 VIEWER_PASSWORD = os.environ.get("TEST_VIEWER_PASSWORD", "viewer123")
 
 
@@ -44,7 +44,7 @@ class TestMeta:
         r = anon_session.get(f"{API}/")
         assert r.status_code == 200
         data = r.json()
-        assert data.get("name") == "PlaySphere API"
+        assert data.get("name") == "Kreeda Nation API"
         assert "Compete" in data.get("tagline", "")
 
     def test_stats(self, anon_session):
@@ -96,7 +96,7 @@ class TestAuth:
 
     def test_register_viewer(self):
         import uuid as _u
-        email = f"test_{_u.uuid4().hex[:8]}@playsphere.com"
+        email = f"test_{_u.uuid4().hex[:8]}@kreedanation.com"
         r = requests.post(f"{API}/auth/register", json={"email": email, "password": "pass1234", "name": "Test User"})
         assert r.status_code == 200, r.text
         d = r.json()

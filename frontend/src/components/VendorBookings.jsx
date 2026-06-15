@@ -12,8 +12,8 @@ const STATUS_META = {
   pending: { label: "Awaiting vendor", color: "bg-[#F59E0B] text-black", icon: Clock },
   vendor_accepted: { label: "Vendor accepted · awaiting admin", color: "bg-[#06B6D4] text-black", icon: CheckCircle },
   vendor_declined: { label: "Vendor declined · admin reviewing", color: "bg-[#FF3B30] text-white", icon: XCircle },
-  confirmed: { label: "Confirmed by PlaySphere", color: "bg-[#84CC16] text-black", icon: CheckCircle },
-  rejected: { label: "Rejected by PlaySphere", color: "bg-[#FF3B30] text-white", icon: XCircle },
+  confirmed: { label: "Confirmed by Kreeda Nation", color: "bg-[#84CC16] text-black", icon: CheckCircle },
+  rejected: { label: "Rejected by Kreeda Nation", color: "bg-[#FF3B30] text-white", icon: XCircle },
   cancelled: { label: "Cancelled", color: "bg-neutral-500 text-white", icon: Ban },
 };
 
@@ -58,8 +58,8 @@ export default function VendorBookings() {
       <h2 className="font-display text-3xl tracking-wide mt-2">GROUNDS &amp; TALENT REQUESTS</h2>
       <p className="text-xs text-neutral-500 mt-1">
         {isPlatformAdmin && "Confirm or reject each request after coordinating with the vendor."}
-        {isCompanyAdmin && "Track your booking requests. You'll be notified when PlaySphere confirms with the vendor."}
-        {isVendor && "Respond to incoming requests. PlaySphere admin will finalize."}
+        {isCompanyAdmin && "Track your booking requests. You'll be notified when Kreeda Nation confirms with the vendor."}
+        {isVendor && "Respond to incoming requests. Kreeda Nation admin will finalize."}
       </p>
 
       <div className="mt-6 space-y-3">

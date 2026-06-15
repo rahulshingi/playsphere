@@ -24,10 +24,10 @@ export default function Nav() {
     >
       <div className="mx-auto max-w-7xl px-6 h-16 flex items-center justify-between gap-4">
         <Link to="/" data-testid="nav-logo" className="flex items-center gap-3 shrink-0">
-          <img src={LOGO_URL} alt="PlaySphere" className="w-11 h-11 object-contain" />
+          <img src={LOGO_URL} alt="Kreeda Nation" className="w-11 h-11 object-contain" />
           <div className="leading-none hidden lg:block">
-            <div className="font-display text-2xl tracking-wider">
-              <span className="text-white">PLAY</span><span className="text-[#84CC16]">SPHERE</span>
+            <div className="font-brand text-2xl">
+              <span className="text-white">KREEDA</span><span className="text-[#84CC16]"> NATION</span>
             </div>
             <div className="text-[10px] font-mono uppercase tracking-widest mt-1">
               <span className="text-[#EC4899]">compete</span>

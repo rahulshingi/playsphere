@@ -18,6 +18,13 @@ import ImageUpload from "@/components/ImageUpload";
 import DashboardPanel from "@/components/DashboardPanel";
 import SportsManager from "@/components/SportsManager";
 
+const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
+const onSportChange = (current, value) => ({
+  ...current,
+  sport: value,
+  format: INDIVIDUAL_SPORTS.has(value) ? "knockout" : current.format,
+});
+
 const CATEGORIES = ["streaming", "apparel", "merchandise", "awards", "venue", "equipment", "training", "other"];
 
 export default function PlatformAdmin() {
@@ -169,7 +176,7 @@ export default function PlatformAdmin() {
                 <Input data-testid="pa-event-name" placeholder="Event name (e.g. Kreeda Nation Cricket League 2026)" value={newEvent.name} onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })} required className="bg-black/40 border-white/10 text-white" />
                 <Textarea data-testid="pa-event-desc" placeholder="Description" value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 <div className="grid grid-cols-2 gap-2">
-                  <Select value={newEvent.sport} onValueChange={(v) => setNewEvent({ ...newEvent, sport: v })}>
+                  <Select value={newEvent.sport} onValueChange={(v) => setNewEvent(onSportChange(newEvent, v))}>
                     <SelectTrigger data-testid="pa-event-sport" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
                     <SelectContent className="bg-[#141414] text-white border-white/10">
                       {SPORTS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}

@@ -16,6 +16,13 @@ import { toast } from "sonner";
 import { Trash2, Plus } from "lucide-react";
 import VenuePicker from "@/components/VenuePicker";
 
+const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
+const onSportChange = (current, value) => ({
+  ...current,
+  sport: value,
+  format: INDIVIDUAL_SPORTS.has(value) ? "knockout" : current.format,
+});
+
 export default function Admin() {
   const { user, ready, isAdmin, isPlatformAdmin, companyId } = useAuth();
   const nav = useNavigate();
@@ -96,7 +103,7 @@ export default function Admin() {
                 <Input data-testid="admin-event-name" placeholder="Name" value={newEvent.name} onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })} required className="bg-black/40 border-white/10 text-white" />
                 <Textarea data-testid="admin-event-desc" placeholder="Description" value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 <div className="grid grid-cols-2 gap-2">
-                  <Select value={newEvent.sport} onValueChange={(v) => setNewEvent({ ...newEvent, sport: v })}>
+                  <Select value={newEvent.sport} onValueChange={(v) => setNewEvent(onSportChange(newEvent, v))}>
                     <SelectTrigger data-testid="admin-event-sport" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
                     <SelectContent className="bg-[#141414] text-white border-white/10">
                       {SPORTS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}

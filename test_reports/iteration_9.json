@@ -1,0 +1,52 @@
+{
+  "summary": "Iteration 9 — Dynamic sports CRUD + 3 role dashboards + event scope=mine + /my/teams + /venues/suggest + Playo-style venue mgmt (sub-units, schedule, blocks, availability slot grid). BACKEND: 31 new pytest tests in /app/backend/tests/test_dashboards_and_venues.py — initial run failed 3 endpoints (POST /sub-units, POST /blocks) with 500 due to MongoDB ObjectId-not-iterable when returning the dict mutated by insert_one. FIXED in server.py by popping _id before return (2-line fix). After fix: 31/31 new + 145/145 prior = 176/176 PASSED. Verified state machine, peak/weekend pricing math, 403s for non-owners/non-admins. FRONTEND e2e via Playwright on REACT_APP_BACKEND_URL covering all 5 required flows: ADMIN /platform-admin shows DashboardPanel role=admin with 12 stat tiles + SportsManager tab can add/show sport rows. HR /dashboard shows DashboardPanel role=company with 12 tiles; nav-link-my-teams present; /events shows both events-scope-mine + events-scope-all toggles; /my/teams renders my-teams-grid; /admin shows admin-event-venue-pick button which opens VenuePicker modal with vp-city + vp-query selectors. VENDOR /vendor/dashboard shows DashboardPanel role=vendor with 11 tiles; Schedule button opens VenueScheduleEditor with opening/closing/peak/weekend/sub-units/blocks fully rendered. Email notifications still MOCKED via /var/log/supervisor/backend.err.log.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/vendor-listings/{id}/sub-units", "issue": "Returned 500 (ObjectId not JSON-serializable) because insert_one mutates doc adding _id, and endpoint returned doc directly. FIXED by popping _id.", "priority": "HIGH"},
+      {"endpoint": "POST /api/vendor-listings/{id}/blocks", "issue": "Same ObjectId 500 bug. FIXED by popping _id before return.", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Events.jsx", "issue": "Default scope on /events for HR is 'ALL EVENTS' instead of 'MY EVENTS' per spec. Root cause: useState(isCompanyAdmin) captures `false` during AuthContext hydration before `ready=true`. Both events-scope-mine/all buttons work post-mount.", "selector": "h1", "priority": "MINOR"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_dashboards_and_venues.py",
+    "/app/test_reports/pytest/iter9_new.xml",
+    "/app/test_reports/pytest/iter9_full.xml"
+  ],
+  "action_items": [
+    "MINOR: Events.jsx — mineOnly should be re-initialized once `ready && isCompanyAdmin` becomes true. Add useEffect: `useEffect(() => { if (ready) setMineOnly(isCompanyAdmin); }, [ready, isCompanyAdmin]);` so HR lands on 'MY EVENTS' by default as required by spec.",
+    "OPTIONAL: VenueScheduleEditor sub-unit list shows duplicate test data created by pytest (AdminUnit, Turf A nnnn). Consider a cleanup fixture or a UI confirm-before-delete to prevent test bloat over iterations.",
+    "OPTIONAL: server.py is now ~3030 lines (was 2600). Iter5/6/7/8 already flagged a routers refactor — strongly recommended before next feature batch.",
+    "OPTIONAL: /api/sports POST accepts arbitrary {value,label} but does no slug validation (e.g. spaces, special chars). Backend stores normalised lower-cased value but UI shows whatever admin typed in label.",
+    "OPTIONAL: /api/vendor-listings/{id}/availability does not return overlapping block reason text, only the status. UI shows 'blocked' but admin/vendor cannot see WHY. Add `reason` to the slot dict where status=blocked.",
+    "OPTIONAL: Dashboard endpoints fire 12-15 sequential count_documents per request. Consider a single $facet aggregation for perf at scale.",
+    "OPTIONAL: GET /api/sports?include_inactive=true is unauthenticated and exposes the full sports catalog including inactive — acceptable since sports are public, but worth being aware of."
+  ],
+  "critical_code_review_comments": [
+    "server.py L2829-2845, L2893-2911 — original BUG: insert_one mutates the dict adding _id (BSON ObjectId), then `return doc` triggers FastAPI's pydantic serialiser which can't iterate ObjectId. Pattern repeated 2x. The schedule upsert (L2880) gets it right with find_one(..., {'_id': 0}) after upsert. Fixed by popping _id, but the safer pattern is: always re-read with projection or store doc.pop('_id', None) immediately after insert. Audit other insert_one+return-doc patterns in the file.",
+    "server.py L2948-3001 listing_availability: weekend factor overrides peak factor on weekends (elif), but a real venue may want BOTH on Sat 8pm. Either compound (price *= weekend_factor * peak_factor on weekend-peak) or document the intentional 'whole-day weekend bump replaces peak' behaviour.",
+    "server.py L2698 list_sports: no auth required for include_inactive=true. Minor; sports are public, but consistent with admin-only PATCH/DELETE expects admin-only listing of inactive too.",
+    "server.py L2761-2783 dashboard_company: `my_event_ids` resolves all event ids in memory then $in's them into fixtures — fine for tens-to-hundreds of events but degrades at scale. Consider an aggregation pipeline.",
+    "server.py L2748 vendors_pending uses `{'approved': {'$ne': True}}` which counts BOTH approved=False AND approved missing. If a vendor doc is missing the field this inflates pending count. Consider explicit `{'$or': [{'approved': False}, {'approved': {'$exists': False}}]}` OR migrate-script to backfill.",
+    "Events.jsx L13 const [mineOnly, setMineOnly] = useState(isCompanyAdmin) — race condition with AuthContext hydration. Use useEffect to sync. Listed in action_items.",
+    "VenuePicker.jsx L41 SelectItem value=' ' (single space) for 'Any city' — react-select rejects empty-string values so a single space is used as a sentinel. Works but fragile; prefer onValueChange(v => v === 'ANY' ? '' : v) sentinel pattern.",
+    "DashboardPanel.jsx L52 — silent .catch(() => setStats({})) hides backend errors. Show a toast or retry button instead so a real 500 isn't invisible to the HR user."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (popped _id in 2 endpoints: create_sub_unit + create_block — fixes 500 ObjectId serialisation)",
+    "/app/backend/tests/test_dashboards_and_venues.py (NEW — 31 tests)"
+  ],
+  "success_rate": {"backend": "100% (176/176 pytest — 31 new + 145 regression)", "frontend": "100% on the 16 critical UI assertions exercised (admin dashboard 12 tiles + sports add + HR dashboard 12 tiles + nav my-teams + events scope toggles + my/teams grid + admin VenuePicker modal + vendor dashboard 11 tiles + VenueScheduleEditor with sub-units & blocks)"},
+  "test_credentials": "admin@kreedanation.com/admin123, acme@example.com/acme123, ravi@turf.in/vendor123, +919000000001/player123",
+  "seed_data_creation": "Pytest creates idempotent listings (Bangalore ground if absent), sub-units (TEST/AdminUnit/Turf A prefixed), schedule (07:00-23:00 with peak 18-20), blocks 7-15 days out. No production data modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression is now 176 tests — keep this green. The ObjectId-on-insert bug pattern was caught only because tests covered the POST happy-path; audit any new endpoint that does `await db.X.insert_one(doc); return doc` — must pop _id. Email is still MOCKED in /var/log/supervisor/backend.err.log. The Events.jsx default-state minor bug (MY EVENTS vs ALL EVENTS) is a 2-line useEffect fix for main agent. VenueScheduleEditor modal is heavyweight (sub-units + schedule + blocks all in one) — be patient with wait_for_timeout on tests.",
+  "rca of the issue": "ObjectId 500 RCA: server.py create_sub_unit (L2829) and create_block (L2893) built a dict with fields including 'id' (uuid) then called insert_one(doc). MongoDB mutates the passed dict by adding _id (a bson.ObjectId). FastAPI's response serialiser tries to iterate ObjectId during JSON encoding → TypeError(\"'ObjectId' object is not iterable\"). Fix: doc.pop('_id', None) before `return doc`. Verified via pytest TestSubUnits.test_create_sub_unit_as_owner + TestBlocks.test_create_block_owner — both green after fix. The same pattern exists in create_sport (L2715) which already popped _id — that's why /api/sports POST worked from day one."
+}

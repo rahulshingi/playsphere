@@ -238,6 +238,22 @@ function SectionTitle({ n, title }) {
 
 function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
   const total = useMemo(() => Number(listing.price) * Number(form.hours || 0), [listing.price, form.hours]);
+  const [availability, setAvailability] = useState(null);
+
+  useEffect(() => {
+    if (!form.requested_date) { setAvailability(null); return; }
+    let cancelled = false;
+    api.get(`/vendor-listings/${listing.id}/availability?date=${form.requested_date}`)
+      .then((r) => { if (!cancelled) setAvailability(r.data); })
+      .catch(() => { if (!cancelled) setAvailability(null); });
+    return () => { cancelled = true; };
+  }, [form.requested_date, listing.id]);
+
+  const pickSlot = (s) => {
+    if (s.status !== "available") return;
+    setForm({ ...form, start_time: s.time });
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-start justify-center overflow-auto p-6" onClick={onClose}>
       <div className="bg-[#0c0c0c] border border-white/10 rounded-sm w-full max-w-2xl my-10 text-white" onClick={(e) => e.stopPropagation()}>
@@ -269,6 +285,35 @@ function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
               </Select>
             </div>
           </div>
+
+          {/* SLOT GRID */}
+          {availability && (
+            <div data-testid="vm-slot-grid">
+              <Label className="text-xs font-mono uppercase text-neutral-500">Available slots {availability.is_weekend && <span className="ml-2 text-[#F59E0B]">· weekend pricing</span>}</Label>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {availability.slots.map((s) => (
+                  <button
+                    key={s.time}
+                    data-testid={`vm-slot-${s.time.replace(":", "")}`}
+                    onClick={() => pickSlot(s)}
+                    disabled={s.status !== "available"}
+                    title={`${fmtPrice(s.price, availability.currency)} / hr · ${s.status}`}
+                    className={`text-[11px] font-mono px-2 py-1 rounded-sm border transition ${
+                      form.start_time === s.time
+                        ? "bg-[#06B6D4] text-black border-[#06B6D4] font-semibold"
+                        : s.status === "available"
+                        ? "bg-[#84CC16]/10 text-[#84CC16] border-[#84CC16]/30 hover:bg-[#84CC16]/20"
+                        : s.status === "booked"
+                        ? "bg-[#FF3B30]/10 text-[#FF3B30]/60 border-[#FF3B30]/30 cursor-not-allowed"
+                        : "bg-neutral-900 text-neutral-600 border-white/10 cursor-not-allowed"
+                    }`}>
+                    {s.time}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div>
             <Label className="text-xs font-mono uppercase text-neutral-500">Notes</Label>
             <Textarea data-testid="vm-book-notes" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Tournament name, slot preference, etc." className="mt-2 bg-black/40 border-white/10 text-white" />

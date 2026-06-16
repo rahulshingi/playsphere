@@ -4,12 +4,18 @@ import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { sportColor } from "@/lib/sports";
+import { useAuth } from "@/context/AuthContext";
 
 export default function Events() {
+  const { isCompanyAdmin } = useAuth();
   const [events, setEvents] = useState([]);
   const [filter, setFilter] = useState("all");
+  const [mineOnly, setMineOnly] = useState(isCompanyAdmin);
 
-  useEffect(() => { api.get("/events").then((r) => setEvents(r.data)); }, []);
+  useEffect(() => {
+    const url = mineOnly && isCompanyAdmin ? "/events?scope=mine" : "/events";
+    api.get(url).then((r) => setEvents(r.data));
+  }, [mineOnly, isCompanyAdmin]);
 
   const filtered = filter === "all" ? events : events.filter((e) => e.status === filter);
 
@@ -18,8 +24,14 @@ export default function Events() {
       <Nav />
       <div className="max-w-7xl mx-auto px-6 pt-16 pb-24">
         <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ Tournaments</div>
-        <h1 className="font-display text-6xl tracking-wide mt-3">ALL EVENTS</h1>
+        <h1 className="font-display text-6xl tracking-wide mt-3">{mineOnly && isCompanyAdmin ? "MY EVENTS" : "ALL EVENTS"}</h1>
         <p className="text-neutral-400 mt-3 max-w-2xl">Multi-sport, multi-format, multi-team — every season's lineup at a glance.</p>
+        {isCompanyAdmin && (
+          <div className="mt-6 flex gap-2">
+            <button data-testid="events-scope-mine" onClick={() => setMineOnly(true)} className={`px-3 py-1.5 text-xs font-mono uppercase tracking-widest rounded-sm border ${mineOnly ? "bg-[#84CC16] text-black border-[#84CC16]" : "text-neutral-400 border-white/10"}`}>My events</button>
+            <button data-testid="events-scope-all" onClick={() => setMineOnly(false)} className={`px-3 py-1.5 text-xs font-mono uppercase tracking-widest rounded-sm border ${!mineOnly ? "bg-[#84CC16] text-black border-[#84CC16]" : "text-neutral-400 border-white/10"}`}>All events</button>
+          </div>
+        )}
 
         <div className="flex gap-2 mt-10 border-b border-white/10 pb-4">
           {["all", "upcoming", "ongoing", "completed"].map((s) => (

@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { CURRENCIES, fmtPrice } from "@/lib/currency";
 import { SPORTS } from "@/lib/sports";
 import ImageUpload from "@/components/ImageUpload";
+import DashboardPanel from "@/components/DashboardPanel";
+import SportsManager from "@/components/SportsManager";
 
 const CATEGORIES = ["streaming", "apparel", "merchandise", "awards", "venue", "equipment", "training", "other"];
 
@@ -120,10 +122,12 @@ export default function PlatformAdmin() {
           </Button>
         </div>
 
-        <Tabs defaultValue="services" className="mt-10">
+        <Tabs defaultValue="dashboard" className="mt-10">
           <TabsList className="bg-[#141414] border border-white/10 rounded-sm flex-wrap">
+            <TabsTrigger value="dashboard" data-testid="pa-tab-dashboard" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Dashboard</TabsTrigger>
             <TabsTrigger value="services" data-testid="pa-tab-services" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Services ({services.length})</TabsTrigger>
             <TabsTrigger value="events" data-testid="pa-tab-events" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Events ({events.length})</TabsTrigger>
+            <TabsTrigger value="sports" data-testid="pa-tab-sports" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sports</TabsTrigger>
             <TabsTrigger value="companies" data-testid="pa-tab-companies" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Companies ({companies.length})</TabsTrigger>
             <TabsTrigger value="bookings" data-testid="pa-tab-bookings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bookings ({bookings.length})</TabsTrigger>
             <TabsTrigger value="vendors" data-testid="pa-tab-vendors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Vendors ({vendors.length})</TabsTrigger>
@@ -131,6 +135,14 @@ export default function PlatformAdmin() {
             <TabsTrigger value="settings" data-testid="pa-tab-settings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Settings</TabsTrigger>
             <TabsTrigger value="about" data-testid="pa-tab-about" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">About page</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="dashboard" className="mt-6">
+            <DashboardPanel role="admin" />
+          </TabsContent>
+
+          <TabsContent value="sports" className="mt-6">
+            <SportsManager />
+          </TabsContent>
 
           <TabsContent value="services" className="mt-6 space-y-2">
             {services.map((s) => (

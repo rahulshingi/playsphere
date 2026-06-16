@@ -14,12 +14,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { SPORTS } from "@/lib/sports";
 import { toast } from "sonner";
 import { Trash2, Plus } from "lucide-react";
+import VenuePicker from "@/components/VenuePicker";
 
 export default function Admin() {
   const { user, ready, isAdmin, isPlatformAdmin, companyId } = useAuth();
   const nav = useNavigate();
   const [stats, setStats] = useState({});
   const [events, setEvents] = useState([]);
+  const [venuePickerOpen, setVenuePickerOpen] = useState(false);
   const [teams, setTeams] = useState([]);
   const [sponsors, setSponsors] = useState([]);
   const [newEvent, setNewEvent] = useState({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "" });
@@ -108,7 +110,10 @@ export default function Admin() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Input data-testid="admin-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                <div className="flex gap-2">
+                  <Input data-testid="admin-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                  <Button type="button" data-testid="admin-event-venue-pick" variant="outline" onClick={() => setVenuePickerOpen(true)} className="rounded-sm border-white/10 text-white whitespace-nowrap">Pick verified venue</Button>
+                </div>
                 <Input data-testid="admin-event-banner" placeholder="Banner image URL" value={newEvent.banner_url} onChange={(e) => setNewEvent({ ...newEvent, banner_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 <Input data-testid="admin-event-stream" placeholder="Live stream URL (YouTube / Twitch / any)" value={newEvent.stream_url} onChange={(e) => setNewEvent({ ...newEvent, stream_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 {isPlatformAdmin && (
@@ -206,6 +211,7 @@ export default function Admin() {
         </Tabs>
       </div>
       <Footer />
+      <VenuePicker open={venuePickerOpen} onClose={() => setVenuePickerOpen(false)} onPick={(v) => setNewEvent({ ...newEvent, venue: `${v.title} · ${v.city}` })} />
     </div>
   );
 }

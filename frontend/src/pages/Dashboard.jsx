@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { CalendarDays, Users, Activity, Package, Plus, ChevronRight } from "lucide-react";
 import { fmtPrice } from "@/lib/currency";
+import DashboardPanel from "@/components/DashboardPanel";
 
 export default function Dashboard() {
   const { ready, isCompanyAdmin, companyName, user } = useAuth();
@@ -45,19 +46,8 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-white/10 mt-10 border border-white/10 rounded-sm overflow-hidden">
-          {[
-            { l: "EVENTS",   v: stats.events ?? 0,   icon: CalendarDays },
-            { l: "TEAMS",    v: stats.teams ?? 0,    icon: Users },
-            { l: "LIVE",     v: stats.live ?? 0,     icon: Activity, red: true },
-            { l: "BOOKINGS", v: stats.bookings ?? 0, icon: Package, accent: true },
-          ].map((s, i) => (
-            <div key={i} className="bg-[#0a0a0a] p-5">
-              <s.icon className={`w-4 h-4 ${s.red ? "text-[#FF3B30]" : s.accent ? "text-[#84CC16]" : "text-neutral-500"}`} />
-              <div className={`font-mono text-4xl mt-3 ${s.red ? "text-[#FF3B30]" : s.accent ? "text-[#84CC16]" : "text-white"}`}>{String(s.v).padStart(2, "0")}</div>
-              <div className="text-[10px] font-mono uppercase tracking-[0.25em] text-neutral-500 mt-1">{s.l}</div>
-            </div>
-          ))}
+        <div className="mt-10">
+          <DashboardPanel role="company" />
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mt-12">

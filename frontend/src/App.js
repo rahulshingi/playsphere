@@ -26,6 +26,7 @@ import PlayerLogin from "@/pages/PlayerLogin";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import PlayerProfile from "@/pages/PlayerProfile";
+import MyTeams from "@/pages/MyTeams";
 import { PlayerSearch, PlayerProfileView } from "@/pages/PlayerDirectory";
 import VendorSignup from "@/pages/VendorSignup";
 import VendorDashboard from "@/pages/VendorDashboard";
@@ -66,6 +67,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/players/me" element={<PlayerProfile />} />
+          <Route path="/my/teams" element={<MyTeams />} />
           <Route path="/players/profiles" element={<PlayerSearch />} />
           <Route path="/players/profiles/:id" element={<PlayerProfileView />} />
 

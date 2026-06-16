@@ -109,6 +109,14 @@ async def get_current_user(request: Request) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
+async def get_current_user_optional(request: Request) -> Optional[dict]:
+    """Like get_current_user but returns None instead of raising for anonymous users."""
+    try:
+        return await get_current_user(request)
+    except HTTPException:
+        return None
+
+
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     if user.get("role") not in ("admin", "platform_admin", "company_admin"):
         raise HTTPException(status_code=403, detail="Admin only")
@@ -518,6 +526,7 @@ class VendorListingCreate(BaseModel):
 
 class VendorBookingRequest(BaseModel):
     listing_id: str
+    sub_unit_id: Optional[str] = None
     requested_date: str
     start_time: str
     end_time: Optional[str] = None
@@ -539,6 +548,7 @@ class VendorBooking(BaseModel):
     start_time: str
     end_time: str
     hours: int = 1
+    sub_unit_id: Optional[str] = None
     sport: Optional[str] = None
     city: Optional[str] = None
     price: float
@@ -707,10 +717,41 @@ def default_score(sport: str) -> dict:
 
 # ---------- Events ----------
 @api.get("/events", response_model=List[Event])
-async def list_events(company_id: Optional[str] = None):
-    q = {"company_id": company_id} if company_id else {}
+async def list_events(
+    company_id: Optional[str] = None,
+    scope: Optional[str] = None,
+    user: Optional[dict] = Depends(get_current_user_optional),
+):
+    q: dict = {}
+    if company_id:
+        q["company_id"] = company_id
+    if scope == "mine" and user and user.get("role") == "company_admin":
+        cid = user.get("company_id")
+        if cid:
+            q = {"$or": [{"company_id": cid}, {"companies": cid}]}
     docs = await db.events.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
     return [Event(**d) for d in docs]
+
+
+@api.get("/my/teams", response_model=List[Team])
+async def my_teams(user: dict = Depends(require_company_admin)):
+    cid = user.get("company_id")
+    if not cid:
+        return []
+    docs = await db.teams.find({"company_id": cid}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    return [Team(**d) for d in docs]
+
+
+@api.get("/venues/suggest")
+async def venues_suggest(city: Optional[str] = None, q: Optional[str] = None):
+    """Venue picker for event creation — approved venue listings filtered by city / name."""
+    flt: dict = {"approved": True, "active": True, "vendor_type": {"$in": ["ground", "court"]}}
+    if city:
+        flt["city"] = {"$regex": f"^{city}$", "$options": "i"}
+    if q:
+        flt["title"] = {"$regex": q, "$options": "i"}
+    docs = await db.vendor_listings.find(flt, {"_id": 0, "title": 1, "city": 1, "price": 1, "currency": 1, "id": 1, "sports": 1}).limit(40).to_list(40)
+    return docs
 
 
 @api.get("/events/{event_id}", response_model=Event)
@@ -1961,7 +2002,7 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         vendor_id=listing["vendor_id"], vendor_type=listing["vendor_type"],
         company_id=user["company_id"], company_name=(company or {}).get("name", ""),
         requested_date=body.requested_date, start_time=body.start_time, end_time=end_time,
-        hours=hours, sport=sport, city=listing.get("city"),
+        hours=hours, sport=sport, city=listing.get("city"), sub_unit_id=body.sub_unit_id,
         price=price, currency=listing.get("currency", "INR"), total=price * hours,
         notes=body.notes or "", created_by=user["id"], hr_email=user.get("email"),
     )
@@ -2121,9 +2162,6 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_cu
     return {"url": f"/api/uploads/{name}", "filename": name, "size": len(contents)}
 
 
-app.include_router(api)
-app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
-
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
@@ -2188,7 +2226,27 @@ async def seed_admin():
         })
 
 
+async def _seed_demo_sponsors():
+    """Top up the 4 demo banner sponsors if missing (idempotent)."""
+    demo = [
+        {"name": "Mercedes-Benz", "tier": "title", "website": "https://mercedes-benz.com", "description": "Driving excellence"},
+        {"name": "Coca-Cola", "tier": "gold", "website": "https://coca-cola.com", "description": "Refreshing every game"},
+        {"name": "Northwind Energy", "tier": "silver", "website": "#", "description": "Powering performance"},
+        {"name": "Vertex Labs", "tier": "bronze", "website": "#", "description": "Tech accelerator"},
+    ]
+    for s in demo:
+        if not await db.sponsors.find_one({"name": s["name"], "event_id": None}):
+            await db.sponsors.insert_one({
+                "id": str(uuid.uuid4()),
+                "name": s["name"], "tier": s["tier"], "logo_url": "",
+                "website": s["website"], "show_in_banner": True,
+                "description": s["description"], "event_id": None,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+
 async def seed_demo_data():
+    await _seed_demo_sponsors()
     if await db.events.count_documents({}) > 0:
         return
     # Demo company (Acme Corp) with company_admin user
@@ -2606,6 +2664,350 @@ async def seed_services():
         logger.info(f"Seeded {inserted} new services (total {len(services)} defined)")
 
 
+# ---------- Sports CRUD (dynamic list) ----------
+DEFAULT_SPORTS = [
+    {"value": "cricket", "label": "Cricket"},
+    {"value": "football", "label": "Football"},
+    {"value": "basketball", "label": "Basketball"},
+    {"value": "badminton", "label": "Badminton"},
+    {"value": "tabletennis", "label": "Table Tennis"},
+    {"value": "volleyball", "label": "Volleyball"},
+    {"value": "chess", "label": "Chess"},
+    {"value": "quiz", "label": "Quiz"},
+    {"value": "hackathon", "label": "Hackathon"},
+    {"value": "other", "label": "Other"},
+]
+
+
+async def seed_sports():
+    for idx, s in enumerate(DEFAULT_SPORTS):
+        if not await db.sports.find_one({"value": s["value"]}):
+            await db.sports.insert_one({
+                "id": str(uuid.uuid4()),
+                "value": s["value"], "label": s["label"],
+                "active": True, "sort_order": idx,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+
+
+@api.get("/sports")
+async def list_sports(include_inactive: bool = False):
+    flt = {} if include_inactive else {"active": True}
+    docs = await db.sports.find(flt, {"_id": 0}).sort("sort_order", 1).to_list(200)
+    return docs
+
+
+@api.post("/sports")
+async def create_sport(body: dict, _: dict = Depends(require_platform_admin)):
+    value = (body.get("value") or "").strip().lower()
+    label = (body.get("label") or "").strip()
+    if not (value and label):
+        raise HTTPException(400, "value and label required")
+    if await db.sports.find_one({"value": value}):
+        raise HTTPException(400, "Sport with this value already exists")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "value": value, "label": label, "active": True,
+        "sort_order": int(body.get("sort_order", 999)),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.sports.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.patch("/sports/{sport_id}")
+async def update_sport(sport_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+    allowed = {k: v for k, v in body.items() if k in ("label", "active", "sort_order")}
+    if not allowed:
+        raise HTTPException(400, "No allowed fields")
+    await db.sports.update_one({"id": sport_id}, {"$set": allowed})
+    doc = await db.sports.find_one({"id": sport_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404)
+    return doc
+
+
+@api.delete("/sports/{sport_id}")
+async def delete_sport(sport_id: str, _: dict = Depends(require_platform_admin)):
+    res = await db.sports.delete_one({"id": sport_id})
+    if not res.deleted_count:
+        raise HTTPException(404)
+    return {"ok": True}
+
+
+# ---------- Dashboards ----------
+@api.get("/dashboard/admin")
+async def dashboard_admin(_: dict = Depends(require_platform_admin)):
+    return {
+        "events_total": await db.events.count_documents({}),
+        "events_ongoing": await db.events.count_documents({"status": "ongoing"}),
+        "events_upcoming": await db.events.count_documents({"status": "upcoming"}),
+        "events_completed": await db.events.count_documents({"status": "completed"}),
+        "companies": await db.companies.count_documents({}),
+        "vendors_total": await db.vendors.count_documents({}),
+        "vendors_pending": await db.vendors.count_documents({"approved": {"$ne": True}}),
+        "listings_total": await db.vendor_listings.count_documents({}),
+        "listings_pending": await db.vendor_listings.count_documents({"approved": {"$ne": True}}),
+        "service_bookings": await db.bookings.count_documents({}),
+        "vendor_bookings_total": await db.vendor_bookings.count_documents({}),
+        "vendor_bookings_pending": await db.vendor_bookings.count_documents({"status": "pending"}),
+        "vendor_bookings_confirmed": await db.vendor_bookings.count_documents({"status": "confirmed"}),
+        "players": await db.player_profiles.count_documents({}),
+        "teams": await db.teams.count_documents({}),
+    }
+
+
+@api.get("/dashboard/company")
+async def dashboard_company(user: dict = Depends(require_company_admin)):
+    cid = user.get("company_id")
+    if not cid:
+        raise HTTPException(400, "Not associated with a company")
+    # Events the company owns OR is participating in (inter-company)
+    event_filter = {"$or": [{"company_id": cid}, {"companies": cid}]}
+    my_events = await db.events.count_documents(event_filter)
+    my_event_ids = [d["id"] async for d in db.events.find(event_filter, {"id": 1})]
+    return {
+        "my_events": my_events,
+        "my_events_ongoing": await db.events.count_documents({**event_filter, "status": "ongoing"}),
+        "my_events_upcoming": await db.events.count_documents({**event_filter, "status": "upcoming"}),
+        "my_events_completed": await db.events.count_documents({**event_filter, "status": "completed"}),
+        "my_teams": await db.teams.count_documents({"company_id": cid}),
+        "my_matches": await db.fixtures.count_documents({"event_id": {"$in": my_event_ids}}) if my_event_ids else 0,
+        "matches_completed": await db.fixtures.count_documents({"event_id": {"$in": my_event_ids}, "status": "completed"}) if my_event_ids else 0,
+        "service_bookings": await db.bookings.count_documents({"company_id": cid}),
+        "ground_bookings": await db.vendor_bookings.count_documents({"company_id": cid}),
+        "ground_bookings_confirmed": await db.vendor_bookings.count_documents({"company_id": cid, "status": "confirmed"}),
+        "ground_bookings_pending": await db.vendor_bookings.count_documents({"company_id": cid, "status": "pending"}),
+        "players_in_company": await db.player_profiles.count_documents({"company_id": cid}),
+    }
+
+
+@api.get("/dashboard/vendor")
+async def dashboard_vendor(user: dict = Depends(get_current_user)):
+    if user.get("role") != "vendor":
+        raise HTTPException(403, "Vendors only")
+    v = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not v:
+        raise HTTPException(404, "Vendor profile not found")
+    vid = v["id"]
+    today = datetime.now(timezone.utc).date().isoformat()
+    return {
+        "listings_total": await db.vendor_listings.count_documents({"vendor_id": vid}),
+        "listings_approved": await db.vendor_listings.count_documents({"vendor_id": vid, "approved": True}),
+        "listings_pending": await db.vendor_listings.count_documents({"vendor_id": vid, "approved": {"$ne": True}}),
+        "bookings_total": await db.vendor_bookings.count_documents({"vendor_id": vid}),
+        "bookings_pending": await db.vendor_bookings.count_documents({"vendor_id": vid, "status": "pending"}),
+        "bookings_vendor_accepted": await db.vendor_bookings.count_documents({"vendor_id": vid, "status": "vendor_accepted"}),
+        "bookings_confirmed": await db.vendor_bookings.count_documents({"vendor_id": vid, "status": "confirmed"}),
+        "bookings_completed": await db.vendor_bookings.count_documents({"vendor_id": vid, "status": "confirmed", "requested_date": {"$lt": today}}),
+        "bookings_upcoming": await db.vendor_bookings.count_documents({"vendor_id": vid, "status": "confirmed", "requested_date": {"$gte": today}}),
+        "bookings_rejected": await db.vendor_bookings.count_documents({"vendor_id": vid, "status": "rejected"}),
+        "bookings_cancelled": await db.vendor_bookings.count_documents({"vendor_id": vid, "status": "cancelled"}),
+    }
+
+
+# ---------- Venue sub-units, schedule, blocks (Playo-style) ----------
+@api.get("/vendor-listings/{listing_id}/sub-units")
+async def list_sub_units(listing_id: str):
+    docs = await db.venue_sub_units.find({"listing_id": listing_id}, {"_id": 0}).sort("name", 1).to_list(50)
+    return docs
+
+
+async def _require_vendor_owner(listing_id: str, user: dict) -> dict:
+    listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    if user.get("role") in ("platform_admin", "admin"):
+        return listing
+    v = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not v or v["id"] != listing.get("vendor_id"):
+        raise HTTPException(403, "Not your listing")
+    return listing
+
+
+@api.post("/vendor-listings/{listing_id}/sub-units")
+async def create_sub_unit(listing_id: str, body: dict, user: dict = Depends(get_current_user)):
+    await _require_vendor_owner(listing_id, user)
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(400, "name required")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "listing_id": listing_id,
+        "name": name,
+        "capacity": int(body.get("capacity") or 0),
+        "active": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.venue_sub_units.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.delete("/vendor-listings/{listing_id}/sub-units/{sub_id}")
+async def delete_sub_unit(listing_id: str, sub_id: str, user: dict = Depends(get_current_user)):
+    await _require_vendor_owner(listing_id, user)
+    res = await db.venue_sub_units.delete_one({"id": sub_id, "listing_id": listing_id})
+    if not res.deleted_count:
+        raise HTTPException(404)
+    return {"ok": True}
+
+
+@api.get("/vendor-listings/{listing_id}/schedule")
+async def get_schedule(listing_id: str):
+    doc = await db.venue_schedules.find_one({"listing_id": listing_id}, {"_id": 0})
+    if not doc:
+        return {
+            "listing_id": listing_id,
+            "opening_time": "06:00", "closing_time": "22:00",
+            "slot_minutes": 60,
+            "peak_hours": ["18:00", "19:00", "20:00", "21:00"],
+            "peak_price_factor": 1.25,
+            "weekend_price_factor": 1.2,
+            "amenities": [],
+        }
+    return doc
+
+
+@api.patch("/vendor-listings/{listing_id}/schedule")
+async def update_schedule(listing_id: str, body: dict, user: dict = Depends(get_current_user)):
+    await _require_vendor_owner(listing_id, user)
+    allowed = {k: body[k] for k in ("opening_time", "closing_time", "slot_minutes", "peak_hours",
+                                     "peak_price_factor", "weekend_price_factor", "amenities") if k in body}
+    if not allowed:
+        raise HTTPException(400, "no allowed fields")
+    allowed["listing_id"] = listing_id
+    await db.venue_schedules.update_one({"listing_id": listing_id}, {"$set": allowed}, upsert=True)
+    return await db.venue_schedules.find_one({"listing_id": listing_id}, {"_id": 0})
+
+
+@api.get("/vendor-listings/{listing_id}/blocks")
+async def list_blocks(listing_id: str, date: Optional[str] = None):
+    flt = {"listing_id": listing_id}
+    if date:
+        flt["date"] = date
+    docs = await db.venue_blocks.find(flt, {"_id": 0}).sort("date", 1).to_list(200)
+    return docs
+
+
+@api.post("/vendor-listings/{listing_id}/blocks")
+async def create_block(listing_id: str, body: dict, user: dict = Depends(get_current_user)):
+    await _require_vendor_owner(listing_id, user)
+    date = body.get("date") or ""
+    start = body.get("start_time") or ""
+    end = body.get("end_time") or ""
+    if not (date and start and end):
+        raise HTTPException(400, "date, start_time, end_time required")
+    doc = {
+        "id": str(uuid.uuid4()),
+        "listing_id": listing_id,
+        "sub_unit_id": body.get("sub_unit_id"),
+        "date": date, "start_time": start, "end_time": end,
+        "reason": (body.get("reason") or "").strip(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.venue_blocks.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api.delete("/vendor-listings/{listing_id}/blocks/{block_id}")
+async def delete_block(listing_id: str, block_id: str, user: dict = Depends(get_current_user)):
+    await _require_vendor_owner(listing_id, user)
+    res = await db.venue_blocks.delete_one({"id": block_id, "listing_id": listing_id})
+    if not res.deleted_count:
+        raise HTTPException(404)
+    return {"ok": True}
+
+
+def _slots_between(opening: str, closing: str, minutes: int) -> list:
+    """Generate slot start times between opening and closing (exclusive end)."""
+    try:
+        sh, sm = (int(x) for x in opening.split(":")[:2])
+        eh, em = (int(x) for x in closing.split(":")[:2])
+    except Exception:
+        return []
+    start = sh * 60 + sm
+    end = eh * 60 + em
+    slots = []
+    cur = start
+    while cur + minutes <= end:
+        slots.append(f"{cur // 60:02d}:{cur % 60:02d}")
+        cur += minutes
+    return slots
+
+
+def _hhmm_to_min(t: str) -> int:
+    h, m = (int(x) for x in t.split(":")[:2])
+    return h * 60 + m
+
+
+def _overlaps(a_start: str, a_end: str, b_start: str, b_end: str) -> bool:
+    return _hhmm_to_min(a_start) < _hhmm_to_min(b_end) and _hhmm_to_min(b_start) < _hhmm_to_min(a_end)
+
+
+@api.get("/vendor-listings/{listing_id}/availability")
+async def listing_availability(listing_id: str, date: str, sub_unit_id: Optional[str] = None):
+    listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    sched = await db.venue_schedules.find_one({"listing_id": listing_id}, {"_id": 0}) or {}
+    opening = sched.get("opening_time", "06:00")
+    closing = sched.get("closing_time", "22:00")
+    minutes = int(sched.get("slot_minutes", 60))
+    peak = set(sched.get("peak_hours", []))
+    peak_factor = float(sched.get("peak_price_factor", 1.0))
+    weekend_factor = float(sched.get("weekend_price_factor", 1.0))
+    base_price = float(listing.get("price", 0))
+    try:
+        weekday = datetime.fromisoformat(date).weekday()  # 5,6 = Sat,Sun
+    except Exception:
+        raise HTTPException(400, "Invalid date")
+    is_weekend = weekday >= 5
+
+    booked = await db.vendor_bookings.find({
+        "listing_id": listing_id, "requested_date": date,
+        "status": {"$in": ["pending", "vendor_accepted", "confirmed"]},
+        **({"sub_unit_id": sub_unit_id} if sub_unit_id else {}),
+    }, {"_id": 0, "start_time": 1, "end_time": 1}).to_list(200)
+    blocks = await db.venue_blocks.find({
+        "listing_id": listing_id, "date": date,
+        **({"sub_unit_id": sub_unit_id} if sub_unit_id else {}),
+    }, {"_id": 0, "start_time": 1, "end_time": 1, "reason": 1}).to_list(200)
+
+    slots = []
+    for s in _slots_between(opening, closing, minutes):
+        s_end = _hhmm_add(s, max(1, minutes // 60))
+        status = "available"
+        for b in booked:
+            if _overlaps(s, s_end, b["start_time"], b["end_time"]):
+                status = "booked"
+                break
+        if status == "available":
+            for bk in blocks:
+                if _overlaps(s, s_end, bk["start_time"], bk["end_time"]):
+                    status = "blocked"
+                    break
+        price = base_price
+        if is_weekend:
+            price *= weekend_factor
+        elif s in peak:
+            price *= peak_factor
+        slots.append({"time": s, "status": status, "price": round(price, 2)})
+    return {
+        "date": date, "weekday": weekday, "is_weekend": is_weekend,
+        "opening_time": opening, "closing_time": closing,
+        "slot_minutes": minutes, "currency": listing.get("currency", "INR"),
+        "slots": slots,
+    }
+
+
+# Register router + static mount AFTER all @api.x definitions above
+app.include_router(api)
+app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+
+
 @app.on_event("startup")
 async def on_startup():
     await db.users.create_index("email", unique=True)
@@ -2625,6 +3027,7 @@ async def on_startup():
     await seed_admin()
     await seed_demo_data()
     await seed_services()
+    await seed_sports()
 
 
 @app.on_event("shutdown")

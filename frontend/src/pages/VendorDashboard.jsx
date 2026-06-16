@@ -13,6 +13,8 @@ import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 import { CURRENCIES, fmtPrice } from "@/lib/currency";
 import ImageUpload from "@/components/ImageUpload";
+import DashboardPanel from "@/components/DashboardPanel";
+import VenueScheduleEditor from "@/components/VenueScheduleEditor";
 
 const SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
 
@@ -48,6 +50,7 @@ export default function VendorDashboard() {
   const [listings, setListings] = useState([]);
   const [bookings, setBookings] = useState([]);
   const [editing, setEditing] = useState(null);
+  const [scheduling, setScheduling] = useState(null);
 
   const load = () => {
     api.get("/vendors/me").then((r) => setVendor(r.data));
@@ -107,6 +110,11 @@ export default function VendorDashboard() {
         </div>
 
         <div className="mt-10">
+          <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Dashboard</div>
+          <DashboardPanel role="vendor" />
+        </div>
+
+        <div className="mt-10">
           <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Your listings ({listings.length})</div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {listings.map((l) => (
@@ -122,6 +130,7 @@ export default function VendorDashboard() {
                   <div className="text-xs font-mono text-neutral-500 mt-1 uppercase">{l.vendor_type} · {l.city} · {fmtPrice(l.price, l.currency)} {l.price_unit}</div>
                   <div className="flex gap-2 mt-3">
                     <Button size="sm" variant="ghost" onClick={() => setEditing({ ...l, images: l.images?.length ? l.images : [""] })} className="text-[#84CC16]">Edit</Button>
+                    <Button size="sm" variant="ghost" data-testid={`vl-schedule-${l.id}`} onClick={() => setScheduling(l)} className="text-[#06B6D4]">Schedule</Button>
                     <Button size="sm" variant="ghost" onClick={() => remove(l.id)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
                   </div>
                 </div>
@@ -164,6 +173,7 @@ export default function VendorDashboard() {
       </div>
 
       {editing && <ListingEditor listing={editing} setListing={setEditing} onSave={save} onClose={() => setEditing(null)} />}
+      {scheduling && <VenueScheduleEditor listing={scheduling} onClose={() => setScheduling(null)} />}
 
       <Footer />
     </div>

@@ -7,10 +7,12 @@ import { sportColor } from "@/lib/sports";
 import { useAuth } from "@/context/AuthContext";
 
 export default function Events() {
-  const { isCompanyAdmin } = useAuth();
+  const { ready, isCompanyAdmin } = useAuth();
   const [events, setEvents] = useState([]);
   const [filter, setFilter] = useState("all");
-  const [mineOnly, setMineOnly] = useState(isCompanyAdmin);
+  const [mineOnly, setMineOnly] = useState(false);
+
+  useEffect(() => { if (ready) setMineOnly(isCompanyAdmin); }, [ready, isCompanyAdmin]);
 
   useEffect(() => {
     const url = mineOnly && isCompanyAdmin ? "/events?scope=mine" : "/events";

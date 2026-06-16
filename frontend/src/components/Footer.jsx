@@ -42,7 +42,7 @@ export default function Footer() {
           <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Platform</div>
           <ul className="space-y-2 text-sm">
             <li><Link className="hover:text-[#84CC16]" to="/events">Events</Link></li>
-            <li><Link className="hover:text-[#84CC16]" to="/teams">Teams</Link></li>
+            <li><Link className="hover:text-[#84CC16]" to="/players/profiles">Players</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/standings">Standings</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/services">Services</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/sponsors">Sponsors</Link></li>

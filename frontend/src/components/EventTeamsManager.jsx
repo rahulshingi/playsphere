@@ -10,6 +10,8 @@ import { useAuth } from "@/context/AuthContext";
 
 const COLOR_OPTIONS = ["#84CC16", "#EC4899", "#06B6D4", "#F59E0B", "#A855F7", "#3B82F6", "#EF4444"];
 
+const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
+
 export default function EventTeamsManager({ event, teams, reload }) {
   const { isPlatformAdmin, isCompanyAdmin, isPlayer, companyId } = useAuth();
   const [myPlayerId, setMyPlayerId] = useState(null);
@@ -54,6 +56,8 @@ export default function EventTeamsManager({ event, teams, reload }) {
 
   if (!canSeeTab) return null;
 
+  const isIndividual = INDIVIDUAL_SPORTS.has(event.sport);
+
   return (
     <div data-testid="teams-manager" className="space-y-8">
       {isPlatformAdmin && event.event_type === "inter_company" && (
@@ -61,17 +65,31 @@ export default function EventTeamsManager({ event, teams, reload }) {
       )}
 
       {canManageEvent && (
-        <NewTeamForm
-          event={event}
-          companies={companies}
-          isPlatformAdmin={isPlatformAdmin}
-          companyId={companyId}
-          reload={reload}
-        />
+        isIndividual ? (
+          <NewIndividualPlayerForm
+            event={event}
+            companies={companies}
+            isPlatformAdmin={isPlatformAdmin}
+            companyId={companyId}
+            allPlayers={allPlayers}
+            reload={reload}
+            setCreds={setCreds}
+          />
+        ) : (
+          <NewTeamForm
+            event={event}
+            companies={companies}
+            isPlatformAdmin={isPlatformAdmin}
+            companyId={companyId}
+            reload={reload}
+          />
+        )
       )}
 
       {visibleTeams.length === 0 ? (
-        <div className="text-neutral-500 text-center py-16 border border-dashed border-white/10 rounded-sm">No teams yet for your view. {canManageEvent && "Add the first one above."}</div>
+        <div className="text-neutral-500 text-center py-16 border border-dashed border-white/10 rounded-sm">
+          {isIndividual ? "No players registered yet. " : "No teams yet for your view. "}{canManageEvent && "Add the first one above."}
+        </div>
       ) : (
         <div className="grid lg:grid-cols-2 gap-4">
           {visibleTeams.map((t) => (
@@ -84,6 +102,7 @@ export default function EventTeamsManager({ event, teams, reload }) {
               canManage={canManageTeam(t)}
               reload={reload}
               setCreds={setCreds}
+              individualMode={isIndividual}
             />
           ))}
         </div>
@@ -169,6 +188,94 @@ function EventCompaniesSection({ event, companies, reload, setCreds }) {
         </div>
       )}
     </div>
+  );
+}
+
+function NewIndividualPlayerForm({ event, companies, isPlatformAdmin, companyId, allPlayers, reload, setCreds }) {
+  const [mode, setMode] = useState("existing");
+  const [pickedPlayerId, setPickedPlayerId] = useState("");
+  const [quick, setQuick] = useState({ name: "", mobile: "", email: "" });
+  const [pickedCompanyId, setPickedCompanyId] = useState("");
+
+  const targetCompanyId = isPlatformAdmin && event.event_type === "inter_company"
+    ? pickedCompanyId
+    : (companyId || event.company_id || "");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (event.event_type === "inter_company" && isPlatformAdmin && !targetCompanyId) return toast.error("Pick which company this player belongs to");
+    let playerId = pickedPlayerId;
+    let playerName = "";
+    let createdCreds = null;
+    if (mode === "quick") {
+      if (!(quick.name && quick.mobile)) return toast.error("Name and mobile required");
+      playerName = quick.name;
+    } else {
+      if (!playerId) return toast.error("Pick a player");
+      const p = allPlayers.find((x) => x.id === playerId);
+      playerName = p?.name || "Player";
+    }
+    try {
+      // 1. Create a "team" of one (named after the player)
+      const teamPayload = { name: playerName, color: "#84CC16" };
+      if (targetCompanyId) teamPayload.company_id = targetCompanyId;
+      const tr = await api.post(`/events/${event.id}/teams`, teamPayload);
+      const teamId = tr.data.id;
+      // 2. Add the player
+      const memberBody = mode === "quick" ? { quick } : { player_id: playerId };
+      const mr = await api.post(`/events/${event.id}/teams/${teamId}/members`, memberBody);
+      if (mr.data.temp_password) {
+        createdCreds = {
+          kind: "Player",
+          email: quick.email || `player_${quick.mobile}@players.playsphere.app`,
+          password: mr.data.temp_password,
+          name: quick.name,
+        };
+      }
+      // 3. Auto-assign as captain so the player can manage their own entry
+      await api.post(`/events/${event.id}/teams/${teamId}/captain`, { player_id: mr.data.player_id });
+      toast.success("Player registered");
+      if (createdCreds) setCreds(createdCreds);
+      setPickedPlayerId("");
+      setQuick({ name: "", mobile: "", email: "" });
+      reload();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed");
+    }
+  };
+
+  return (
+    <form onSubmit={submit} className="border border-white/10 rounded-sm bg-[#141414] p-5">
+      <div className="font-display tracking-wider text-xl flex items-center gap-2 mb-3"><Plus className="w-4 h-4 text-[#84CC16]" /> REGISTER PLAYER</div>
+      <div className="flex gap-2 mb-3">
+        <Button type="button" size="sm" variant={mode === "existing" ? "default" : "outline"} onClick={() => setMode("existing")} className="rounded-sm" data-testid="indiv-mode-existing">Pick registered</Button>
+        <Button type="button" size="sm" variant={mode === "quick" ? "default" : "outline"} onClick={() => setMode("quick")} className="rounded-sm" data-testid="indiv-mode-quick">Quick add (creates profile)</Button>
+      </div>
+      {mode === "existing" ? (
+        <Select value={pickedPlayerId} onValueChange={setPickedPlayerId}>
+          <SelectTrigger data-testid="indiv-pick" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Pick from registered players" /></SelectTrigger>
+          <SelectContent className="bg-[#141414] text-white border-white/10 max-h-[280px]">
+            {allPlayers.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name} {p.company_name ? `· ${p.company_name}` : ""}</SelectItem>))}
+          </SelectContent>
+        </Select>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+          <Input data-testid="indiv-quick-name" placeholder="Full name" value={quick.name} onChange={(e) => setQuick({ ...quick, name: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          <Input data-testid="indiv-quick-mobile" placeholder="Mobile (+91...)" value={quick.mobile} onChange={(e) => setQuick({ ...quick, mobile: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          <Input data-testid="indiv-quick-email" placeholder="Email (for login + reset)" value={quick.email} onChange={(e) => setQuick({ ...quick, email: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+        </div>
+      )}
+      {event.event_type === "inter_company" && isPlatformAdmin && (
+        <Select value={pickedCompanyId} onValueChange={setPickedCompanyId}>
+          <SelectTrigger data-testid="indiv-company" className="bg-black/40 border-white/10 text-white mt-2"><SelectValue placeholder="Player's company" /></SelectTrigger>
+          <SelectContent className="bg-[#141414] text-white border-white/10">
+            {companies.map((c) => (<SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>))}
+          </SelectContent>
+        </Select>
+      )}
+      <Button data-testid="indiv-submit" type="submit" className="mt-3 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Register player</Button>
+      <p className="text-[10px] text-neutral-500 mt-2 leading-relaxed">For {event.sport}, each participant registers as an individual — no team setup needed.</p>
+    </form>
   );
 }
 

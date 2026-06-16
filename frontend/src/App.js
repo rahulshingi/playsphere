@@ -6,7 +6,6 @@ import "@/App.css";
 import Home from "@/pages/Home";
 import Events from "@/pages/Events";
 import EventDetail from "@/pages/EventDetail";
-import Teams from "@/pages/Teams";
 import TeamDetail from "@/pages/TeamDetail";
 import PlayerDetail from "@/pages/PlayerDetail";
 import Standings from "@/pages/Standings";
@@ -26,7 +25,6 @@ import PlayerLogin from "@/pages/PlayerLogin";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import PlayerProfile from "@/pages/PlayerProfile";
-import MyTeams from "@/pages/MyTeams";
 import { PlayerSearch, PlayerProfileView } from "@/pages/PlayerDirectory";
 import VendorSignup from "@/pages/VendorSignup";
 import VendorDashboard from "@/pages/VendorDashboard";
@@ -41,7 +39,6 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/events" element={<Events />} />
           <Route path="/events/:id" element={<EventDetail />} />
-          <Route path="/teams" element={<Teams />} />
           <Route path="/teams/:id" element={<TeamDetail />} />
           <Route path="/team-players/:id" element={<PlayerDetail />} />
           <Route path="/standings" element={<Standings />} />
@@ -67,7 +64,6 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/players/me" element={<PlayerProfile />} />
-          <Route path="/my/teams" element={<MyTeams />} />
           <Route path="/players/profiles" element={<PlayerSearch />} />
           <Route path="/players/profiles/:id" element={<PlayerProfileView />} />
 

@@ -63,8 +63,8 @@ export default function Nav() {
               <NavLink to="/hire" data-testid="nav-link-hire" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm ${isActive ? "text-white bg-white/5" : "text-neutral-400 hover:text-white"}`}>
                 Hire
               </NavLink>
-              <NavLink to="/my/teams" data-testid="nav-link-my-teams" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm ${isActive ? "text-white bg-white/5" : "text-neutral-400 hover:text-white"}`}>
-                My teams
+              <NavLink to="/players/profiles" data-testid="nav-link-find-players-hr" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm ${isActive ? "text-white bg-white/5" : "text-neutral-400 hover:text-white"}`}>
+                Players
               </NavLink>
               <NavLink to="/admin" data-testid="nav-link-admin" className={({ isActive }) => `px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 ${isActive ? "text-[#84CC16]" : "text-[#84CC16]/80 hover:text-[#84CC16]"}`}>
                 <Shield className="w-3.5 h-3.5" /> Manage

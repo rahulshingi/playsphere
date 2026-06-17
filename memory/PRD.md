@@ -62,28 +62,34 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **Forgot / reset password (players):** `POST /api/players/forgot-password` generates a token, logs reset URL to backend log (email integration pending user's provider choice). `POST /api/players/reset-password` validates and rotates the password. New UI: `/players/forgot-password` + `/players/reset-password?token=…`.
 - 22 new pytest tests (event teams + password reset), 123/123 total backend tests pass.
 
-## Phase 2 — CricHeroes match flow (next iteration)
-- Toss (winner, elected to bat / bowl)
-- Playing XI selection per team per match
-- Per-innings batting card (R, B, 4s, 6s, SR) + bowling card (O, R, W, Eco)
-- Wire LiveScorer to lineup so each run/wicket attributes to a specific player
+## Implemented (Feb 17, 2026 — Iteration 11) **CricHeroes-style Full Cricket Match Flow + Routes Refactor**
+- **Cricket state machine**: `toss → playing_xi → ready → in_play → (wicket | innings_break) → in_play → completed`. Driven by `/api/fixtures/{id}/cricket/*` endpoints.
+- **10 new backend endpoints** under `/api/fixtures/{id}/cricket/`: `setup`, `toss`, `playing-xi`, `start-innings`, `ball`, `new-batsman`, `new-bowler`, `end-innings`, `end-match`, `undo`.
+- **Full ball-by-ball mechanics**: extras (wd/nb/byes/leg-byes) with correct accounting, strike rotation on odd runs + end-of-over flip, dismissals (bowled/caught/lbw/runout/stumped/hitwicket — bowler credit logic), maiden detection, innings completion (all-out / overs / chase target), undo via balls_log replay, knockout winner propagation on end-match.
+- **`CricketScorer.jsx` (~620 lines)** — replaces `LiveScorer` when `event.sport === "cricket"`. Sub-components: Setup, Toss, XI picker (captain/wk toggles), Ready (striker/non-striker/bowler), Live (big scoreboard + run/wicket/extras buttons + striker/non-striker/bowler cards + batting/bowling tables), Innings Break, Completed (winner declaration + match result cards).
+- **Routes refactor (starter)**: Extracted all cricket endpoints into `/app/backend/routes/cricket.py` via a `register(api, db, ws_manager, require_admin, propagate_knockout_winner)` pattern — server.py is now ~3088 lines (down from 3719). Foundation laid for splitting auth/events/fixtures/vendors/bookings/settings in subsequent iterations.
+- **35 new pytest tests** in `test_cricket_scoring.py` + `test_cricket_extended.py` covering: state machine, strike rotation, wicket types, extras accounting, innings completion, end-match propagation, validation (overs range, double toss, striker==non-striker, bogus winner, bowler not in bowling XI). 207/210 overall pass (3 vendor/player pre-existing failures untouched).
+- **Code quality fixes (Iter 11)**: Backend lint cleaned (E702 chained semicolons split, unused vars removed, defensive weekday init). Frontend stable keys on hardcoded lists (Home, About, PlayerDetail, LiveScorer). Empty catch blocks in `useFixtureSocket`, `AuthContext`, `EventTeamsManager` now log errors. Magic numbers in `useFixtureSocket` extracted to named constants. Production `console.warn` removed from craco config. Footer contact: `contact@kreedanation.com` / `+91 9923114499`.
 
 ## Backlog
 ### P0
-- (none open) — MVP complete & tested (31/31 backend, all critical UI flows pass)
+- (none open) — Cricket flow complete & tested end-to-end.
 
 ### P1
-- WebSocket-based real-time score push (currently fetch-on-demand)
-- Per-player stats (goals, MoM, etc.) aggregated from match events
-- Match-level player participation & substitutions
-- Tighten CORS to explicit origins; brute-force lockout on /auth/login
+- **Realtime via WebSocket** — `wss://.../api/ws` handshake fails through Kubernetes ingress. UI still refreshes via API on each action, but second-admin concurrent scoring won't propagate live until ingress is fixed.
+- **Email integration** (Resend/SendGrid) — currently mocked. Awaiting API key from user. Used for: password reset, booking notifications.
+- **Sponsor reach analytics** — track logo impressions across event pages for ROI.
+- **Vendor/player test fixes** — 3 pre-existing failures in `test_vendor_player_settings.py` (profile list mobile mask, view count increment, booking flow). Not cricket-related; investigate separately.
 
 ### P2
-- Email/Slack notifications for fixture & result updates
-- Photo gallery & match highlights upload (object storage)
-- Achievements/badges, season MVP, social shareable cards
-- Payments for paid tournaments (Stripe) or sponsor billing
+- **Continue routes split** — extract `routes/auth.py`, `routes/events.py`, `routes/fixtures.py`, `routes/vendors.py`, `routes/bookings.py`, `routes/settings.py` following the cricket pattern.
+- **Editor lists UUIDs** — VendorDashboard images + RegisterTeam players + PlatformAdmin fields/variants use array-index keys; refactor to stable `_uid`s (requires DB migration for vendor listings).
+- **Refactor large functions** — `seed_services` (300 lines), `seed_demo_data` (113 lines), `get_standings` (cyclomatic 17), `listing_availability` (14).
+- **Cricket enhancements**: Wagon wheel positions, partnership tracking widget, fall-of-wickets list, free-hit handling after no-ball, super over for tied limited-overs matches.
 
 ## Test Credentials
-- Admin: admin@kreedanation.com / admin123
+- Platform Admin: admin@kreedanation.com / admin123
+- Company HR: hr@acme.com / hr123
+- Vendor: ravi@turf.in / vendor123
+- Player: player@acme.com / player123 (or +919000000001)
 - Viewer: viewer@kreedanation.com / viewer123

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -64,6 +64,7 @@ export default function CricketScorer({ fixture, event, teamMap, onClose, onSave
             CRICKET SCORING
             <span className="text-xs font-mono uppercase text-neutral-500">/ Match #{fixture.match_number}</span>
           </DialogTitle>
+          <DialogDescription className="sr-only">CricHeroes-style cricket scoring controls for this fixture.</DialogDescription>
           <div className="flex items-center gap-2 text-xs font-mono uppercase text-neutral-400">
             <TeamChip team={teamA} />
             <span className="text-neutral-600">vs</span>

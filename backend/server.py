@@ -570,6 +570,11 @@ class SiteSettings(BaseModel):
     linkedin_url: Optional[str] = ""
     twitter_url: Optional[str] = ""
     youtube_url: Optional[str] = ""
+    contact_email: Optional[str] = "contact@kreedanation.com"
+    contact_phone: Optional[str] = ""
+    contact_address: Optional[str] = ""
+    contact_hours: Optional[str] = "Mon–Sat · 09:00 – 19:00 IST"
+    contact_map_url: Optional[str] = ""
 
 
 async def _user_with_company(user: dict) -> dict:
@@ -2681,13 +2686,16 @@ DEFAULT_SPORTS = [
 
 async def seed_sports():
     for idx, s in enumerate(DEFAULT_SPORTS):
-        if not await db.sports.find_one({"value": s["value"]}):
+        existing = await db.sports.find_one({"value": s["value"]})
+        if not existing:
             await db.sports.insert_one({
                 "id": str(uuid.uuid4()),
                 "value": s["value"], "label": s["label"],
                 "active": True, "sort_order": idx,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             })
+        elif not existing.get("active"):
+            await db.sports.update_one({"value": s["value"]}, {"$set": {"active": True}})
 
 
 @api.get("/sports")
@@ -3001,6 +3009,42 @@ async def listing_availability(listing_id: str, date: str, sub_unit_id: Optional
         "slot_minutes": minutes, "currency": listing.get("currency", "INR"),
         "slots": slots,
     }
+
+
+# ---------- Contact form ----------
+@api.post("/contact")
+async def submit_contact(body: dict):
+    name = (body.get("name") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    message = (body.get("message") or "").strip()
+    phone = (body.get("phone") or "").strip()
+    if not (name and email and message):
+        raise HTTPException(400, "name, email, message required")
+    settings = await db.settings.find_one({"id": "site"}, {"_id": 0}) or {}
+    to = settings.get("contact_email") or "contact@kreedanation.com"
+    doc = {
+        "id": str(uuid.uuid4()),
+        "name": name, "email": email, "phone": phone, "message": message,
+        "delivered_to": to, "read": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.contact_messages.insert_one(doc)
+    logger.warning("CONTACT MESSAGE for %s | from=%s <%s> phone=%s | %s",
+                   to, name, email, phone or "-", message[:200])
+    return {"ok": True}
+
+
+@api.get("/contact-messages")
+async def list_contact_messages(_: dict = Depends(require_platform_admin)):
+    docs = await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return docs
+
+
+@api.patch("/contact-messages/{msg_id}")
+async def update_contact_message(msg_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+    allowed = {k: body[k] for k in ("read",) if k in body}
+    await db.contact_messages.update_one({"id": msg_id}, {"$set": allowed})
+    return {"ok": True}
 
 
 # Register router + static mount AFTER all @api.x definitions above

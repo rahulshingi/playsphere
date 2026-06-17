@@ -306,6 +306,30 @@ export default function PlatformAdmin() {
               ))}
               <Button data-testid="settings-save" onClick={async () => { await api.patch("/settings", settings); toast.success("Saved"); load(); }} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Save settings</Button>
             </div>
+
+            <div className="border border-white/10 rounded-sm bg-[#141414] p-6 max-w-2xl space-y-3 mt-6">
+              <div className="font-display tracking-wider text-2xl">CONTACT DETAILS</div>
+              <p className="text-xs text-neutral-500 font-mono">Shown on /contact and used as the default email for contact-form deliveries.</p>
+              {[
+                { k: "contact_email", label: "Email", placeholder: "contact@kreedanation.com" },
+                { k: "contact_phone", label: "Phone", placeholder: "+91 ..." },
+                { k: "contact_address", label: "Address", placeholder: "Office address", multiline: true },
+                { k: "contact_hours", label: "Hours", placeholder: "Mon–Sat · 09:00 – 19:00 IST" },
+                { k: "contact_map_url", label: "Google Maps embed URL", placeholder: "https://www.google.com/maps/embed?…" },
+              ].map((f) => (
+                <div key={f.k}>
+                  <Label className="text-xs font-mono uppercase text-neutral-500">{f.label}</Label>
+                  {f.multiline ? (
+                    <Textarea data-testid={`setting-${f.k}`} rows={2} value={settings[f.k] || ""} onChange={(e) => setSettings({ ...settings, [f.k]: e.target.value })} placeholder={f.placeholder} className="mt-2 bg-black/40 border-white/10 text-white" />
+                  ) : (
+                    <Input data-testid={`setting-${f.k}`} value={settings[f.k] || ""} onChange={(e) => setSettings({ ...settings, [f.k]: e.target.value })} placeholder={f.placeholder} className="mt-2 bg-black/40 border-white/10 text-white" />
+                  )}
+                </div>
+              ))}
+              <Button data-testid="contact-save" onClick={async () => { await api.patch("/settings", settings); toast.success("Saved"); load(); }} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Save contact details</Button>
+            </div>
+
+            <ContactInbox />
           </TabsContent>
 
           <TabsContent value="about" className="mt-6">
@@ -474,6 +498,33 @@ function PeopleEditor({ label, testid, people, onChange }) {
             <Input placeholder="LinkedIn" value={p.linkedin_url || ""} onChange={(e) => upd(i, { linkedin_url: e.target.value })} className="col-span-1 bg-black/40 border-white/10 text-white" />
             <Button size="sm" variant="ghost" onClick={() => del(i)} className="col-span-1 text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
             <Textarea data-testid={`${testid}-${i}-bio`} rows={1} placeholder="Bio" value={p.bio || ""} onChange={(e) => upd(i, { bio: e.target.value })} className="col-span-12 bg-black/40 border-white/10 text-white" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContactInbox() {
+  const [items, setItems] = useState([]);
+  const load = () => api.get("/contact-messages").then((r) => setItems(r.data)).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const markRead = async (id) => { await api.patch(`/contact-messages/${id}`, { read: true }); load(); };
+  return (
+    <div className="border border-white/10 rounded-sm bg-[#141414] p-6 max-w-2xl space-y-3 mt-6">
+      <div className="font-display tracking-wider text-2xl">CONTACT INBOX ({items.filter((x) => !x.read).length} unread)</div>
+      {items.length === 0 && <div className="text-xs text-neutral-500">No messages yet.</div>}
+      <div className="space-y-2 max-h-[480px] overflow-auto">
+        {items.map((m) => (
+          <div key={m.id} data-testid={`contact-msg-${m.id}`} className={`border border-white/10 rounded-sm p-3 ${m.read ? "bg-black/20" : "bg-black/40"}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-semibold">{m.name} <span className="text-[10px] font-mono text-neutral-500">{m.email}</span></div>
+                <div className="text-[10px] font-mono text-neutral-600">{new Date(m.created_at).toLocaleString()} · phone: {m.phone || "—"}</div>
+              </div>
+              {!m.read && <Button size="sm" variant="ghost" onClick={() => markRead(m.id)} className="text-[#84CC16] text-xs">Mark read</Button>}
+            </div>
+            <div className="text-sm text-neutral-300 mt-2 whitespace-pre-wrap">{m.message}</div>
           </div>
         ))}
       </div>

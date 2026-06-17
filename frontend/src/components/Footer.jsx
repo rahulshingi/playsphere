@@ -68,8 +68,8 @@ export default function Footer() {
         </div>
         <div>
           <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Contact</div>
-          <p className="text-sm text-neutral-400">hello@kreedanation.io</p>
-          <p className="text-sm text-neutral-400">+1 (415) 555-0142</p>
+          <p className="text-sm text-neutral-400" data-testid="footer-contact-email">contact@kreedanation.com</p>
+          <p className="text-sm text-neutral-400" data-testid="footer-contact-phone">+91 9923114499</p>
         </div>
       </div>
       <div className="border-t border-white/5 py-5 text-center text-xs text-neutral-500 font-mono">

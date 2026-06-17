@@ -51,7 +51,9 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
-    try { await api.post("/auth/logout"); } catch (e) { /* ignore */ }
+    try { await api.post("/auth/logout"); } catch (err) {
+      console.error("[AuthContext] Logout request failed:", err);
+    }
     setUser(false);
   };
 

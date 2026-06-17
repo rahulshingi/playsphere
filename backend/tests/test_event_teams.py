@@ -124,7 +124,7 @@ class TestEventCompanies:
         r = admin_session.post(f"{API}/events/{created_event['id']}/companies", json=body)
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data["ok"] == True
+        assert data["ok"]
         assert data["company_id"]
         assert data["hr_email"] == f"hr_{uniq}@testco.example.com"
         assert isinstance(data["temp_password"], str) and len(data["temp_password"]) >= 8
@@ -217,7 +217,7 @@ class TestEventTeams:
         )
         assert r.status_code == 200, r.text
         data = r.json()
-        assert data["ok"] == True
+        assert data["ok"]
         assert data["player_id"]
         assert isinstance(data["temp_password"], str) and len(data["temp_password"]) >= 8
         pytest.added_member_id = data["player_id"]

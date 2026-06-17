@@ -98,14 +98,6 @@ class TestUploadValidation:
     def test_jpeg_accepted(self, admin_session):
         # Minimal JPEG-typed payload (content_type is what backend checks)
         jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 64
-        if False: jpeg = bytes.fromhex(
-            "FFD8FFE000104A46494600010100000100010000FFDB0043000806060706050806070707"
-            "0909080A0C140D0C0B0B0C1912130F141D1A1F1E1D1A1C1C20242E2720222C231C1C2837"
-            "292C30313434341F27393D38323C2E333432FFC0000B080001000101011100FFC4001F00"
-            "0001050101010101010000000000000000010203040506070809000A0BFFC4003510000201030302"
-            "04030506050001000000000000000000010203040506070708090A0B11122131410551617181"
-            "92A1B1C109233352636F1F00000FFDA0008010100003F00FBD0FFD9"
-        )
         r = admin_session.post(
             f"{BASE_URL}/api/upload",
             files={"file": ("a.jpg", io.BytesIO(jpeg), "image/jpeg")},

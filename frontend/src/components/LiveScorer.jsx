@@ -142,7 +142,7 @@ function SideEditor({ sport, side, team, score, setScore }) {
       {(sport === "badminton" || sport === "tabletennis" || sport === "volleyball") && (
         <div className="space-y-2">
           {(s.sets || [0, 0, 0]).map((v, i) => (
-            <NumberField key={i} testid={`${side}-set-${i + 1}`} label={`Set ${i + 1}`} value={v} onChange={(nv) => {
+            <NumberField key={`set-${i + 1}`} testid={`${side}-set-${i + 1}`} label={`Set ${i + 1}`} value={v} onChange={(nv) => {
               const arr = [...(s.sets || [0, 0, 0])];
               arr[i] = nv;
               update({ sets: arr });

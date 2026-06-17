@@ -48,8 +48,8 @@ export default function PlayerDetail() {
                 { l: "JERSEY", v: player.jersey_number ?? "—" },
                 { l: "ROLE", v: player.role || "—" },
                 { l: "TEAM", v: team?.name?.split(" ")[0] || "—" },
-              ].map((s, i) => (
-                <div key={i} className="bg-[#0a0a0a] p-5">
+              ].map((s) => (
+                <div key={s.l} className="bg-[#0a0a0a] p-5">
                   <div className="font-mono text-2xl">{s.v}</div>
                   <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mt-1">{s.l}</div>
                 </div>

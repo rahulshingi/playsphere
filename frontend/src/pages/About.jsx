@@ -57,7 +57,7 @@ function PeopleGrid({ people }) {
   return (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
       {people.map((p, i) => (
-        <div key={i} data-testid={`about-person-${i}`} className="border border-white/10 rounded-sm bg-[#141414] overflow-hidden">
+        <div key={`${p.name || "person"}-${i}`} data-testid={`about-person-${i}`} className="border border-white/10 rounded-sm bg-[#141414] overflow-hidden">
           <div className="aspect-[4/3] bg-black/40">
             {p.image_url && <img src={p.image_url} className="w-full h-full object-cover" alt="" />}
           </div>

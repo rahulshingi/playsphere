@@ -688,7 +688,9 @@ async def get_my_company(user: dict = Depends(require_company_admin)):
 
 @api.patch("/companies/me")
 async def update_my_company(body: dict, user: dict = Depends(require_company_admin)):
-    body.pop("id", None); body.pop("slug", None); body.pop("owner_user_id", None)
+    body.pop("id", None)
+    body.pop("slug", None)
+    body.pop("owner_user_id", None)
     await db.companies.update_one({"id": user["company_id"]}, {"$set": body})
     return await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
 
@@ -1204,7 +1206,6 @@ def generate_round_robin(team_ids: List[str], event_id: str) -> List[dict]:
     if len(teams) % 2 == 1:
         teams.append(None)  # bye
     n = len(teams)
-    rounds = []
     fixtures = []
     half = n // 2
     arr = teams[:]
@@ -1353,7 +1354,6 @@ async def update_fixture_score(fixture_id: str, body: ScoreUpdate, _: dict = Dep
 async def propagate_knockout_winner(fixture: dict):
     event_id = fixture["event_id"]
     rnd = fixture["round"]
-    match_num = fixture["match_number"]
     # find next round fixture that should receive this winner
     next_round = rnd + 1
     next_fixtures = await db.fixtures.find(
@@ -1596,7 +1596,9 @@ async def update_booking(booking_id: str, body: dict, user: dict = Depends(get_c
         raise HTTPException(400, "Booking already processed")
     if not is_platform:
         body.pop("status", None)
-    body.pop("id", None); body.pop("company_id", None); body.pop("total_price", None)
+    body.pop("id", None)
+    body.pop("company_id", None)
+    body.pop("total_price", None)
     await db.bookings.update_one({"id": booking_id}, {"$set": body})
     updated = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
     return Booking(**updated)
@@ -1721,7 +1723,10 @@ async def get_my_player_profile(user: dict = Depends(get_current_user)):
 async def update_my_profile(body: dict, user: dict = Depends(get_current_user)):
     if user.get("role") != "player":
         raise HTTPException(403, "Player only")
-    body.pop("id", None); body.pop("user_id", None); body.pop("mobile", None); body.pop("view_count", None)
+    body.pop("id", None)
+    body.pop("user_id", None)
+    body.pop("mobile", None)
+    body.pop("view_count", None)
     if "company_id" in body:
         cid = body["company_id"]
         company_name = None
@@ -1895,7 +1900,9 @@ async def update_vendor_listing(listing_id: str, body: dict, user: dict = Depend
     listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
     if not vendor or not listing or listing["vendor_id"] != vendor["id"]:
         raise HTTPException(404, "Not found")
-    body.pop("id", None); body.pop("vendor_id", None); body.pop("approved", None)
+    body.pop("id", None)
+    body.pop("vendor_id", None)
+    body.pop("approved", None)
     # Changing vendor_type requires re-approval
     if body.get("vendor_type") and body["vendor_type"] != listing.get("vendor_type"):
         body["approved"] = False
@@ -2968,6 +2975,7 @@ async def listing_availability(listing_id: str, date: str, sub_unit_id: Optional
     peak_factor = float(sched.get("peak_price_factor", 1.0))
     weekend_factor = float(sched.get("weekend_price_factor", 1.0))
     base_price = float(listing.get("price", 0))
+    weekday = 0
     try:
         weekday = datetime.fromisoformat(date).weekday()  # 5,6 = Sat,Sun
     except Exception:

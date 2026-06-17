@@ -330,7 +330,9 @@ function useTeamMembers(eventId, teamId) {
     try {
       const r = await api.get(`/events/${eventId}/teams/${teamId}/members`);
       setMembers(r.data);
-    } catch (e) { /* ignore */ }
+    } catch (err) {
+      console.error("[useTeamMembers] refresh failed:", err);
+    }
   }, [eventId, teamId]);
   useEffect(() => {
     let cancelled = false;
@@ -338,7 +340,9 @@ function useTeamMembers(eventId, teamId) {
       try {
         const r = await api.get(`/events/${eventId}/teams/${teamId}/members`);
         if (!cancelled) setMembers(r.data);
-      } catch (e) { /* ignore */ }
+      } catch (err) {
+        console.error("[useTeamMembers] initial load failed:", err);
+      }
     })();
     return () => { cancelled = true; };
   }, [eventId, teamId]);

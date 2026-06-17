@@ -41,7 +41,7 @@ def test_forgot_password_unknown_email_returns_ok():
     r = requests.post(f"{API}/players/forgot-password",
                       json={"email": f"nope_{int(time.time())}@nowhere.test"})
     assert r.status_code == 200
-    assert r.json().get("ok") == True
+    assert r.json().get("ok")
 
 
 def test_forgot_password_missing_email_400():
@@ -115,7 +115,7 @@ def test_auth_forgot_reset_works_for_company_admin():
     # Trigger forgot via /auth/* (not /players/*)
     r = requests.post(f"{API}/auth/forgot-password", json={"email": hr_email})
     assert r.status_code == 200
-    assert r.json().get("ok") == True
+    assert r.json().get("ok")
 
     time.sleep(0.5)
     token = _read_backend_log_for_token(hr_email)
@@ -145,4 +145,4 @@ def test_auth_forgot_password_unknown_email_returns_ok():
     r = requests.post(f"{API}/auth/forgot-password",
                       json={"email": f"nope_{int(time.time())}@nowhere.test"})
     assert r.status_code == 200
-    assert r.json().get("ok") == True
+    assert r.json().get("ok")

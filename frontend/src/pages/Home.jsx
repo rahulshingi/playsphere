@@ -104,8 +104,8 @@ export default function Home() {
               { label: "Teams", value: stats.teams, icon: Users },
               { label: "Players", value: stats.players, icon: Trophy },
               { label: "Live Now", value: stats.live, icon: Activity, accent: true },
-            ].map((s, i) => (
-              <div key={i} className="bg-[#0a0a0a] p-6">
+            ].map((s) => (
+              <div key={s.label} className="bg-[#0a0a0a] p-6">
                 <s.icon className={`w-4 h-4 ${s.accent ? "text-[#FF3B30]" : "text-neutral-500"}`} />
                 <div className={`font-mono text-4xl mt-3 ${s.accent ? "text-[#FF3B30]" : "text-white"}`}>
                   {String(s.value).padStart(2, "0")}
@@ -171,8 +171,8 @@ export default function Home() {
               { t: "Grounds", c: "#06B6D4", d: "Reserve premium venues" },
               { t: "Match Kits", c: "#84CC16", d: "Bats, balls, scoreboards" },
               { t: "Training", c: "#FF3B30", d: "Coaches & conditioning" },
-            ].map((x, i) => (
-              <div key={i} className="border border-white/10 rounded-sm p-4 bg-black/40 backdrop-blur">
+            ].map((x) => (
+              <div key={x.t} className="border border-white/10 rounded-sm p-4 bg-black/40 backdrop-blur">
                 <span className="w-2 h-2 rounded-full block" style={{ background: x.c }} />
                 <div className="font-display tracking-wider text-xl mt-3">{x.t.toUpperCase()}</div>
                 <div className="text-xs text-neutral-400 mt-1">{x.d}</div>

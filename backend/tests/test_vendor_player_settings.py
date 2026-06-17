@@ -407,13 +407,20 @@ class TestVendorsListingsBookings:
 
 
 class TestVendorBookings:
-    def _approved_listing_id(self):
+    def _approved_listing_id(self, vendor_session=None):
+        """Return an approved listing — when a vendor_session is provided, pick one owned by that vendor
+        so vendor-side filter tests work end-to-end."""
+        if vendor_session is not None:
+            own = vendor_session.get(f"{API}/vendors/me/listings").json()
+            for L in own:
+                if L.get("approved"):
+                    return L["id"], L
         rows = requests.get(f"{API}/vendor-listings").json()
         assert rows, "No approved public listings available — fixture data missing"
         return rows[0]["id"], rows[0]
 
     def test_company_admin_books_approved_listing(self, acme_session, vendor_session, admin_session):
-        listing_id, listing = self._approved_listing_id()
+        listing_id, listing = self._approved_listing_id(vendor_session)
         body = {
             "listing_id": listing_id,
             "requested_date": "2026-12-25",

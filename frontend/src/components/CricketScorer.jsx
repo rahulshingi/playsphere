@@ -365,6 +365,29 @@ function LivePanel({ score, fixture, teamMap, busy, callApi }) {
 
   const inWicket = score.match_state === "wicket";
   const overBreak = inn.legal_balls % 6 === 0 && inn.legal_balls > 0 && !inn.current_bowler_id;
+  const freeHit = !!inn.free_hit_pending;
+
+  // Partnership: scan balls_log backwards to find the most recent wicket; sum runs+balls since.
+  const partnership = useMemo(() => {
+    const log = inn.balls_log || [];
+    let lastWicketIdx = -1;
+    for (let i = log.length - 1; i >= 0; i -= 1) {
+      const w = log[i].wicket;
+      if (w && w.type && !w.ignored_free_hit) {
+        lastWicketIdx = i;
+        break;
+      }
+    }
+    let runs = 0;
+    let balls = 0;
+    for (let i = lastWicketIdx + 1; i < log.length; i += 1) {
+      const b = log[i];
+      runs += b.team_runs || 0;
+      // Count legal deliveries (not wd/nb) as balls faced together
+      if (b.extra !== "wd" && b.extra !== "nb") balls += 1;
+    }
+    return { runs, balls };
+  }, [inn.balls_log]);
 
   return (
     <div className="mt-6 space-y-4">
@@ -399,6 +422,27 @@ function LivePanel({ score, fixture, teamMap, busy, callApi }) {
         <BatterCard label="Non-striker" b={nonStriker} />
         <BowlerCard b={bowler} />
       </div>
+
+      {/* Partnership widget */}
+      {striker && nonStriker && (
+        <div data-testid="partnership-widget" className="flex items-center justify-between border border-white/10 rounded-sm px-4 py-2 bg-[#141414] text-xs font-mono uppercase">
+          <span className="text-neutral-500">Partnership</span>
+          <span className="text-white">
+            <span className="text-[#84CC16]">{partnership.runs}</span> runs · {partnership.balls} balls · RR{" "}
+            <span className="text-neutral-300">
+              {partnership.balls > 0 ? ((partnership.runs / partnership.balls) * 6).toFixed(2) : "0.00"}
+            </span>
+          </span>
+        </div>
+      )}
+
+      {/* Free-hit banner */}
+      {freeHit && !inWicket && (
+        <div data-testid="free-hit-banner" className="border border-[#A855F7]/50 bg-[#A855F7]/15 rounded-sm px-4 py-2 flex items-center justify-between">
+          <span className="font-mono text-[11px] uppercase tracking-widest text-[#A855F7]">/ FREE HIT — batsman can only be runout</span>
+          <span className="text-[10px] font-mono text-neutral-400">resets after next legal ball</span>
+        </div>
+      )}
 
       {/* Wicket prompt */}
       {inWicket && (
@@ -462,15 +506,25 @@ function LivePanel({ score, fixture, teamMap, busy, callApi }) {
 
           {/* Wicket panel */}
           <div className="mt-4 border-t border-white/10 pt-3">
-            <div className="font-mono text-[10px] uppercase text-neutral-500">/ Wicket</div>
+            <div className="font-mono text-[10px] uppercase text-neutral-500 flex items-center gap-2">
+              / Wicket
+              {freeHit && <span className="text-[#A855F7]">— free-hit: only runout dismisses</span>}
+            </div>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-2">
-              {["bowled", "caught", "lbw", "runout", "stumped", "hitwicket"].map((wt) => (
-                <button key={wt} data-testid={`ball-wicket-${wt}`} disabled={busy}
-                  onClick={() => sendBall(0, null, { type: wt })}
-                  className="px-3 py-2 text-xs font-mono uppercase rounded-sm border border-[#FF3B30]/40 text-[#FF3B30] hover:bg-[#FF3B30]/10">
-                  {wt}
-                </button>
-              ))}
+              {["bowled", "caught", "lbw", "runout", "stumped", "hitwicket"].map((wt) => {
+                const disabled = busy || (freeHit && wt !== "runout");
+                return (
+                  <button key={wt} data-testid={`ball-wicket-${wt}`} disabled={disabled}
+                    onClick={() => sendBall(0, null, { type: wt })}
+                    className={`px-3 py-2 text-xs font-mono uppercase rounded-sm border ${
+                      disabled
+                        ? "border-white/10 text-neutral-600 cursor-not-allowed"
+                        : "border-[#FF3B30]/40 text-[#FF3B30] hover:bg-[#FF3B30]/10"
+                    }`}>
+                    {wt}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>

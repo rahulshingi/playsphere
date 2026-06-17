@@ -1616,55 +1616,6 @@ async def delete_booking(booking_id: str, user: dict = Depends(get_current_user)
     return {"ok": True}
 
 
-# ---------- Public companies (for player signup picker) ----------
-@api.get("/companies/public")
-async def list_public_companies():
-    docs = await db.companies.find({}, {"_id": 0, "id": 1, "name": 1, "slug": 1, "logo_url": 1}).sort("name", 1).to_list(500)
-    return docs
-
-
-# ---------- Site settings ----------
-@api.get("/settings")
-async def get_settings():
-    doc = await db.settings.find_one({"id": "site"}, {"_id": 0}) or {}
-    out = SiteSettings(**doc).model_dump()
-    out["id"] = "site"
-    return out
-
-
-@api.patch("/settings")
-async def update_settings(body: dict, _: dict = Depends(require_platform_admin)):
-    body.pop("id", None)
-    await db.settings.update_one({"id": "site"}, {"$set": body}, upsert=True)
-    doc = await db.settings.find_one({"id": "site"}, {"_id": 0}) or {}
-    out = SiteSettings(**doc).model_dump()
-    out["id"] = "site"
-    return out
-
-
-# ---------- About page ----------
-@api.get("/about")
-async def get_about():
-    doc = await db.about_settings.find_one({"id": "about"}, {"_id": 0})
-    if not doc:
-        doc = {
-            "id": "about",
-            "company_description": "",
-            "mission": "",
-            "vision": "",
-            "founders": [],
-            "directors": [],
-        }
-    return doc
-
-
-@api.patch("/about")
-async def update_about(body: dict, _: dict = Depends(require_platform_admin)):
-    body.pop("id", None)
-    await db.about_settings.update_one({"id": "about"}, {"$set": body}, upsert=True)
-    return await db.about_settings.find_one({"id": "about"}, {"_id": 0})
-
-
 # ---------- Player accounts (mobile + password) ----------
 @api.post("/players/register", response_model=UserPublic)
 async def player_register(body: PlayerSignupBody, response: Response):
@@ -1743,6 +1694,7 @@ async def update_my_profile(body: dict, user: dict = Depends(get_current_user)):
 async def list_player_profiles(
     company_id: Optional[str] = None,
     q: Optional[str] = None,
+    limit: int = 500,
     user: dict = Depends(get_current_user),
 ):
     flt = {}
@@ -1754,7 +1706,9 @@ async def list_player_profiles(
             {"city": {"$regex": q, "$options": "i"}},
             {"mobile": {"$regex": q, "$options": "i"}},
         ]
-    docs = await db.player_profiles.find(flt, {"_id": 0}).sort("name", 1).to_list(500)
+    # Sort newest-first so freshly-registered players surface immediately, then alphabetical fallback.
+    limit = max(1, min(int(limit), 2000))
+    docs = await db.player_profiles.find(flt, {"_id": 0}).sort([("created_at", -1), ("name", 1)]).to_list(limit)
     # Mask mobile for non-self viewers (keep last 4 digits)
     for d in docs:
         if user.get("id") != d.get("user_id"):
@@ -3019,45 +2973,13 @@ async def listing_availability(listing_id: str, date: str, sub_unit_id: Optional
     }
 
 
-# ---------- Contact form ----------
-@api.post("/contact")
-async def submit_contact(body: dict):
-    name = (body.get("name") or "").strip()
-    email = (body.get("email") or "").strip().lower()
-    message = (body.get("message") or "").strip()
-    phone = (body.get("phone") or "").strip()
-    if not (name and email and message):
-        raise HTTPException(400, "name, email, message required")
-    settings = await db.settings.find_one({"id": "site"}, {"_id": 0}) or {}
-    to = settings.get("contact_email") or "contact@kreedanation.com"
-    doc = {
-        "id": str(uuid.uuid4()),
-        "name": name, "email": email, "phone": phone, "message": message,
-        "delivered_to": to, "read": False,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.contact_messages.insert_one(doc)
-    logger.warning("CONTACT MESSAGE for %s | from=%s <%s> phone=%s | %s",
-                   to, name, email, phone or "-", message[:200])
-    return {"ok": True}
-
-
-@api.get("/contact-messages")
-async def list_contact_messages(_: dict = Depends(require_platform_admin)):
-    docs = await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
-    return docs
-
-
-@api.patch("/contact-messages/{msg_id}")
-async def update_contact_message(msg_id: str, body: dict, _: dict = Depends(require_platform_admin)):
-    allowed = {k: body[k] for k in ("read",) if k in body}
-    await db.contact_messages.update_one({"id": msg_id}, {"$set": allowed})
-    return {"ok": True}
-
-
 # Cricket — CricHeroes-style match flow (extracted into routes/cricket.py)
 from routes import cricket as cricket_routes  # noqa: E402
 cricket_routes.register(api, db, ws_manager, require_admin, propagate_knockout_winner)
+
+# Site settings / About / Contact (extracted into routes/settings.py)
+from routes import settings as settings_routes  # noqa: E402
+settings_routes.register(api, db, SiteSettings, require_platform_admin)
 
 
 # Register router + static mount AFTER all @api.x definitions above

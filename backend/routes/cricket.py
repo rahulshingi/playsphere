@@ -43,6 +43,7 @@ def _empty_innings(batting_team_id: str, bowling_team_id: str) -> dict:
         "balls_log": [],
         "completed": False,
         "target": None,
+        "free_hit_pending": False,
     }
 
 
@@ -327,25 +328,36 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
             inn["legal_balls"] += 1
 
         out_player = None
+        free_hit_active = bool(inn.get("free_hit_pending"))
         if wicket and wicket.get("type") in DISMISSAL_TYPES:
             wtype = wicket["type"]
-            out_pid = wicket.get("batsman_id") or striker_id
-            out_player = _find_batsman(inn, out_pid)
-            if out_player and not out_player["out"]:
-                out_player["out"] = True
-                out_player["dismissal"] = {
-                    "type": wtype,
-                    "bowler_id": bowler_id if wtype in ("bowled", "caught", "lbw", "stumped", "hitwicket") else None,
-                    "fielder_id": wicket.get("fielder_id"),
-                }
-                inn["wickets"] += 1
-                if wtype != "runout":
-                    bowler["wickets"] += 1
-                if inn["striker_id"] == out_pid:
-                    inn["striker_id"] = None
-                elif inn["non_striker_id"] == out_pid:
-                    inn["non_striker_id"] = None
-                score["match_state"] = "wicket"
+            # Free-hit rule: only runout can dismiss the batsman on a free-hit
+            if free_hit_active and wtype != "runout":
+                wicket = {"type": wtype, "ignored_free_hit": True}
+            else:
+                out_pid = wicket.get("batsman_id") or striker_id
+                out_player = _find_batsman(inn, out_pid)
+                if out_player and not out_player["out"]:
+                    out_player["out"] = True
+                    out_player["dismissal"] = {
+                        "type": wtype,
+                        "bowler_id": bowler_id if wtype in ("bowled", "caught", "lbw", "stumped", "hitwicket") else None,
+                        "fielder_id": wicket.get("fielder_id"),
+                    }
+                    inn["wickets"] += 1
+                    if wtype != "runout":
+                        bowler["wickets"] += 1
+                    if inn["striker_id"] == out_pid:
+                        inn["striker_id"] = None
+                    elif inn["non_striker_id"] == out_pid:
+                        inn["non_striker_id"] = None
+                    score["match_state"] = "wicket"
+
+        # Free-hit toggling: set on no-ball; clear when a legal delivery is bowled.
+        if extra == "nb":
+            inn["free_hit_pending"] = True
+        elif legal:
+            inn["free_hit_pending"] = False
 
         over_num = (inn["legal_balls"] - 1) // 6 if legal else inn["legal_balls"] // 6
         ball_in_over = ((inn["legal_balls"] - 1) % 6) + 1 if legal else 0
@@ -359,6 +371,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
             "striker_id": striker_id,
             "bowler_id": bowler_id,
             "commentary": commentary,
+            "free_hit": free_hit_active,
         })
 
         end_of_over = legal and inn["legal_balls"] % 6 == 0
@@ -568,6 +581,12 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
                 if w["type"] != "runout" and bowler:
                     bowler["wickets"] += 1
         inn["completed"] = False
+        # Restore free_hit_pending from the last ball in the log
+        last = inn["balls_log"][-1] if inn["balls_log"] else None
+        if last and last.get("extra") == "nb":
+            inn["free_hit_pending"] = True
+        else:
+            inn["free_hit_pending"] = False
         score["match_state"] = "in_play"
         _sync_summary_fields(score, fixture["team_a_id"], fixture["team_b_id"])
         doc = await _save_score(fixture_id, score, fixture["event_id"])

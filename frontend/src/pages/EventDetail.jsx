@@ -46,13 +46,17 @@ export default function EventDetail() {
   useEffect(() => { if (isPlayer) api.get("/players/me").then((r) => setMyPlayerId(r.data.id)).catch(() => {}); }, [isPlayer]);
 
   // Real-time updates: merge incoming fixture changes; refresh standings on completion.
-  useFixtureSocket((payload) => {
-    if (!payload || payload.event_id !== id) return;
-    setFixtures((prev) => prev.map((f) => (f.id === payload.fixture.id ? payload.fixture : f)));
-    if (payload.fixture.status === "completed") {
-      api.get(`/events/${id}/standings`).then((r) => setStandings(r.data));
-    }
-  });
+  // The polling fallback re-fetches event fixtures every ~6s when the WebSocket is down.
+  useFixtureSocket(
+    (payload) => {
+      if (!payload || payload.event_id !== id) return;
+      setFixtures((prev) => prev.map((f) => (f.id === payload.fixture.id ? payload.fixture : f)));
+      if (payload.fixture.status === "completed") {
+        api.get(`/events/${id}/standings`).then((r) => setStandings(r.data));
+      }
+    },
+    () => api.get(`/events/${id}/fixtures`).then((r) => setFixtures(r.data)),
+  );
 
   const teamMap = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t])), [teams]);
 

@@ -190,6 +190,11 @@ export default function PlatformAdmin() {
                     </SelectContent>
                   </Select>
                 </div>
+                {INDIVIDUAL_SPORTS.has(newEvent.sport) && (
+                  <p data-testid="pa-event-format-hint" className="text-[11px] text-[#06B6D4]">
+                    {newEvent.sport.charAt(0).toUpperCase() + newEvent.sport.slice(1)} is an individual sport — knockout selected by default. Switch to round-robin if you want everyone to play everyone.
+                  </p>
+                )}
                 <Select value={newEvent.event_type} onValueChange={(v) => setNewEvent({ ...newEvent, event_type: v })}>
                   <SelectTrigger data-testid="pa-event-type" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-[#141414] text-white border-white/10">

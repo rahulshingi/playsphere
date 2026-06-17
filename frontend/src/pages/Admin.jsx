@@ -117,6 +117,11 @@ export default function Admin() {
                     </SelectContent>
                   </Select>
                 </div>
+                {INDIVIDUAL_SPORTS.has(newEvent.sport) && (
+                  <p data-testid="admin-event-format-hint" className="text-[11px] text-[#06B6D4]">
+                    {newEvent.sport.charAt(0).toUpperCase() + newEvent.sport.slice(1)} is an individual sport — knockout selected by default. Switch to round-robin if you want everyone to play everyone.
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <Input data-testid="admin-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                   <Button type="button" data-testid="admin-event-venue-pick" variant="outline" onClick={() => setVenuePickerOpen(true)} className="rounded-sm border-white/10 text-white whitespace-nowrap">Pick verified venue</Button>

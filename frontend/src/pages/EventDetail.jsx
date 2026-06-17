@@ -10,6 +10,7 @@ import { renderScore, sportColor } from "@/lib/sports";
 import { useAuth } from "@/context/AuthContext";
 import { Trophy, MapPin, Calendar, Wifi, Youtube, Edit3 } from "lucide-react";
 import LiveScorer from "@/components/LiveScorer";
+import CricketScorer from "@/components/CricketScorer";
 import EventTeamsManager from "@/components/EventTeamsManager";
 import useFixtureSocket from "@/lib/useFixtureSocket";
 import { toast } from "sonner";
@@ -154,7 +155,17 @@ export default function EventDetail() {
         </Tabs>
       </div>
 
-      {scoringFixture && (
+      {scoringFixture && event.sport === "cricket" && (
+        <CricketScorer
+          fixture={scoringFixture}
+          event={event}
+          teamMap={teamMap}
+          onClose={() => setScoringFixture(null)}
+          onSaved={loadAll}
+        />
+      )}
+
+      {scoringFixture && event.sport !== "cricket" && (
         <LiveScorer
           fixture={scoringFixture}
           event={event}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
+import { devError } from "@/lib/devLog";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,7 +32,7 @@ export default function CricketScorer({ fixture, event, teamMap, onClose, onSave
         ]);
         if (!cancelled) setRosters({ team_a: ra.data, team_b: rb.data });
       } catch (err) {
-        console.error("[CricketScorer] roster load failed:", err);
+        devError("[CricketScorer] roster load failed:", err);
       }
     })();
     return () => { cancelled = true; };
@@ -300,8 +301,8 @@ function ReadyPanel({ score, fixture, teamA, teamB, busy, onStart }) {
     <div className="mt-6 grid md:grid-cols-2 gap-4">
       <div className="border border-white/10 rounded-sm p-4 bg-[#141414]">
         <div className="font-mono text-[10px] uppercase text-neutral-500">/ Batting · {battingTeam?.name}</div>
-        <PickPlayer label="Striker" players={battingXI} value={striker} onChange={setStriker} testid="pick-striker" excludeIds={[nonStriker]} />
-        <PickPlayer label="Non-striker" players={battingXI} value={nonStriker} onChange={setNonStriker} testid="pick-non-striker" excludeIds={[striker]} />
+        <PickPlayer label="Striker" players={battingXI} value={striker} onChange={setStriker} testid="pick-striker" excludeId={nonStriker} />
+        <PickPlayer label="Non-striker" players={battingXI} value={nonStriker} onChange={setNonStriker} testid="pick-non-striker" excludeId={striker} />
       </div>
       <div className="border border-white/10 rounded-sm p-4 bg-[#141414]">
         <div className="font-mono text-[10px] uppercase text-neutral-500">/ Bowling · {bowlingTeam?.name}</div>
@@ -318,14 +319,18 @@ function ReadyPanel({ score, fixture, teamA, teamB, busy, onStart }) {
   );
 }
 
-function PickPlayer({ label, players, value, onChange, testid, excludeIds = [] }) {
+function PickPlayer({ label, players, value, onChange, testid, excludeId }) {
+  const filtered = useMemo(
+    () => (players || []).filter((p) => p.player_id !== excludeId),
+    [players, excludeId]
+  );
   return (
     <div className="mt-3">
       <Label className="text-[10px] font-mono uppercase text-neutral-500">{label}</Label>
       <Select value={value || ""} onValueChange={onChange}>
         <SelectTrigger data-testid={testid} className="mt-1 bg-black/40 border-white/10 text-white"><SelectValue placeholder="Select player" /></SelectTrigger>
         <SelectContent className="bg-[#141414] text-white border-white/10">
-          {(players || []).filter((p) => !excludeIds.includes(p.player_id)).map((p) => (
+          {filtered.map((p) => (
             <SelectItem key={p.player_id} value={p.player_id} data-testid={`${testid}-opt-${p.player_id}`}>
               {p.name}{p.captain ? " (C)" : ""}{p.wk ? " (WK)" : ""}
             </SelectItem>
@@ -677,8 +682,8 @@ function InningsBreakPanel({ score, fixture, teamA, teamB, busy, onStart }) {
       <div className="grid md:grid-cols-2 gap-4">
         <div className="border border-white/10 rounded-sm p-4 bg-[#141414]">
           <div className="font-mono text-[10px] uppercase text-neutral-500">/ Chasing — opening pair</div>
-          <PickPlayer label="Striker" players={nextBattingXI} value={striker} onChange={setStriker} testid="i2-striker" excludeIds={[nonStriker]} />
-          <PickPlayer label="Non-striker" players={nextBattingXI} value={nonStriker} onChange={setNonStriker} testid="i2-non-striker" excludeIds={[striker]} />
+          <PickPlayer label="Striker" players={nextBattingXI} value={striker} onChange={setStriker} testid="i2-striker" excludeId={nonStriker} />
+          <PickPlayer label="Non-striker" players={nextBattingXI} value={nonStriker} onChange={setNonStriker} testid="i2-non-striker" excludeId={striker} />
         </div>
         <div className="border border-white/10 rounded-sm p-4 bg-[#141414]">
           <div className="font-mono text-[10px] uppercase text-neutral-500">/ Opening bowler</div>

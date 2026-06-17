@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import api, { formatApiErrorDetail } from "@/lib/api";
+import { devError } from "@/lib/devLog";
 
 const AuthContext = createContext(null);
 
@@ -52,7 +53,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try { await api.post("/auth/logout"); } catch (err) {
-      console.error("[AuthContext] Logout request failed:", err);
+      devError("[AuthContext] Logout request failed:", err);
     }
     setUser(false);
   };

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
+import { devError } from "@/lib/devLog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -331,7 +332,7 @@ function useTeamMembers(eventId, teamId) {
       const r = await api.get(`/events/${eventId}/teams/${teamId}/members`);
       setMembers(r.data);
     } catch (err) {
-      console.error("[useTeamMembers] refresh failed:", err);
+      devError("[useTeamMembers] refresh failed:", err);
     }
   }, [eventId, teamId]);
   useEffect(() => {
@@ -341,7 +342,7 @@ function useTeamMembers(eventId, teamId) {
         const r = await api.get(`/events/${eventId}/teams/${teamId}/members`);
         if (!cancelled) setMembers(r.data);
       } catch (err) {
-        console.error("[useTeamMembers] initial load failed:", err);
+        devError("[useTeamMembers] initial load failed:", err);
       }
     })();
     return () => { cancelled = true; };

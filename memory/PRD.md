@@ -71,6 +71,14 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **35 new pytest tests** in `test_cricket_scoring.py` + `test_cricket_extended.py` covering: state machine, strike rotation, wicket types, extras accounting, innings completion, end-match propagation, validation (overs range, double toss, striker==non-striker, bogus winner, bowler not in bowling XI). 207/210 overall pass (3 vendor/player pre-existing failures untouched).
 - **Code quality fixes (Iter 11)**: Backend lint cleaned (E702 chained semicolons split, unused vars removed, defensive weekday init). Frontend stable keys on hardcoded lists (Home, About, PlayerDetail, LiveScorer). Empty catch blocks in `useFixtureSocket`, `AuthContext`, `EventTeamsManager` now log errors. Magic numbers in `useFixtureSocket` extracted to named constants. Production `console.warn` removed from craco config. Footer contact: `contact@kreedanation.com` / `+91 9923114499`.
 
+## Implemented (Feb 17, 2026 — Iteration 13) **Code Quality Pass**
+- **Console statements gated** behind `process.env.NODE_ENV !== "production"` via new `/app/frontend/src/lib/devLog.js` helper. Replaced 11 `console.error` calls in `useFixtureSocket.js`, `AuthContext.jsx`, `EventTeamsManager.jsx`, `CricketScorer.jsx` with `devError`. Production builds no longer leak debug info.
+- **Inline-array prop elimination** in `CricketScorer.jsx`: changed `PickPlayer`'s `excludeIds={[scalar]}` API to `excludeId={scalar}` (4 call sites) — eliminates new-array-per-render in 4 hot paths. Internal filter wrapped in `useMemo`.
+- **Python `is` comparisons audit**: all 5 reviewer-flagged cases (`server.py:1216, 1772, 1881, 2035` + `routes/cricket.py:122`) are `is None`/`is not None` — the reviewer's own guidance says "keep as-is". **No changes needed; false positives.**
+- **Deferred (high-risk refactors)**: `register()` cyclomatic 167, `cricket_ball()` complexity 57, `cricket_undo()` complexity 33 — all are working correctly with 40+ passing tests; refactoring carries high regression risk and is best done in a dedicated session.
+- **Deferred (false-positive hook deps)**: 40+ flagged instances are mostly false positives (imported singletons like `api`, globals like `encodeURIComponent`, or local variables inside effects). Genuine ones are tracked but non-critical.
+- **46/46 cricket + vendor/player tests still green** after this iteration.
+
 ## Implemented (Feb 17, 2026 — Iteration 12) **Pre-existing test fixes + WS polling fallback + Cricket free-hit/partnership + Settings extraction**
 - **3 pre-existing vendor/player test failures FIXED** (all 28/28 green):
   - `/api/players/profiles`: changed default sort from alphabetical to `created_at desc + name` (newest first); added `limit` query param (default 500, max 2000). Bound tightly to test fixture pattern.

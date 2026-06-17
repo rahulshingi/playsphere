@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { devError } from "./devLog";
 
 /**
  * Subscribe to backend WebSocket and invoke onUpdate(payload) on every message.
@@ -36,7 +37,7 @@ export default function useFixtureSocket(onUpdate, pollFallback) {
       pollTimer = setInterval(() => {
         if (socketHealthy || stopped) return;
         Promise.resolve(pollRef.current()).catch((err) =>
-          console.error("[useFixtureSocket] poll fallback failed:", err)
+          devError("[useFixtureSocket] poll fallback failed:", err)
         );
       }, POLL_FALLBACK_MS);
     };
@@ -53,7 +54,7 @@ export default function useFixtureSocket(onUpdate, pollFallback) {
       try {
         ws = new WebSocket(wsUrl);
       } catch (err) {
-        console.error("[useFixtureSocket] WebSocket constructor failed:", err);
+        devError("[useFixtureSocket] WebSocket constructor failed:", err);
         startPolling();
         scheduleReconnect();
         return;
@@ -66,7 +67,7 @@ export default function useFixtureSocket(onUpdate, pollFallback) {
           try {
             ws.send("ping");
           } catch (err) {
-            console.error("[useFixtureSocket] Ping send failed:", err);
+            devError("[useFixtureSocket] Ping send failed:", err);
           }
         }, PING_INTERVAL_MS);
       };
@@ -77,7 +78,7 @@ export default function useFixtureSocket(onUpdate, pollFallback) {
             onUpdateRef.current && onUpdateRef.current(data);
           }
         } catch (err) {
-          console.error("[useFixtureSocket] Failed to parse message:", err);
+          devError("[useFixtureSocket] Failed to parse message:", err);
         }
       };
       ws.onclose = () => {
@@ -87,13 +88,13 @@ export default function useFixtureSocket(onUpdate, pollFallback) {
         scheduleReconnect();
       };
       ws.onerror = (err) => {
-        console.error("[useFixtureSocket] Socket error:", err);
+        devError("[useFixtureSocket] Socket error:", err);
         socketHealthy = false;
         startPolling();
         try {
           ws.close();
         } catch (closeErr) {
-          console.error("[useFixtureSocket] Close after error failed:", closeErr);
+          devError("[useFixtureSocket] Close after error failed:", closeErr);
         }
       };
     };
@@ -114,7 +115,7 @@ export default function useFixtureSocket(onUpdate, pollFallback) {
       try {
         ws && ws.close();
       } catch (err) {
-        console.error("[useFixtureSocket] Cleanup close failed:", err);
+        devError("[useFixtureSocket] Cleanup close failed:", err);
       }
     };
   }, []);

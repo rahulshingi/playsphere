@@ -164,6 +164,22 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **About.jsx** — content now uses `whitespace-pre-line` (preserves admin-entered newlines), occupies full container width, legacy `<br>` literals normalised to real line breaks, bio text in PeopleGrid also wrapped.
 - **Admin editor** — About page editor (`PlatformAdmin.jsx`) shows a hint about Enter key for line breaks, larger textareas (rows 4–6) for better authoring.
 
+## Implemented (Feb 18, 2026 — Iteration 14) Cricket module decomposition
+- **Extracted 6 pure helpers** at module level in `routes/cricket.py`:
+  - `_compute_ball_delta(extra, runs)` — pure scoring math (returns legal/bat_runs/team_runs/bowler_runs/extras_inc/swap_strike)
+  - `_apply_ball_to_players(inn, striker, bowler, delta, extra)` — mutates innings counters from a computed delta
+  - `_apply_wicket(inn, score, striker_id, bowler_id, wicket, free_hit_active)` — handles dismissal + free-hit rule
+  - `_is_innings_complete(inn, overs_limit)` — all-out / overs-done / chase-done check
+  - `_resolve_innings_teams(score, team_a_id, team_b_id)` — picks batting/bowling sides from toss
+  - `_reset_innings_counters(inn)` + `_replay_ball(inn, ball)` — replay-based undo
+- **Function size reductions**:
+  - `register()`: 489 → 337 LoC (**-31%**)
+  - `cricket_ball()`: 162 → 89 LoC (**-45%**, was CC 57)
+  - `cricket_undo()`: 92 → 21 LoC (**-77%**, was CC 33)
+  - `cricket_start_innings()`: 55 → 48 LoC (was CC 21)
+- **24 new pure-unit tests** in `tests/test_cricket_helpers.py` cover the extracted helpers (run in 0.2s — fast safety net).
+- **Zero regressions**: all 41 existing cricket integration tests + 24 new unit tests = **65 passing**. Behavior identical, just reorganised.
+
 ## Implemented (Feb 18, 2026 — Iteration 13) Routes split (P2) + seed-count test fix (P1 nit)
 - **`routes/auth.py`** (179 LoC) — `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/me`, `/companies/signup`, `/companies/me` (GET/PATCH), `/companies` list, `/{auth,players}/forgot-password`, `/{auth,players}/reset-password`. Pulls helpers (`hash_password`, `create_access_token`, `set_auth_cookie`, `_user_with_company`) + models via `SimpleNamespace` deps bundle.
 - **`routes/events.py`** (167 LoC) — `/events` CRUD, `/my/teams`, `/venues/suggest`, `/teams` CRUD, `/team-players` CRUD.

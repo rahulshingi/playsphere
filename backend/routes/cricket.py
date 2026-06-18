@@ -101,6 +101,195 @@ def _add_bowler(inn: dict, player_id: str, name: str) -> dict:
     return rec
 
 
+# ---------- Pure ball-processing helpers (no I/O) ----------
+def _compute_ball_delta(extra: Optional[str], runs: int) -> dict:
+    """Given the extra type and runs, compute how the ball affects the innings totals.
+
+    Returns a dict:
+      legal: bool        — counts toward the over
+      bat_runs: int      — runs added to the striker's score
+      team_runs: int     — runs added to the team total
+      bowler_runs: int   — runs charged to the bowler
+      extras_inc: dict   — per-type extras increment {wd, nb, b, lb}
+      swap_strike: bool  — strike should swap (odd run total)
+    """
+    extras_inc = {"wd": 0, "nb": 0, "b": 0, "lb": 0}
+    if extra == "wd":
+        return {
+            "legal": False, "bat_runs": 0, "team_runs": 1 + runs,
+            "bowler_runs": 1 + runs, "extras_inc": {**extras_inc, "wd": 1 + runs},
+            "swap_strike": False,
+        }
+    if extra == "nb":
+        return {
+            "legal": False, "bat_runs": runs, "team_runs": 1 + runs,
+            "bowler_runs": 1 + runs, "extras_inc": {**extras_inc, "nb": 1},
+            "swap_strike": runs % 2 == 1,
+        }
+    if extra == "b":
+        return {
+            "legal": True, "bat_runs": 0, "team_runs": runs,
+            "bowler_runs": 0, "extras_inc": {**extras_inc, "b": runs},
+            "swap_strike": runs % 2 == 1,
+        }
+    if extra == "lb":
+        return {
+            "legal": True, "bat_runs": 0, "team_runs": runs,
+            "bowler_runs": 0, "extras_inc": {**extras_inc, "lb": runs},
+            "swap_strike": runs % 2 == 1,
+        }
+    # No extra — a normal legal delivery
+    return {
+        "legal": True, "bat_runs": runs, "team_runs": runs,
+        "bowler_runs": runs, "extras_inc": extras_inc,
+        "swap_strike": runs % 2 == 1,
+    }
+
+
+def _apply_ball_to_players(inn: dict, striker: dict, bowler: dict, delta: dict, extra: Optional[str]):
+    """Mutate striker / bowler / innings counters from a computed delta."""
+    if delta["legal"] and extra not in ("b", "lb"):
+        striker["balls"] += 1
+    striker["runs"] += delta["bat_runs"]
+    if delta["bat_runs"] == 4:
+        striker["fours"] += 1
+    elif delta["bat_runs"] == 6:
+        striker["sixes"] += 1
+    if delta["legal"]:
+        bowler["balls"] += 1
+    bowler["runs"] += delta["bowler_runs"]
+    inn["runs"] += delta["team_runs"]
+    for k, v in delta["extras_inc"].items():
+        inn["extras"][k] = inn["extras"].get(k, 0) + v
+    if delta["legal"]:
+        inn["legal_balls"] += 1
+
+
+def _apply_wicket(inn: dict, score: dict, striker_id: str, bowler_id: str,
+                  wicket: Optional[dict], free_hit_active: bool) -> Optional[dict]:
+    """Mutate the innings on a wicket. Returns the (possibly modified) wicket dict."""
+    if not wicket or wicket.get("type") not in DISMISSAL_TYPES:
+        return wicket
+    wtype = wicket["type"]
+    # Free-hit rule: only run-out can dismiss the batsman on a free-hit
+    if free_hit_active and wtype != "runout":
+        return {"type": wtype, "ignored_free_hit": True}
+    out_pid = wicket.get("batsman_id") or striker_id
+    out_player = _find_batsman(inn, out_pid)
+    if out_player and not out_player["out"]:
+        out_player["out"] = True
+        out_player["dismissal"] = {
+            "type": wtype,
+            "bowler_id": bowler_id if wtype in ("bowled", "caught", "lbw", "stumped", "hitwicket") else None,
+            "fielder_id": wicket.get("fielder_id"),
+        }
+        inn["wickets"] += 1
+        if wtype != "runout":
+            bowler = _find_bowler(inn, bowler_id)
+            if bowler:
+                bowler["wickets"] += 1
+        if inn["striker_id"] == out_pid:
+            inn["striker_id"] = None
+        elif inn["non_striker_id"] == out_pid:
+            inn["non_striker_id"] = None
+        score["match_state"] = "wicket"
+    return wicket
+
+
+def _is_innings_complete(inn: dict, overs_limit: int) -> bool:
+    target = inn.get("target")
+    all_out = inn["wickets"] >= 10
+    overs_done = inn["legal_balls"] >= overs_limit * 6
+    chase_done = target and inn["runs"] >= target
+    return bool(all_out or overs_done or chase_done)
+
+
+def _resolve_innings_teams(score: dict, team_a_id: str, team_b_id: str) -> tuple:
+    """Pick batting/bowling team IDs for a new innings based on toss / prior innings."""
+    if not score.get("innings"):
+        toss_winner = score["toss"]["winner_team_id"]
+        toss_decision = score["toss"]["decision"]
+        batting = toss_winner if toss_decision == "bat" else (team_b_id if toss_winner == team_a_id else team_a_id)
+        bowling = team_b_id if batting == team_a_id else team_a_id
+    else:
+        prev = score["innings"][-1]
+        batting = prev["bowling_team_id"]
+        bowling = prev["batting_team_id"]
+    return batting, bowling
+
+
+def _reset_innings_counters(inn: dict):
+    """Zero out all innings + player + bowler counters before a full replay (used by undo)."""
+    inn["runs"] = 0
+    inn["wickets"] = 0
+    inn["legal_balls"] = 0
+    inn["extras"] = {"wd": 0, "nb": 0, "b": 0, "lb": 0}
+    for b in inn["batsmen"]:
+        b["runs"] = 0
+        b["balls"] = 0
+        b["fours"] = 0
+        b["sixes"] = 0
+        b["out"] = False
+        b["dismissal"] = None
+    for bw in inn["bowlers"]:
+        bw["balls"] = 0
+        bw["runs"] = 0
+        bw["wickets"] = 0
+        bw["maidens"] = 0
+
+
+def _replay_ball(inn: dict, ball: dict):
+    """Apply a single logged ball back onto a freshly-reset innings (used by undo)."""
+    striker = _find_batsman(inn, ball["striker_id"])
+    bowler = _find_bowler(inn, ball["bowler_id"])
+    extra = ball.get("extra")
+    runs = ball.get("runs", 0)
+    team_runs = ball.get("team_runs", 0)
+    if extra == "wd":
+        inn["extras"]["wd"] += team_runs
+        if bowler:
+            bowler["runs"] += team_runs
+    elif extra == "nb":
+        inn["extras"]["nb"] += 1
+        if striker:
+            striker["runs"] += runs
+            if runs == 4:
+                striker["fours"] += 1
+            if runs == 6:
+                striker["sixes"] += 1
+        if bowler:
+            bowler["runs"] += team_runs
+    elif extra in ("b", "lb"):
+        inn["extras"][extra] += team_runs
+        if striker:
+            striker["balls"] += 1
+        if bowler:
+            bowler["balls"] += 1
+        inn["legal_balls"] += 1
+    else:
+        if striker:
+            striker["balls"] += 1
+            striker["runs"] += runs
+            if runs == 4:
+                striker["fours"] += 1
+            if runs == 6:
+                striker["sixes"] += 1
+        if bowler:
+            bowler["balls"] += 1
+            bowler["runs"] += runs
+        inn["legal_balls"] += 1
+    inn["runs"] += team_runs
+    w = ball.get("wicket")
+    if w and w.get("type") in DISMISSAL_TYPES:
+        inn["wickets"] += 1
+        wb = _find_batsman(inn, w.get("batsman_id") or ball["striker_id"])
+        if wb:
+            wb["out"] = True
+            wb["dismissal"] = {"type": w["type"]}
+        if w["type"] != "runout" and bowler:
+            bowler["wickets"] += 1
+
+
 def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
     """Attach all cricket endpoints to the provided router."""
 
@@ -204,15 +393,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
             raise HTTPException(400, "Striker and non-striker must differ")
 
         a_id, b_id = fixture["team_a_id"], fixture["team_b_id"]
-        if not score.get("innings"):
-            toss_winner = score["toss"]["winner_team_id"]
-            toss_decision = score["toss"]["decision"]
-            batting = toss_winner if toss_decision == "bat" else (b_id if toss_winner == a_id else a_id)
-            bowling = b_id if batting == a_id else a_id
-        else:
-            prev = score["innings"][-1]
-            batting = prev["bowling_team_id"]
-            bowling = prev["batting_team_id"]
+        batting, bowling = _resolve_innings_teams(score, a_id, b_id)
 
         inn = _empty_innings(batting, bowling)
         if score.get("innings"):
@@ -269,89 +450,19 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         wicket = body.get("wicket")
         commentary = (body.get("commentary") or "").strip()
 
-        legal = True
-        bat_runs = 0
-        team_runs = 0
-        bowler_runs = 0
-        extras_inc = {"wd": 0, "nb": 0, "b": 0, "lb": 0}
-        swap_strike = False
+        # 1) Compute pure delta for this ball
+        delta = _compute_ball_delta(extra, runs)
+        legal = delta["legal"]
+        bat_runs = delta["bat_runs"]
+        team_runs = delta["team_runs"]
+        swap_strike = delta["swap_strike"]
 
-        if extra == "wd":
-            legal = False
-            team_runs = 1 + runs
-            bowler_runs = 1 + runs
-            extras_inc["wd"] = 1 + runs
-        elif extra == "nb":
-            legal = False
-            team_runs = 1 + runs
-            bowler_runs = 1 + runs
-            bat_runs = runs
-            extras_inc["nb"] = 1
-            if runs % 2 == 1:
-                swap_strike = True
-        elif extra == "b":
-            legal = True
-            team_runs = runs
-            extras_inc["b"] = runs
-            if runs % 2 == 1:
-                swap_strike = True
-        elif extra == "lb":
-            legal = True
-            team_runs = runs
-            extras_inc["lb"] = runs
-            if runs % 2 == 1:
-                swap_strike = True
-        else:
-            legal = True
-            team_runs = runs
-            bat_runs = runs
-            bowler_runs = runs
-            if runs % 2 == 1:
-                swap_strike = True
+        # 2) Apply delta to player + innings counters
+        _apply_ball_to_players(inn, striker, bowler, delta, extra)
 
-        if legal and extra not in ("b", "lb"):
-            striker["balls"] += 1
-        striker["runs"] += bat_runs
-        if bat_runs == 4:
-            striker["fours"] += 1
-        elif bat_runs == 6:
-            striker["sixes"] += 1
-
-        if legal:
-            bowler["balls"] += 1
-        bowler["runs"] += bowler_runs
-
-        inn["runs"] += team_runs
-        for k, v in extras_inc.items():
-            inn["extras"][k] = inn["extras"].get(k, 0) + v
-        if legal:
-            inn["legal_balls"] += 1
-
-        out_player = None
+        # 3) Apply wicket (if any)
         free_hit_active = bool(inn.get("free_hit_pending"))
-        if wicket and wicket.get("type") in DISMISSAL_TYPES:
-            wtype = wicket["type"]
-            # Free-hit rule: only runout can dismiss the batsman on a free-hit
-            if free_hit_active and wtype != "runout":
-                wicket = {"type": wtype, "ignored_free_hit": True}
-            else:
-                out_pid = wicket.get("batsman_id") or striker_id
-                out_player = _find_batsman(inn, out_pid)
-                if out_player and not out_player["out"]:
-                    out_player["out"] = True
-                    out_player["dismissal"] = {
-                        "type": wtype,
-                        "bowler_id": bowler_id if wtype in ("bowled", "caught", "lbw", "stumped", "hitwicket") else None,
-                        "fielder_id": wicket.get("fielder_id"),
-                    }
-                    inn["wickets"] += 1
-                    if wtype != "runout":
-                        bowler["wickets"] += 1
-                    if inn["striker_id"] == out_pid:
-                        inn["striker_id"] = None
-                    elif inn["non_striker_id"] == out_pid:
-                        inn["non_striker_id"] = None
-                    score["match_state"] = "wicket"
+        wicket = _apply_wicket(inn, score, striker_id, bowler_id, wicket, free_hit_active)
 
         # Free-hit toggling: set on no-ball; clear when a legal delivery is bowled.
         if extra == "nb":
@@ -390,11 +501,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
             inn["striker_id"], inn["non_striker_id"] = inn["non_striker_id"], inn["striker_id"]
 
         overs_limit = score.get("overs_limit", 20)
-        target = inn.get("target")
-        all_out = inn["wickets"] >= 10
-        overs_done = inn["legal_balls"] >= overs_limit * 6
-        chase_done = target and inn["runs"] >= target
-        if all_out or overs_done or chase_done:
+        if _is_innings_complete(inn, overs_limit):
             inn["completed"] = True
             if score["current_innings"] == 0:
                 score["match_state"] = "innings_break"
@@ -507,86 +614,15 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         inn = _get_innings(score)
         if not inn["balls_log"]:
             raise HTTPException(400, "Nothing to undo")
+        # Drop the latest ball and replay every remaining one to rebuild counters
         inn["balls_log"].pop()
-        inn["runs"] = 0
-        inn["wickets"] = 0
-        inn["legal_balls"] = 0
-        inn["extras"] = {"wd": 0, "nb": 0, "b": 0, "lb": 0}
-        for b in inn["batsmen"]:
-            b["runs"] = 0
-            b["balls"] = 0
-            b["fours"] = 0
-            b["sixes"] = 0
-            b["out"] = False
-            b["dismissal"] = None
-        for bw in inn["bowlers"]:
-            bw["balls"] = 0
-            bw["runs"] = 0
-            bw["wickets"] = 0
-            bw["maidens"] = 0
-        for b in inn["balls_log"]:
-            striker = _find_batsman(inn, b["striker_id"])
-            bowler = _find_bowler(inn, b["bowler_id"])
-            extra = b.get("extra")
-            runs = b.get("runs", 0)
-            team_runs = b.get("team_runs", 0)
-            if extra == "wd":
-                inn["extras"]["wd"] += team_runs
-                if bowler:
-                    bowler["runs"] += team_runs
-            elif extra == "nb":
-                inn["extras"]["nb"] += 1
-                if striker:
-                    striker["runs"] += runs
-                    if runs == 4:
-                        striker["fours"] += 1
-                    if runs == 6:
-                        striker["sixes"] += 1
-                if bowler:
-                    bowler["runs"] += team_runs
-            elif extra == "b":
-                inn["extras"]["b"] += team_runs
-                if striker:
-                    striker["balls"] += 1
-                if bowler:
-                    bowler["balls"] += 1
-                inn["legal_balls"] += 1
-            elif extra == "lb":
-                inn["extras"]["lb"] += team_runs
-                if striker:
-                    striker["balls"] += 1
-                if bowler:
-                    bowler["balls"] += 1
-                inn["legal_balls"] += 1
-            else:
-                if striker:
-                    striker["balls"] += 1
-                    striker["runs"] += runs
-                    if runs == 4:
-                        striker["fours"] += 1
-                    if runs == 6:
-                        striker["sixes"] += 1
-                if bowler:
-                    bowler["balls"] += 1
-                    bowler["runs"] += runs
-                inn["legal_balls"] += 1
-            inn["runs"] += team_runs
-            w = b.get("wicket")
-            if w and w.get("type") in DISMISSAL_TYPES:
-                inn["wickets"] += 1
-                wb = _find_batsman(inn, w.get("batsman_id") or b["striker_id"])
-                if wb:
-                    wb["out"] = True
-                    wb["dismissal"] = {"type": w["type"]}
-                if w["type"] != "runout" and bowler:
-                    bowler["wickets"] += 1
+        _reset_innings_counters(inn)
+        for ball in inn["balls_log"]:
+            _replay_ball(inn, ball)
         inn["completed"] = False
-        # Restore free_hit_pending from the last ball in the log
+        # Restore free_hit_pending from the (new) last ball in the log
         last = inn["balls_log"][-1] if inn["balls_log"] else None
-        if last and last.get("extra") == "nb":
-            inn["free_hit_pending"] = True
-        else:
-            inn["free_hit_pending"] = False
+        inn["free_hit_pending"] = bool(last and last.get("extra") == "nb")
         score["match_state"] = "in_play"
         _sync_summary_fields(score, fixture["team_a_id"], fixture["team_b_id"])
         doc = await _save_score(fixture_id, score, fixture["event_id"])

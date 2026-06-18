@@ -224,6 +224,15 @@ function FixtureCard({ fixture, event, teamMap, isAdmin, onScore }) {
           Update score
         </Button>
       )}
+      {a && b && (
+        <Link
+          to={`/live/${fixture.id}`}
+          data-testid={`share-live-${fixture.id}`}
+          className="mt-2 block w-full text-center text-[10px] font-mono uppercase text-[#06B6D4] hover:text-white tracking-widest"
+        >
+          ▶ Open live scorecard
+        </Link>
+      )}
     </div>
   );
 }

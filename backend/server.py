@@ -1331,6 +1331,42 @@ async def get_fixture(fixture_id: str):
     return Fixture(**doc)
 
 
+# ---------- Public live scorecard (no auth) ----------
+@api.get("/public/fixtures/{fixture_id}")
+async def public_live_scorecard(fixture_id: str):
+    """No-auth, shareable live scoreboard payload. Returns the fixture, parent event,
+    both team summaries, and the current score blob. Safe for anonymous viewers."""
+    fx = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+    if not fx:
+        raise HTTPException(404, "Fixture not found")
+    event = await db.events.find_one({"id": fx["event_id"]}, {"_id": 0}) or {}
+    team_ids = [tid for tid in (fx.get("team_a_id"), fx.get("team_b_id")) if tid]
+    teams = {}
+    if team_ids:
+        async for t in db.teams.find({"id": {"$in": team_ids}}, {"_id": 0}):
+            teams[t["id"]] = {
+                "id": t["id"],
+                "name": t.get("name"),
+                "short_name": t.get("short_name"),
+                "color": t.get("color"),
+                "logo_url": t.get("logo_url"),
+            }
+    # Strip private fields from event
+    pub_event = {
+        "id": event.get("id"),
+        "name": event.get("name"),
+        "sport": event.get("sport"),
+        "format": event.get("format"),
+        "location": event.get("location"),
+        "company_id": event.get("company_id"),
+    }
+    return {
+        "fixture": fx,
+        "event": pub_event,
+        "teams": teams,
+    }
+
+
 @api.patch("/fixtures/{fixture_id}", response_model=Fixture)
 async def update_fixture_score(fixture_id: str, body: ScoreUpdate, _: dict = Depends(require_admin)):
     upd = {"score": body.score}

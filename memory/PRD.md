@@ -71,6 +71,21 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **35 new pytest tests** in `test_cricket_scoring.py` + `test_cricket_extended.py` covering: state machine, strike rotation, wicket types, extras accounting, innings completion, end-match propagation, validation (overs range, double toss, striker==non-striker, bogus winner, bowler not in bowling XI). 207/210 overall pass (3 vendor/player pre-existing failures untouched).
 - **Code quality fixes (Iter 11)**: Backend lint cleaned (E702 chained semicolons split, unused vars removed, defensive weekday init). Frontend stable keys on hardcoded lists (Home, About, PlayerDetail, LiveScorer). Empty catch blocks in `useFixtureSocket`, `AuthContext`, `EventTeamsManager` now log errors. Magic numbers in `useFixtureSocket` extracted to named constants. Production `console.warn` removed from craco config. Footer contact: `contact@kreedanation.com` / `+91 9923114499`.
 
+## Implemented (Feb 18, 2026 — Iteration 14) **Phase 1: Mobile Nav + Public Scorecard**
+- **Mobile responsive Nav** (`/app/frontend/src/components/Nav.jsx` rewrite):
+  - Hamburger button (`data-testid="nav-mobile-toggle"`) appears below `md` breakpoint
+  - Slide-out drawer (`data-testid="nav-mobile-drawer"`) via shadcn Sheet — right side, 85vw on mobile / 384px on tablet
+  - Drawer shows: user identity + company badge, public links (Browse), role-based links (My Workspace), logout / sign-in / signup CTAs
+  - Closes automatically on link tap; ESC and overlay-click also close
+  - Logo compacts to brand text on small screens
+- **Public live scorecard** at `/live/:fixture_id`:
+  - Backend: `GET /api/public/fixtures/{id}` (no-auth) returns fixture + event metadata (id/name/sport/format/location/company_id only — no admin fields) + both team summaries (id/name/short_name/color/logo_url)
+  - Frontend page (`/app/frontend/src/pages/LiveScorecard.jsx`): polls every 5s, sport-aware rendering — full cricket scorecard with innings cards, batting/bowling tables, ball-by-ball strip, partnership target, free-hit aware; generic scoreboard for non-cricket sports
+  - Web Share API integration (falls back to clipboard) via SHARE button
+  - "▶ Open live scorecard" link added to every FixtureCard on EventDetail
+- **3 new pytest tests** in `test_public_scorecard.py` — anonymous access, 404 handling, no admin field leakage. All pass.
+- **Test status**: 80 passed + 1 skipped on the focus suite. Full suite: 218 backend tests + 1 skipped.
+
 ## Implemented (Feb 17, 2026 — Iteration 13) **Code Quality Pass**
 - **Console statements gated** behind `process.env.NODE_ENV !== "production"` via new `/app/frontend/src/lib/devLog.js` helper. Replaced 11 `console.error` calls in `useFixtureSocket.js`, `AuthContext.jsx`, `EventTeamsManager.jsx`, `CricketScorer.jsx` with `devError`. Production builds no longer leak debug info.
 - **Inline-array prop elimination** in `CricketScorer.jsx`: changed `PickPlayer`'s `excludeIds={[scalar]}` API to `excludeId={scalar}` (4 call sites) — eliminates new-array-per-render in 4 hot paths. Internal filter wrapped in `useMemo`.

@@ -17,6 +17,7 @@ import { SPORTS } from "@/lib/sports";
 import ImageUpload from "@/components/ImageUpload";
 import DashboardPanel from "@/components/DashboardPanel";
 import SportsManager from "@/components/SportsManager";
+import { AdminReviewsQueue } from "@/components/Reviews";
 
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
 const onSportChange = (current, value) => ({
@@ -141,6 +142,7 @@ export default function PlatformAdmin() {
             <TabsTrigger value="listings" data-testid="pa-tab-listings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Listings ({listings.length})</TabsTrigger>
             <TabsTrigger value="settings" data-testid="pa-tab-settings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Settings</TabsTrigger>
             <TabsTrigger value="about" data-testid="pa-tab-about" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">About page</TabsTrigger>
+            <TabsTrigger value="reviews" data-testid="pa-tab-reviews" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Reviews</TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
@@ -233,10 +235,11 @@ export default function PlatformAdmin() {
 
           <TabsContent value="companies" className="mt-6 space-y-2">
             {companies.map((c) => (
-              <div key={c.id} className="border border-white/10 rounded-sm p-4 bg-[#141414]">
+              <Link key={c.id} to={`/platform-admin/companies/${c.id}`} data-testid={`pa-company-${c.id}`}
+                className="block border border-white/10 rounded-sm p-4 bg-[#141414] hover:border-[#84CC16] transition-colors">
                 <div className="font-semibold">{c.name}</div>
                 <div className="text-xs font-mono text-neutral-500">{c.contact_email} · {c.contact_phone || "—"} · /{c.slug}</div>
-              </div>
+              </Link>
             ))}
           </TabsContent>
 
@@ -255,12 +258,12 @@ export default function PlatformAdmin() {
 
           <TabsContent value="vendors" className="mt-6 space-y-2">
             {vendors.map((v) => (
-              <div key={v.id} className="border border-white/10 rounded-sm p-4 bg-[#141414] flex items-center justify-between">
-                <div>
+              <div key={v.id} className="border border-white/10 rounded-sm p-4 bg-[#141414] flex items-center justify-between hover:border-[#EC4899] transition-colors">
+                <Link to={`/platform-admin/vendors/${v.id}`} data-testid={`pa-vendor-${v.id}`} className="flex-1 min-w-0">
                   <div className="font-semibold">{v.business_name} <span className="text-[10px] font-mono uppercase text-neutral-500 ml-2">{v.vendor_type}</span></div>
                   <div className="text-xs font-mono text-neutral-500">{v.contact_name} · {v.city} · {v.mobile} · {v.email}</div>
-                </div>
-                <div className="flex items-center gap-2">
+                </Link>
+                <div className="flex items-center gap-2 ml-3">
                   <span className={`text-[10px] font-mono uppercase border rounded-sm px-2 py-0.5 ${v.approved ? "text-[#84CC16] border-[#84CC16]/40" : "text-amber-400 border-amber-500/40"}`}>{v.approved ? "APPROVED" : "PENDING"}</span>
                   <Button size="sm" data-testid={`pa-approve-vendor-${v.id}`} onClick={async () => { await api.patch(`/vendors/${v.id}/approve`, { approved: !v.approved }); load(); toast.success(v.approved ? "Revoked" : "Approved"); }}
                     className={v.approved ? "bg-white/10 hover:bg-white/20 text-white rounded-sm" : "bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm"}>
@@ -330,6 +333,14 @@ export default function PlatformAdmin() {
             </div>
 
             <ContactInbox />
+          </TabsContent>
+
+          <TabsContent value="reviews" className="mt-6">
+            <div className="border border-white/10 rounded-sm bg-[#141414] p-6">
+              <div className="font-display tracking-wider text-2xl">REVIEW MODERATION QUEUE</div>
+              <p className="text-xs text-neutral-400 mt-1">Vendor-approved reviews awaiting final publish, plus flagged items.</p>
+              <div className="mt-5"><AdminReviewsQueue /></div>
+            </div>
           </TabsContent>
 
           <TabsContent value="about" className="mt-6">

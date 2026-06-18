@@ -513,6 +513,25 @@ class HappyHour(BaseModel):
     factor: float = 1.0  # e.g. 0.75 for 25% off
 
 
+class Review(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    listing_id: str
+    vendor_id: str
+    booking_id: Optional[str] = None
+    author_user_id: str
+    author_name: str
+    author_role: str
+    rating: int  # 1-5
+    text: str = ""
+    status: str = "pending_vendor"  # pending_vendor -> approved -> visible | rejected
+    vendor_response: Optional[str] = None
+    moderation_note: Optional[str] = None
+    moderated_by_role: Optional[str] = None
+    moderated_at: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
 class VendorListing(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -1848,6 +1867,70 @@ async def approve_vendor(vendor_id: str, body: dict, _: dict = Depends(require_p
     return {"ok": True, "approved": approved}
 
 
+# ---------- Admin Detail Views: Vendor / Company / Player drilldowns ----------
+@api.get("/admin/vendors/{vendor_id}/detail")
+async def admin_vendor_detail(vendor_id: str, _: dict = Depends(require_platform_admin)):
+    vendor = await db.vendors.find_one({"id": vendor_id}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(404, "Vendor not found")
+    listings = await db.vendor_listings.find({"vendor_id": vendor_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    bookings = await db.vendor_bookings.find({"vendor_id": vendor_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    reviews = await db.reviews.find({"vendor_id": vendor_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    schedules = await db.venue_schedules.find(
+        {"listing_id": {"$in": [L["id"] for L in listings]}}, {"_id": 0}
+    ).to_list(200) if listings else []
+    owner = await db.users.find_one({"id": vendor.get("user_id")}, {"_id": 0, "password_hash": 0}) if vendor.get("user_id") else None
+    return {
+        "vendor": vendor,
+        "owner": owner,
+        "listings": listings,
+        "bookings": bookings,
+        "reviews": reviews,
+        "schedules": schedules,
+    }
+
+
+@api.get("/admin/companies/{company_id}/detail")
+async def admin_company_detail(company_id: str, _: dict = Depends(require_platform_admin)):
+    company = await db.companies.find_one({"id": company_id}, {"_id": 0})
+    if not company:
+        raise HTTPException(404, "Company not found")
+    members = await db.users.find(
+        {"company_id": company_id}, {"_id": 0, "password_hash": 0}
+    ).sort("role", 1).to_list(500)
+    players = await db.player_profiles.find({"company_id": company_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    bookings = await db.vendor_bookings.find({"company_id": company_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+    events = await db.events.find({"company_id": company_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {
+        "company": company,
+        "members": members,
+        "players": players,
+        "bookings": bookings,
+        "events": events,
+    }
+
+
+@api.get("/admin/players/{player_id}/detail")
+async def admin_player_detail(player_id: str, _: dict = Depends(require_platform_admin)):
+    profile = await db.player_profiles.find_one({"id": player_id}, {"_id": 0})
+    if not profile:
+        raise HTTPException(404, "Player not found")
+    user = await db.users.find_one({"id": profile.get("user_id")}, {"_id": 0, "password_hash": 0}) if profile.get("user_id") else None
+    company = await db.companies.find_one({"id": profile.get("company_id")}, {"_id": 0}) if profile.get("company_id") else None
+    teams = await db.teams.find({"members": profile["id"]}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    event_ids = list({t.get("event_id") for t in teams if t.get("event_id")})
+    events = await db.events.find({"id": {"$in": event_ids}}, {"_id": 0}).to_list(200) if event_ids else []
+    reviews = await db.reviews.find({"author_user_id": profile.get("user_id")}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return {
+        "player": profile,
+        "user": user,
+        "company": company,
+        "teams": teams,
+        "events": events,
+        "reviews": reviews,
+    }
+
+
 @api.get("/vendor-listings")
 async def list_public_listings(
     vendor_type: Optional[str] = None,
@@ -2080,7 +2163,7 @@ async def list_vendor_bookings(user: dict = Depends(get_current_user)):
 
 
 VENDOR_STATUSES = {"vendor_accepted", "vendor_declined"}
-ADMIN_STATUSES = {"confirmed", "rejected"}
+ADMIN_STATUSES = {"confirmed", "rejected", "completed"}
 HR_STATUSES = {"cancelled"}
 TERMINAL_STATUSES = {"confirmed", "rejected", "cancelled"}
 
@@ -2143,6 +2226,154 @@ async def update_vendor_booking(booking_id: str, body: dict, user: dict = Depend
         await _log_booking_change(doc, "status_change", msg, user)
     updated = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
     return VendorBooking(**updated)
+
+
+# ---------- Reviews & Ratings (vendor moderation -> admin moderation -> public) ----------
+@api.post("/vendor-listings/{listing_id}/reviews", response_model=Review)
+async def create_review(listing_id: str, body: dict, user: dict = Depends(get_current_user)):
+    rating = int(body.get("rating") or 0)
+    if rating < 1 or rating > 5:
+        raise HTTPException(400, "rating must be between 1 and 5")
+    text = (body.get("text") or "").strip()
+    booking_id = body.get("booking_id")
+    listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    # Require a completed booking owned by the reviewer (player / HR) to allow review
+    if booking_id:
+        booking = await db.vendor_bookings.find_one({"id": booking_id, "listing_id": listing_id}, {"_id": 0})
+        if not booking:
+            raise HTTPException(400, "Booking does not belong to this listing")
+        if booking.get("status") != "completed":
+            raise HTTPException(400, "You can only review completed bookings")
+        if booking.get("company_id") != user.get("company_id") and booking.get("created_by") != user.get("id"):
+            raise HTTPException(403, "Not your booking")
+        existing = await db.reviews.find_one({"booking_id": booking_id, "author_user_id": user["id"]}, {"_id": 0})
+        if existing:
+            raise HTTPException(400, "You already reviewed this booking")
+    review = Review(
+        listing_id=listing_id,
+        vendor_id=listing["vendor_id"],
+        booking_id=booking_id,
+        author_user_id=user["id"],
+        author_name=user.get("name") or user.get("email") or "User",
+        author_role=user.get("role") or "player",
+        rating=rating,
+        text=text[:2000],
+    )
+    await db.reviews.insert_one(review.model_dump())
+    # Notify vendor for moderation
+    vendor_user = await db.users.find_one({"vendor_id": listing["vendor_id"], "role": "vendor"}, {"_id": 0, "email": 1}) or {}
+    if vendor_user.get("email"):
+        send_email(vendor_user["email"], f"New review awaiting your response — {listing['title']}",
+                   f"{review.author_name} left a {rating}/5 review:\n\n{text[:200]}\n\nApprove or flag it from your vendor dashboard.",
+                   kind="review_pending_vendor")
+    return review
+
+
+@api.get("/vendor-listings/{listing_id}/reviews")
+async def list_listing_reviews(listing_id: str, include_pending: bool = False, user: Optional[dict] = Depends(get_current_user_optional)):
+    """Public route: by default returns only `visible` reviews. Vendor or platform admin can pass include_pending=true to see all."""
+    flt = {"listing_id": listing_id}
+    if not include_pending:
+        flt["status"] = "visible"
+    else:
+        # Authorize: must be vendor owner or platform admin
+        listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
+        if not listing:
+            raise HTTPException(404, "Listing not found")
+        if not user:
+            raise HTTPException(401, "Auth required to view pending reviews")
+        role = user.get("role")
+        if role not in ("platform_admin", "admin"):
+            v = await db.vendors.find_one({"user_id": user.get("id")}, {"_id": 0}) or {}
+            if v.get("id") != listing["vendor_id"]:
+                raise HTTPException(403, "Not allowed to view pending reviews")
+    docs = await db.reviews.find(flt, {"_id": 0}).sort("created_at", -1).to_list(200)
+    # Compute rating summary (visible only) for the listing
+    if not include_pending:
+        agg = await db.reviews.aggregate([
+            {"$match": {"listing_id": listing_id, "status": "visible"}},
+            {"$group": {"_id": None, "avg": {"$avg": "$rating"}, "count": {"$sum": 1}}},
+        ]).to_list(1)
+        summary = agg[0] if agg else {"avg": 0, "count": 0}
+        return {"reviews": docs, "summary": {"average": round(summary.get("avg") or 0, 2), "count": summary.get("count") or 0}}
+    return {"reviews": docs}
+
+
+@api.post("/reviews/{review_id}/respond")
+async def vendor_review_response(review_id: str, body: dict, user: dict = Depends(get_current_user)):
+    """Vendor approves/rejects or appends a public response to a pending review."""
+    review = await db.reviews.find_one({"id": review_id}, {"_id": 0})
+    if not review:
+        raise HTTPException(404, "Review not found")
+    listing = await db.vendor_listings.find_one({"id": review["listing_id"]}, {"_id": 0}) or {}
+    v = await db.vendors.find_one({"user_id": user.get("id")}, {"_id": 0}) or {}
+    if user.get("role") != "vendor" or v.get("id") != listing.get("vendor_id"):
+        raise HTTPException(403, "Only the listing's vendor can respond")
+    action = body.get("action")  # "approve" | "flag" | "respond"
+    upd = {}
+    if action == "approve":
+        if review["status"] != "pending_vendor":
+            raise HTTPException(400, "Review already moderated")
+        upd["status"] = "pending_admin"  # next step: admin moderation
+        upd["moderated_by_role"] = "vendor"
+        upd["moderated_at"] = datetime.now(timezone.utc).isoformat()
+    elif action == "flag":
+        upd["status"] = "flagged"
+        upd["moderation_note"] = (body.get("note") or "")[:500]
+        upd["moderated_by_role"] = "vendor"
+        upd["moderated_at"] = datetime.now(timezone.utc).isoformat()
+    elif action == "respond":
+        upd["vendor_response"] = (body.get("response") or "")[:1500]
+    else:
+        raise HTTPException(400, "action must be approve, flag, or respond")
+    await db.reviews.update_one({"id": review_id}, {"$set": upd})
+    return await db.reviews.find_one({"id": review_id}, {"_id": 0})
+
+
+@api.post("/admin/reviews/{review_id}/moderate")
+async def admin_moderate_review(review_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+    """Platform admin final verdict: publish (visible), reject, or override flag."""
+    review = await db.reviews.find_one({"id": review_id}, {"_id": 0})
+    if not review:
+        raise HTTPException(404, "Review not found")
+    action = body.get("action")  # "publish" | "reject"
+    upd = {
+        "moderated_by_role": "platform_admin",
+        "moderated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if action == "publish":
+        upd["status"] = "visible"
+    elif action == "reject":
+        upd["status"] = "rejected"
+        upd["moderation_note"] = (body.get("note") or "")[:500]
+    else:
+        raise HTTPException(400, "action must be publish or reject")
+    await db.reviews.update_one({"id": review_id}, {"$set": upd})
+    return await db.reviews.find_one({"id": review_id}, {"_id": 0})
+
+
+@api.get("/admin/reviews/queue")
+async def admin_reviews_queue(_: dict = Depends(require_platform_admin)):
+    docs = await db.reviews.find(
+        {"status": {"$in": ["pending_admin", "flagged"]}}, {"_id": 0}
+    ).sort("moderated_at", -1).to_list(200)
+    return docs
+
+
+@api.get("/vendors/me/reviews")
+async def vendor_pending_reviews(user: dict = Depends(get_current_user)):
+    if user.get("role") != "vendor":
+        raise HTTPException(403, "Vendor only")
+    v = await db.vendors.find_one({"user_id": user.get("id")}, {"_id": 0})
+    if not v:
+        return []
+    docs = await db.reviews.find(
+        {"vendor_id": v["id"], "status": {"$in": ["pending_vendor", "pending_admin", "flagged"]}},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(200)
+    return docs
 
 
 # ---------- Cancellation & Refund ----------

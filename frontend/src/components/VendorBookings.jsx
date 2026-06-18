@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
 import { CheckCircle, XCircle, Clock, Ban, Megaphone, Edit3 } from "lucide-react";
+import { ReviewForm } from "@/components/Reviews";
 
 const STATUS_META = {
   pending: { label: "Awaiting vendor", color: "bg-[#F59E0B] text-black", icon: Clock },
@@ -155,6 +156,9 @@ function BookingRow({ booking, role, onPatch }) {
 
       {canVendorAct && <VendorActions booking={booking} onAct={(s) => onPatch(booking.id, { status: s })} />}
       {canHrModify && <HrCancelReschedule booking={booking} onCancel={hrCancel} onReschedule={hrReschedule} />}
+      {isCompanyAdmin && booking.status === "completed" && (
+        <ReviewForm listingId={booking.listing_id} bookingId={booking.id} />
+      )}
       {(booking.refund_amount !== null && booking.refund_amount !== undefined) && (
         <div className="mt-2 text-[11px] text-[#F59E0B] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-sm px-3 py-2">
           Refund: <span className="font-mono">{fmtPrice(booking.refund_amount, booking.currency)}</span> — {booking.refund_reason}
@@ -179,6 +183,8 @@ function BookingRow({ booking, role, onPatch }) {
 export default function VendorBookings() {
   const role = useAuth();
   const [bookings, reload] = useVendorBookings();
+  const [tab, setTab] = useState("active");
+  const [query, setQuery] = useState("");
 
   const onPatch = async (id, payload) => {
     try {
@@ -198,6 +204,23 @@ export default function VendorBookings() {
     } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
 
+  const tabMatchers = {
+    all: () => true,
+    active: (b) => ["pending", "vendor_accepted", "confirmed"].includes(b.status),
+    pending: (b) => ["pending", "vendor_accepted"].includes(b.status),
+    approved: (b) => b.status === "confirmed",
+    cancelled: (b) => ["cancelled", "rejected", "vendor_declined"].includes(b.status),
+    closed: (b) => b.status === "completed",
+  };
+  const tabCounts = Object.fromEntries(
+    Object.keys(tabMatchers).map((k) => [k, bookings.filter(tabMatchers[k]).length])
+  );
+
+  const q = query.trim().toLowerCase();
+  const filtered = bookings
+    .filter(tabMatchers[tab])
+    .filter((b) => !q || (b.listing_title || "").toLowerCase().includes(q) || (b.notes || "").toLowerCase().includes(q) || (b.company_name || "").toLowerCase().includes(q));
+
   if (bookings.length === 0) return null;
   return (
     <div data-testid="vendor-bookings-panel" className="mt-16">
@@ -208,8 +231,48 @@ export default function VendorBookings() {
         {role.isCompanyAdmin && "Track your booking requests. You'll be notified when Kreeda Nation confirms with the vendor."}
         {role.isVendor && "Respond to incoming requests. Kreeda Nation admin will finalize."}
       </p>
-      <div className="mt-6 space-y-3">
-        {bookings.map((b) => <BookingRow key={b.id} booking={b} role={role} onPatch={onPatch} />)}
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {[
+          { k: "active", label: "Active" },
+          { k: "pending", label: "Pending" },
+          { k: "approved", label: "Approved" },
+          { k: "closed", label: "Closed" },
+          { k: "cancelled", label: "Cancelled" },
+          { k: "all", label: "All" },
+        ].map((opt) => (
+          <button
+            key={opt.k}
+            data-testid={`vb-tab-${opt.k}`}
+            onClick={() => setTab(opt.k)}
+            className={`px-3 py-1.5 text-xs font-mono uppercase rounded-sm border ${
+              tab === opt.k
+                ? "bg-[#84CC16] border-[#84CC16] text-black"
+                : "border-white/10 text-neutral-400 hover:text-white"
+            }`}
+          >
+            {opt.label} · {tabCounts[opt.k]}
+          </button>
+        ))}
+        <div className="ml-auto">
+          <Input
+            data-testid="vb-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search venue, company, notes…"
+            className="bg-black/40 border-white/10 text-white text-sm w-64"
+          />
+        </div>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {filtered.length === 0 ? (
+          <div data-testid="vb-empty" className="text-sm text-neutral-500 border border-dashed border-white/10 rounded-sm p-6 text-center">
+            No bookings in this tab.
+          </div>
+        ) : (
+          filtered.map((b) => <BookingRow key={b.id} booking={b} role={role} onPatch={onPatch} />)
+        )}
       </div>
     </div>
   );

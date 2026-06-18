@@ -11,6 +11,7 @@ import PlayerDetail from "@/pages/PlayerDetail";
 import Standings from "@/pages/Standings";
 import Sponsors from "@/pages/Sponsors";
 import LiveScorecard from "@/pages/LiveScorecard";
+import AdminDetail from "@/pages/AdminDetail";
 import Admin from "@/pages/Admin";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
@@ -42,6 +43,9 @@ function App() {
           <Route path="/events" element={<Events />} />
           <Route path="/events/:id" element={<EventDetail />} />
           <Route path="/live/:fixture_id" element={<LiveScorecard />} />
+          <Route path="/platform-admin/vendors/:id" element={<AdminDetail type="vendor" />} />
+          <Route path="/platform-admin/companies/:id" element={<AdminDetail type="company" />} />
+          <Route path="/platform-admin/players/:id" element={<AdminDetail type="player" />} />
           <Route path="/teams/:id" element={<TeamDetail />} />
           <Route path="/team-players/:id" element={<PlayerDetail />} />
           <Route path="/standings" element={<Standings />} />

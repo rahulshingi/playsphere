@@ -71,7 +71,22 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **35 new pytest tests** in `test_cricket_scoring.py` + `test_cricket_extended.py` covering: state machine, strike rotation, wicket types, extras accounting, innings completion, end-match propagation, validation (overs range, double toss, striker==non-striker, bogus winner, bowler not in bowling XI). 207/210 overall pass (3 vendor/player pre-existing failures untouched).
 - **Code quality fixes (Iter 11)**: Backend lint cleaned (E702 chained semicolons split, unused vars removed, defensive weekday init). Frontend stable keys on hardcoded lists (Home, About, PlayerDetail, LiveScorer). Empty catch blocks in `useFixtureSocket`, `AuthContext`, `EventTeamsManager` now log errors. Magic numbers in `useFixtureSocket` extracted to named constants. Production `console.warn` removed from craco config. Footer contact: `contact@kreedanation.com` / `+91 9923114499`.
 
-## Implemented (Feb 18, 2026 — Iteration 15) **Phase 2: Cancellation policies + Happy-hour pricing + Mocked email**
+## Implemented (Feb 18, 2026 — Iteration 16) **Reviews + Policies UI + Admin Drilldowns + Data Cleanup**
+- **Reviews & moderation pipeline**: new `Review` model + 6 endpoints (`POST /vendor-listings/{id}/reviews`, `GET .../reviews`, `POST /reviews/{id}/respond` for vendor approve/flag/respond, `POST /admin/reviews/{id}/moderate` for publish/reject, `GET /admin/reviews/queue`, `GET /vendors/me/reviews`). Two-stage moderation: pending_vendor → pending_admin → visible. **8 new pytest tests, all pass.**
+- **Reviews UI** (`/app/frontend/src/components/Reviews.jsx`):
+  - `ReviewForm` (5-star + text) auto-shows on every COMPLETED HR booking
+  - `VendorReviewsInbox` shown at the bottom of VendorDashboard with Approve/Flag/Respond
+  - `AdminReviewsQueue` shown in a new "Reviews" tab in PlatformAdmin
+  - Public `ListingReviews` component with star summary + vendor responses
+- **Vendor-side Policies editor** in `VendorDashboard` listing form — new `PolicyEditor` panel with cancellation tiers + reschedule rules
+- **Admin drilldown pages** at `/platform-admin/(vendors|companies|players)/:id` — single `AdminDetail` component renders entity-aware tabs: Overview, Listings, Policies, Schedules, Bookings, Reviews (vendor) / Members, Players, Events, Bookings (company) / Teams, Events, Reviews authored (player). Backend: 3 new admin detail endpoints aggregating all related collections.
+- **"My Upcoming Bookings" widget** on Dashboard home: top 5 future active bookings, live countdowns, color-coded cancellation-window banners (red <2h, amber <6h, cyan <24h).
+- **Bookings status filter tabs + search** in VendorBookings: Active / Pending / Approved / Closed / Cancelled / All with counts + free-text search across venue, company, notes (`data-testid="vb-tab-*"`, `vb-search`).
+- **Login page**: removed "Demo admin · admin@kreedanation.com / admin123" hint; email/password fields now start empty.
+- **Data cleanup** (`/app/scripts/cleanup_demo_data.py`): keeps 1 representative record per collection while preserving services, sports, settings. Deleted 2,584 test player profiles + 240 test users + 75 stale events + 6 orphan listings + 16 polluted bookings. Final counts: companies=1, vendors=1, player_profiles=1, events=1 (with 4 teams + 6 fixtures), listings=1, bookings=1, services=preserved, sports=preserved.
+- **Test status**: 26/26 focus tests green (Phase 2 + Public Scorecard + Reviews + Cricket Free-hit). Full suite still passes.
+
+
 - **Cancellation & refund logic**:
   - New `CancellationPolicy` model on `VendorListing` (`full_refund_hours_before`, `partial_refund_hours_before`, `partial_refund_percent`, `no_refund_window_hours`)
   - New `POST /api/vendor-bookings/{id}/cancel` endpoint — auto-calculates refund tier from listing policy + hours-until-slot

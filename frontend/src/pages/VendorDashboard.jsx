@@ -15,6 +15,7 @@ import { CURRENCIES, fmtPrice } from "@/lib/currency";
 import ImageUpload from "@/components/ImageUpload";
 import DashboardPanel from "@/components/DashboardPanel";
 import VenueScheduleEditor from "@/components/VenueScheduleEditor";
+import { VendorReviewsInbox } from "@/components/Reviews";
 
 const SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
 
@@ -136,7 +137,7 @@ export default function VendorDashboard() {
                 </div>
               </div>
             ))}
-            {listings.length === 0 && <div className="col-span-full text-neutral-500 text-sm">No listings yet. Click "New listing".</div>}
+            {listings.length === 0 && <div className="col-span-full text-neutral-500 text-sm">No listings yet. Click &ldquo;New listing&rdquo;.</div>}
           </div>
         </div>
 
@@ -174,6 +175,8 @@ export default function VendorDashboard() {
 
       {editing && <ListingEditor listing={editing} setListing={setEditing} onSave={save} onClose={() => setEditing(null)} />}
       {scheduling && <VenueScheduleEditor listing={scheduling} onClose={() => setScheduling(null)} />}
+
+      <VendorReviewsInbox />
 
       <Footer />
     </div>
@@ -276,10 +279,55 @@ function ListingEditor({ listing, setListing, onSave, onClose }) {
           </div>
         </div>
 
+        <PolicyEditor listing={listing} setListing={setListing} />
+
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose} className="text-neutral-400">Cancel</Button>
           <Button data-testid="vl-save" onClick={onSave} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Save listing</Button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PolicyEditor({ listing, setListing }) {
+  const cp = listing.cancellation_policy || {};
+  const rp = listing.reschedule_policy || {};
+  const setCp = (patch) => setListing({ ...listing, cancellation_policy: { ...cp, ...patch } });
+  const setRp = (patch) => setListing({ ...listing, reschedule_policy: { ...rp, ...patch } });
+
+  return (
+    <div data-testid="policy-editor" className="mt-6 border border-[#06B6D4]/30 bg-[#06B6D4]/5 rounded-sm p-4">
+      <div className="font-mono text-[10px] uppercase tracking-widest text-[#06B6D4]">/ Cancellation & Reschedule Policies</div>
+      <p className="text-xs text-neutral-400 mt-1">Set when customers can cancel or reschedule a booking, and how much refund / fee applies.</p>
+
+      <div className="grid sm:grid-cols-2 gap-4 mt-4">
+        <div>
+          <div className="text-xs font-semibold text-white mb-1">Cancellation</div>
+          <PolicyNumber label="Full refund — hours before slot" testid="cp-full" value={cp.full_refund_hours_before ?? 24} onChange={(v) => setCp({ full_refund_hours_before: v })} />
+          <PolicyNumber label="Partial refund — hours before slot" testid="cp-partial-hours" value={cp.partial_refund_hours_before ?? 6} onChange={(v) => setCp({ partial_refund_hours_before: v })} />
+          <PolicyNumber label="Partial refund %" testid="cp-partial-pct" value={cp.partial_refund_percent ?? 50} onChange={(v) => setCp({ partial_refund_percent: v })} suffix="%" />
+          <PolicyNumber label="No refund window — hours before slot" testid="cp-norefund" value={cp.no_refund_window_hours ?? 2} onChange={(v) => setCp({ no_refund_window_hours: v })} />
+        </div>
+        <div>
+          <div className="text-xs font-semibold text-white mb-1">Reschedule</div>
+          <PolicyNumber label="Free reschedule — hours before slot" testid="rp-free" value={rp.free_reschedule_hours_before ?? 24} onChange={(v) => setRp({ free_reschedule_hours_before: v })} />
+          <PolicyNumber label="Max reschedules per booking" testid="rp-max" value={rp.max_reschedules ?? 2} onChange={(v) => setRp({ max_reschedules: v })} />
+          <PolicyNumber label="Fee inside cutoff" testid="rp-fee" value={rp.fee_amount ?? 0} onChange={(v) => setRp({ fee_amount: v })} prefix={listing.currency || "INR"} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PolicyNumber({ label, value, onChange, testid, prefix, suffix }) {
+  return (
+    <div className="mt-2">
+      <Label className="text-[10px] font-mono text-neutral-500">{label}</Label>
+      <div className="flex items-center gap-1 mt-1">
+        {prefix && <span className="text-xs font-mono text-neutral-500">{prefix}</span>}
+        <Input data-testid={testid} type="number" min="0" value={value} onChange={(e) => onChange(Number(e.target.value) || 0)} className="bg-black/40 border-white/10 text-white" />
+        {suffix && <span className="text-xs font-mono text-neutral-500">{suffix}</span>}
       </div>
     </div>
   );

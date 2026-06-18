@@ -14,8 +14,8 @@ import pytest
 import requests
 
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "http://localhost:8001").rstrip("/")
-SUPER_EMAIL = "admin@kreedanation.com"
-SUPER_PASSWORD = "admin123"
+SUPER_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@kreedanation.com")
+SUPER_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
 
 
 def _login(email: str, password: str) -> requests.Session:

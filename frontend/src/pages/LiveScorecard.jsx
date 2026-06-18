@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import axios from "axios";
 import { Share2, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import { devError } from "@/lib/devLog";
 
 const BACKEND = process.env.REACT_APP_BACKEND_URL || "";
 const API = BACKEND ? `${BACKEND}/api` : "/api";
@@ -39,9 +40,11 @@ export default function LiveScorecard() {
   const share = async () => {
     const url = window.location.href;
     if (navigator.share) {
-      try { await navigator.share({ title: "Live score", url }); } catch (_) { /* user cancelled */ }
+      try { await navigator.share({ title: "Live score", url }); }
+      catch (err) { devError("[LiveScorecard] navigator.share failed:", err); }
     } else {
-      try { await navigator.clipboard.writeText(url); } catch (_) { /* clipboard blocked */ }
+      try { await navigator.clipboard.writeText(url); }
+      catch (err) { devError("[LiveScorecard] clipboard.writeText blocked:", err); }
     }
   };
 

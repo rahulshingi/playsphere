@@ -189,9 +189,12 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **Email integration** (Resend/SendGrid) — currently mocked. Awaiting API key from user. Will unblock real staff-admin invites, booking notifications, and password resets.
 
 ### P2
-- **Continue routes split** — `routes/auth.py`, `routes/events.py`, `routes/fixtures.py`, `routes/vendors.py`, `routes/bookings.py` ✅ DONE (Feb 18, 2026). Remaining: optional extraction of `routes/vendor_bookings.py` (vendor-bookings + cancel/reschedule, ~300 lines still in server.py) and `routes/players_accounts.py` (player profiles).
+- **Routes split (continuation)** — optional next pass: extract `routes/vendor_bookings.py` (cancel/reschedule lifecycle, ~300 LoC still in server.py) and `routes/players_accounts.py` (player profiles + directory).
+- **Cricket module refactor** — `routes/cricket.py::register()` (489 LoC, complexity 167) and `cricket_ball()` (162 LoC, complexity 57) flagged by code review as needing decomposition into per-handler + per-event helpers. Touches the most complex live-scoring code path; needs dedicated test pass.
+- **Large component decomposition** — `AdminTeam.jsx` (244 LoC), `CricketScorer.jsx::LivePanel` (210 LoC, complexity 46), `EventTeamsManager.jsx`, `PlatformAdmin.jsx` (358 LoC) — split into smaller subcomponents.
+- **Inline objects in AdminDetail.jsx** (~20 locations) — wrap in `useMemo` or hoist to module-level constants.
 - **Cricket enhancements** — wagon wheel positions, super-over for tied matches.
-- **Editor lists UUIDs** — stable `_uid` schemas for VendorDashboard / RegisterTeam / PlatformAdmin editor arrays.
+- **Editor lists UUIDs** — stable `_uid` schemas for VendorDashboard images, RegisterTeam players, PlatformAdmin variants/fields/people arrays (currently keyed by array index — works but breaks on reorder).
 - **Refactor large functions** — `seed_services`, `seed_demo_data`, `get_standings`, `listing_availability`.
 
 ## Test Credentials

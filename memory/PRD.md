@@ -164,6 +164,18 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **About.jsx** — content now uses `whitespace-pre-line` (preserves admin-entered newlines), occupies full container width, legacy `<br>` literals normalised to real line breaks, bio text in PeopleGrid also wrapped.
 - **Admin editor** — About page editor (`PlatformAdmin.jsx`) shows a hint about Enter key for line breaks, larger textareas (rows 4–6) for better authoring.
 
+## Implemented (Feb 18, 2026 — Iteration 13) Routes split (P2) + seed-count test fix (P1 nit)
+- **`routes/auth.py`** (179 LoC) — `/auth/register`, `/auth/login`, `/auth/logout`, `/auth/me`, `/companies/signup`, `/companies/me` (GET/PATCH), `/companies` list, `/{auth,players}/forgot-password`, `/{auth,players}/reset-password`. Pulls helpers (`hash_password`, `create_access_token`, `set_auth_cookie`, `_user_with_company`) + models via `SimpleNamespace` deps bundle.
+- **`routes/events.py`** (167 LoC) — `/events` CRUD, `/my/teams`, `/venues/suggest`, `/teams` CRUD, `/team-players` CRUD.
+- **`routes/fixtures.py`** (213 LoC) — `generate_round_robin` & `generate_knockout` helpers, `/events/{id}/generate-fixtures`, `/events/{id}/fixtures`, `/fixtures/{id}` GET/PATCH/init-score, `/public/fixtures/{id}` (no-auth scorecard), and the `/api/ws` WebSocket. `propagate_knockout_winner` stays in `server.py` (shared with `routes/cricket.py`).
+- **`routes/vendors.py`** (180 LoC) — `/vendors/signup`, `/vendors/me`, `/vendors`, `/vendors/{id}/approve`, `/vendor-listings` (public + cities + by id), `/vendors/me/listings` CRUD, `/admin/listings` + `/admin/listings/{id}/approve`.
+- **`routes/bookings.py`** (149 LoC) — `/services` CRUD (super-only for write), `/bookings` CRUD (HR + admin scoping).
+- **`server.py`** down from 3537 → 2922 LoC (~17% reduction). The 6th/7th split modules (`vendor-bookings` lifecycle and `players_accounts`) are noted in P2 backlog for a follow-up pass.
+- **Seed-count test fix** — `test_multitenant.py::test_company_stats_scoped` now self-seeds 3 events before asserting count, removing the reliance on stale demo data. `test_rbac_admin.py` BASE_URL falls back to `http://localhost:8001` for local pytest runs.
+- **Full regression**: 249 passed + 3 skipped, 0 failures (was 246 passed + 3 skipped + 3 stale-seed failures before this iteration).
+
+
+
 ### Testing & regression
 - **`/app/backend/tests/test_rbac_admin.py`** — 14/14 tests covering all RBAC paths (super-only enforcement, permission-gated paths, staff CRUD, edge cases: super-immortal, duplicate email, perm allowlist).
 - Frontend e2e via Playwright validated: nav guide visibility, footer guide removal, team-tab gating, staff-admin invite flow, staff-admin login → button hiding, About page line-break rendering, all 4 manuals served at /manuals/*.
@@ -175,10 +187,9 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 ### P1
 - **Browser-side wss:// handshake** — polling fallback masks this in UX; ingress upgrade headers still flaky.
 - **Email integration** (Resend/SendGrid) — currently mocked. Awaiting API key from user. Will unblock real staff-admin invites, booking notifications, and password resets.
-- **Pre-existing seed-count test failures** (3) in `backend_test.py` + `test_multitenant.py` — replace shared seed assumptions with per-test fixtures.
 
 ### P2
-- **Continue routes split** — `routes/auth.py`, `routes/events.py`, `routes/fixtures.py`, `routes/vendors.py`, `routes/bookings.py` (2/6 done).
+- **Continue routes split** — `routes/auth.py`, `routes/events.py`, `routes/fixtures.py`, `routes/vendors.py`, `routes/bookings.py` ✅ DONE (Feb 18, 2026). Remaining: optional extraction of `routes/vendor_bookings.py` (vendor-bookings + cancel/reschedule, ~300 lines still in server.py) and `routes/players_accounts.py` (player profiles).
 - **Cricket enhancements** — wagon wheel positions, super-over for tied matches.
 - **Editor lists UUIDs** — stable `_uid` schemas for VendorDashboard / RegisterTeam / PlatformAdmin editor arrays.
 - **Refactor large functions** — `seed_services`, `seed_demo_data`, `get_standings`, `listing_availability`.

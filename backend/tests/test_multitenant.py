@@ -285,12 +285,21 @@ class TestStats:
 
     def test_company_stats_scoped(self, company_admin):
         s, me = company_admin
+        # Self-seed: ensure at least 3 events exist for this company before asserting count
+        for i in range(3):
+            s.post(f"{API}/events", json={
+                "name": f"TEST_StatsEvent_{uuid.uuid4().hex[:6]}",
+                "sport": "cricket",
+                "format": "round_robin",
+                "event_type": "single_company",
+                "description": "stats fixture",
+                "venue": "Test ground",
+            }, timeout=10)
         r = s.get(f"{API}/stats/company")
         assert r.status_code == 200
         d = r.json()
         for k in ["events", "teams", "players", "bookings", "pending_bookings"]:
             assert k in d
-        # Acme has 3 demo events
         assert d["events"] >= 3
 
     def test_company_stats_requires_company_admin(self, viewer):

@@ -687,117 +687,7 @@ async def _user_with_company(user: dict) -> dict:
     return out
 
 
-# ---------- Auth Endpoints ----------
-@api.post("/auth/register", response_model=UserPublic)
-async def register(body: RegisterBody, response: Response):
-    email = body.email.lower()
-    existing = await db.users.find_one({"email": email})
-    if existing:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    user = {
-        "id": str(uuid.uuid4()),
-        "email": email,
-        "name": body.name,
-        "role": "viewer",
-        "company_id": None,
-        "password_hash": hash_password(body.password),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.users.insert_one(user)
-    token = create_access_token(user["id"], user["email"], user["role"], None)
-    set_auth_cookie(response, token)
-    return UserPublic(**await _user_with_company(user))
-
-
-@api.post("/auth/login", response_model=UserPublic)
-async def login(body: LoginBody, response: Response):
-    email = body.email.lower()
-    user = await db.users.find_one({"email": email})
-    if not user or not verify_password(body.password, user["password_hash"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    token = create_access_token(user["id"], user["email"], user["role"], user.get("company_id"))
-    set_auth_cookie(response, token)
-    return UserPublic(**await _user_with_company(user))
-
-
-@api.post("/auth/logout")
-async def logout(response: Response):
-    response.delete_cookie("access_token", path="/")
-    return {"ok": True}
-
-
-@api.get("/auth/me", response_model=UserPublic)
-async def me(user: dict = Depends(get_current_user)):
-    return UserPublic(**await _user_with_company(user))
-
-
-# ---------- Company Signup ----------
-def _slugify(s: str) -> str:
-    out = "".join(c.lower() if c.isalnum() else "-" for c in s).strip("-")
-    while "--" in out:
-        out = out.replace("--", "-")
-    return out or "company"
-
-
-@api.post("/companies/signup", response_model=UserPublic)
-async def company_signup(body: CompanySignupBody, response: Response):
-    email = body.admin_email.lower()
-    if await db.users.find_one({"email": email}):
-        raise HTTPException(400, "Email already registered")
-    base_slug = _slugify(body.company_name)
-    slug = base_slug
-    n = 1
-    while await db.companies.find_one({"slug": slug}):
-        n += 1
-        slug = f"{base_slug}-{n}"
-    company = Company(
-        name=body.company_name,
-        slug=slug,
-        logo_url=body.logo_url or "",
-        contact_email=email,
-        contact_phone=body.contact_phone or "",
-    )
-    user_id = str(uuid.uuid4())
-    company.owner_user_id = user_id
-    await db.companies.insert_one(company.model_dump())
-    user_doc = {
-        "id": user_id,
-        "email": email,
-        "name": body.admin_name,
-        "role": "company_admin",
-        "company_id": company.id,
-        "password_hash": hash_password(body.admin_password),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    await db.users.insert_one(user_doc)
-    token = create_access_token(user_id, email, "company_admin", company.id)
-    set_auth_cookie(response, token)
-    return UserPublic(**await _user_with_company(user_doc))
-
-
-@api.get("/companies/me")
-async def get_my_company(user: dict = Depends(require_company_admin)):
-    if not user.get("company_id"):
-        raise HTTPException(404, "No company")
-    c = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-    if not c:
-        raise HTTPException(404, "Company not found")
-    return c
-
-
-@api.patch("/companies/me")
-async def update_my_company(body: dict, user: dict = Depends(require_company_admin)):
-    body.pop("id", None)
-    body.pop("slug", None)
-    body.pop("owner_user_id", None)
-    await db.companies.update_one({"id": user["company_id"]}, {"$set": body})
-    return await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
-
-
-@api.get("/companies")
-async def list_companies(_: dict = Depends(require_platform_admin)):
-    return await db.companies.find({}, {"_id": 0}).sort("created_at", -1).to_list(500)
-
+# ---------- Auth / Company / Password reset routes are wired via routes/auth.py at bottom ----------
 
 # ---------- Helper for sport-specific default scores ----------
 def default_score(sport: str) -> dict:
@@ -821,168 +711,7 @@ def default_score(sport: str) -> dict:
     return {"team_a": {"score": 0}, "team_b": {"score": 0}}
 
 
-# ---------- Events ----------
-@api.get("/events", response_model=List[Event])
-async def list_events(
-    company_id: Optional[str] = None,
-    scope: Optional[str] = None,
-    user: Optional[dict] = Depends(get_current_user_optional),
-):
-    q: dict = {}
-    if company_id:
-        q["company_id"] = company_id
-    if scope == "mine" and user and user.get("role") == "company_admin":
-        cid = user.get("company_id")
-        if cid:
-            q = {"$or": [{"company_id": cid}, {"companies": cid}]}
-    docs = await db.events.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return [Event(**d) for d in docs]
-
-
-@api.get("/my/teams", response_model=List[Team])
-async def my_teams(user: dict = Depends(require_company_admin)):
-    cid = user.get("company_id")
-    if not cid:
-        return []
-    docs = await db.teams.find({"company_id": cid}, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return [Team(**d) for d in docs]
-
-
-@api.get("/venues/suggest")
-async def venues_suggest(city: Optional[str] = None, q: Optional[str] = None):
-    """Venue picker for event creation — approved venue listings filtered by city / name."""
-    flt: dict = {"approved": True, "active": True, "vendor_type": {"$in": ["ground", "court"]}}
-    if city:
-        flt["city"] = {"$regex": f"^{city}$", "$options": "i"}
-    if q:
-        flt["title"] = {"$regex": q, "$options": "i"}
-    docs = await db.vendor_listings.find(flt, {"_id": 0, "title": 1, "city": 1, "price": 1, "currency": 1, "id": 1, "sports": 1}).limit(40).to_list(40)
-    return docs
-
-
-@api.get("/events/{event_id}", response_model=Event)
-async def get_event(event_id: str):
-    doc = await db.events.find_one({"id": event_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Event not found")
-    return Event(**doc)
-
-
-@api.post("/events", response_model=Event)
-async def create_event(body: EventCreate, user: dict = Depends(require_admin)):
-    payload = body.model_dump()
-    # company_admin events are stamped with their company_id
-    if user.get("role") == "company_admin":
-        payload["company_id"] = user.get("company_id")
-    ev = Event(**payload)
-    await db.events.insert_one(ev.model_dump())
-    return ev
-
-
-@api.patch("/events/{event_id}", response_model=Event)
-async def update_event(event_id: str, body: dict, user: dict = Depends(require_admin)):
-    body.pop("id", None)
-    existing = await db.events.find_one({"id": event_id}, {"_id": 0})
-    if not existing:
-        raise HTTPException(404, "Event not found")
-    if user.get("role") == "company_admin" and existing.get("company_id") != user.get("company_id"):
-        raise HTTPException(403, "Not your event")
-    await db.events.update_one({"id": event_id}, {"$set": body})
-    doc = await db.events.find_one({"id": event_id}, {"_id": 0})
-    return Event(**doc)
-
-
-@api.delete("/events/{event_id}")
-async def delete_event(event_id: str, user: dict = Depends(require_admin)):
-    existing = await db.events.find_one({"id": event_id}, {"_id": 0})
-    if not existing:
-        return {"ok": True}
-    if user.get("role") == "company_admin" and existing.get("company_id") != user.get("company_id"):
-        raise HTTPException(403, "Not your event")
-    await db.events.delete_one({"id": event_id})
-    await db.teams.update_many({"event_id": event_id}, {"$set": {"event_id": None}})
-    await db.fixtures.delete_many({"event_id": event_id})
-    return {"ok": True}
-
-
-# ---------- Teams ----------
-@api.get("/teams", response_model=List[Team])
-async def list_teams(event_id: Optional[str] = None):
-    q = {"event_id": event_id} if event_id else {}
-    docs = await db.teams.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return [Team(**d) for d in docs]
-
-
-@api.get("/teams/{team_id}", response_model=Team)
-async def get_team(team_id: str):
-    doc = await db.teams.find_one({"id": team_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Team not found")
-    return Team(**doc)
-
-
-@api.post("/teams", response_model=Team)
-async def create_team(body: TeamCreate):
-    # Open team registration (any authenticated user can register a team is overkill — allow public for engagement)
-    t = Team(**body.model_dump())
-    await db.teams.insert_one(t.model_dump())
-    return t
-
-
-@api.patch("/teams/{team_id}", response_model=Team)
-async def update_team(team_id: str, body: dict, _: dict = Depends(require_admin)):
-    body.pop("id", None)
-    await db.teams.update_one({"id": team_id}, {"$set": body})
-    doc = await db.teams.find_one({"id": team_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Team not found")
-    return Team(**doc)
-
-
-@api.delete("/teams/{team_id}")
-async def delete_team(team_id: str, _: dict = Depends(require_admin)):
-    await db.teams.delete_one({"id": team_id})
-    await db.players.delete_many({"team_id": team_id})
-    return {"ok": True}
-
-
-# ---------- Players (team roster — legacy, distinct from player accounts) ----------
-@api.get("/team-players", response_model=List[Player])
-async def list_players(team_id: Optional[str] = None):
-    q = {"team_id": team_id} if team_id else {}
-    docs = await db.players.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return [Player(**d) for d in docs]
-
-
-@api.get("/team-players/{player_id}", response_model=Player)
-async def get_player(player_id: str):
-    doc = await db.players.find_one({"id": player_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Player not found")
-    return Player(**doc)
-
-
-@api.post("/team-players", response_model=Player)
-async def create_player(body: PlayerCreate):
-    p = Player(**body.model_dump())
-    await db.players.insert_one(p.model_dump())
-    return p
-
-
-@api.patch("/team-players/{player_id}", response_model=Player)
-async def update_player(player_id: str, body: dict, _: dict = Depends(require_admin)):
-    body.pop("id", None)
-    await db.players.update_one({"id": player_id}, {"$set": body})
-    doc = await db.players.find_one({"id": player_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Player not found")
-    return Player(**doc)
-
-
-@api.delete("/team-players/{player_id}")
-async def delete_player(player_id: str, _: dict = Depends(require_admin)):
-    await db.players.delete_one({"id": player_id})
-    return {"ok": True}
+# ---------- Events / Teams / Team-roster players are wired via routes/events.py at bottom ----------
 
 
 # ---------- Event-scoped team & member management (Phase 1: CricHeroes-style setup chain) ----------
@@ -1252,252 +981,19 @@ async def remove_team_member(event_id: str, team_id: str, player_id: str, user: 
     return {"ok": True}
 
 
-# ---------- Forgot / reset password (all roles) ----------
-@api.post("/players/forgot-password")
-@api.post("/auth/forgot-password")
-async def forgot_password(body: dict):
-    email = ((body or {}).get("email") or "").strip().lower()
-    if not email:
-        raise HTTPException(400, "email required")
-    user = await db.users.find_one({"email": email})
-    # Don't leak whether email exists; respond OK either way
-    if user:
-        import secrets as _secrets
-        token = _secrets.token_urlsafe(32)
-        expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-        await db.password_resets.insert_one({
-            "token": token, "user_id": user["id"], "email": email,
-            "role": user.get("role", ""),
-            "expires_at": expires_at, "used": False,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-        frontend = os.environ.get("FRONTEND_URL", "")
-        reset_url = f"{frontend}/reset-password?token={token}" if frontend else f"/reset-password?token={token}"
-        logger.warning("PASSWORD RESET LINK for %s: %s", email, reset_url)
-    return {"ok": True}
+# ---------- Forgot / reset password routes wired via routes/auth.py ----------
 
-
-@api.post("/players/reset-password")
-@api.post("/auth/reset-password")
-async def reset_password(body: dict):
-    token = ((body or {}).get("token") or "").strip()
-    new_password = (body or {}).get("new_password") or ""
-    if not (token and new_password):
-        raise HTTPException(400, "token and new_password required")
-    if len(new_password) < 6:
-        raise HTTPException(400, "Password must be at least 6 characters")
-    rec = await db.password_resets.find_one({"token": token, "used": False})
-    if not rec:
-        raise HTTPException(400, "Invalid or used token")
-    if rec["expires_at"] < datetime.now(timezone.utc).isoformat():
-        raise HTTPException(400, "Token expired")
-    await db.users.update_one(
-        {"id": rec["user_id"]},
-        {"$set": {"password_hash": hash_password(new_password), "must_reset": False}},
-    )
-    await db.password_resets.update_one({"token": token}, {"$set": {"used": True}})
-    return {"ok": True}
-
-
-# ---------- Fixture generation ----------
-def generate_round_robin(team_ids: List[str], event_id: str) -> List[dict]:
-    teams = list(team_ids)
-    if len(teams) % 2 == 1:
-        teams.append(None)  # bye
-    n = len(teams)
-    fixtures = []
-    half = n // 2
-    arr = teams[:]
-    match_num = 1
-    for r in range(n - 1):
-        for i in range(half):
-            a, b = arr[i], arr[n - 1 - i]
-            if a is not None and b is not None:
-                fixtures.append({
-                    "id": str(uuid.uuid4()),
-                    "event_id": event_id,
-                    "round": r + 1,
-                    "match_number": match_num,
-                    "team_a_id": a,
-                    "team_b_id": b,
-                    "scheduled_at": None,
-                    "venue": "",
-                    "status": "scheduled",
-                    "score": {},
-                    "winner_id": None,
-                    "bracket_position": None,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                })
-                match_num += 1
-        arr = [arr[0]] + [arr[-1]] + arr[1:-1]
-    return fixtures
-
-
-def generate_knockout(team_ids: List[str], event_id: str) -> List[dict]:
-    teams = list(team_ids)
-    random.shuffle(teams)
-    # next power of 2
-    n = 1
-    while n < len(teams):
-        n *= 2
-    while len(teams) < n:
-        teams.append(None)  # bye
-    fixtures = []
-    match_num = 1
-
-    # Round 1
-    current_round_winners_slots = []
-    for i in range(0, n, 2):
-        a, b = teams[i], teams[i + 1]
-        f_id = str(uuid.uuid4())
-        fixtures.append({
-            "id": f_id,
-            "event_id": event_id,
-            "round": 1,
-            "match_number": match_num,
-            "team_a_id": a,
-            "team_b_id": b,
-            "scheduled_at": None,
-            "venue": "",
-            "status": "scheduled",
-            "score": {},
-            "winner_id": None,
-            "bracket_position": f"R1-M{match_num}",
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
-        current_round_winners_slots.append(f_id)
-        match_num += 1
-
-    # subsequent rounds (empty slots)
-    rnd = 2
-    prev = current_round_winners_slots
-    while len(prev) > 1:
-        new_slots = []
-        for i in range(0, len(prev), 2):
-            f_id = str(uuid.uuid4())
-            fixtures.append({
-                "id": f_id,
-                "event_id": event_id,
-                "round": rnd,
-                "match_number": match_num,
-                "team_a_id": None,
-                "team_b_id": None,
-                "scheduled_at": None,
-                "venue": "",
-                "status": "scheduled",
-                "score": {},
-                "winner_id": None,
-                "bracket_position": f"R{rnd}-M{match_num}",
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            })
-            new_slots.append(f_id)
-            match_num += 1
-        prev = new_slots
-        rnd += 1
-    return fixtures
-
-
-@api.post("/events/{event_id}/generate-fixtures")
-async def generate_fixtures_endpoint(event_id: str, _: dict = Depends(require_admin)):
-    ev = await db.events.find_one({"id": event_id}, {"_id": 0})
-    if not ev:
-        raise HTTPException(404, "Event not found")
-    teams = await db.teams.find({"event_id": event_id}, {"_id": 0, "id": 1}).to_list(500)
-    team_ids = [t["id"] for t in teams]
-    if len(team_ids) < 2:
-        raise HTTPException(400, "Need at least 2 teams to generate fixtures")
-    await db.fixtures.delete_many({"event_id": event_id})
-    if ev["format"] == "knockout":
-        fixtures = generate_knockout(team_ids, event_id)
-    else:
-        fixtures = generate_round_robin(team_ids, event_id)
-    if fixtures:
-        await db.fixtures.insert_many(fixtures)
-    return {"ok": True, "count": len(fixtures)}
-
-
-@api.get("/events/{event_id}/fixtures", response_model=List[Fixture])
-async def list_fixtures(event_id: str):
-    docs = await db.fixtures.find({"event_id": event_id}, {"_id": 0}).sort([("round", 1), ("match_number", 1)]).to_list(1000)
-    return [Fixture(**d) for d in docs]
-
-
-@api.get("/fixtures/{fixture_id}", response_model=Fixture)
-async def get_fixture(fixture_id: str):
-    doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Fixture not found")
-    return Fixture(**doc)
-
-
-# ---------- Public live scorecard (no auth) ----------
-@api.get("/public/fixtures/{fixture_id}")
-async def public_live_scorecard(fixture_id: str):
-    """No-auth, shareable live scoreboard payload. Returns the fixture, parent event,
-    both team summaries, and the current score blob. Safe for anonymous viewers."""
-    fx = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
-    if not fx:
-        raise HTTPException(404, "Fixture not found")
-    event = await db.events.find_one({"id": fx["event_id"]}, {"_id": 0}) or {}
-    team_ids = [tid for tid in (fx.get("team_a_id"), fx.get("team_b_id")) if tid]
-    teams = {}
-    if team_ids:
-        async for t in db.teams.find({"id": {"$in": team_ids}}, {"_id": 0}):
-            teams[t["id"]] = {
-                "id": t["id"],
-                "name": t.get("name"),
-                "short_name": t.get("short_name"),
-                "color": t.get("color"),
-                "logo_url": t.get("logo_url"),
-            }
-    # Strip private fields from event
-    pub_event = {
-        "id": event.get("id"),
-        "name": event.get("name"),
-        "sport": event.get("sport"),
-        "format": event.get("format"),
-        "location": event.get("location"),
-        "company_id": event.get("company_id"),
-    }
-    return {
-        "fixture": fx,
-        "event": pub_event,
-        "teams": teams,
-    }
-
-
-@api.patch("/fixtures/{fixture_id}", response_model=Fixture)
-async def update_fixture_score(fixture_id: str, body: ScoreUpdate, _: dict = Depends(require_admin)):
-    upd = {"score": body.score}
-    if body.status:
-        upd["status"] = body.status
-    if body.winner_id:
-        upd["winner_id"] = body.winner_id
-    await db.fixtures.update_one({"id": fixture_id}, {"$set": upd})
-    doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Fixture not found")
-    # propagate winner in knockout
-    if body.winner_id and doc.get("bracket_position"):
-        await propagate_knockout_winner(doc)
-        doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
-    # Broadcast over WebSocket
-    await ws_manager.broadcast({"type": "fixture_update", "event_id": doc["event_id"], "fixture": doc})
-    return Fixture(**doc)
-
-
+# ---------- Fixture generation, scoring and WebSocket are wired via routes/fixtures.py ----------
 async def propagate_knockout_winner(fixture: dict):
+    """Shared knockout winner propagation — used by routes/fixtures.py and routes/cricket.py."""
     event_id = fixture["event_id"]
     rnd = fixture["round"]
-    # find next round fixture that should receive this winner
     next_round = rnd + 1
     next_fixtures = await db.fixtures.find(
         {"event_id": event_id, "round": next_round}, {"_id": 0}
     ).sort("match_number", 1).to_list(500)
     if not next_fixtures:
         return
-    # round 1 has matches 1..N, round 2 gets pair (1,2)->slot 1, (3,4)->slot 2
-    # find position in current round
     current_round_fixtures = await db.fixtures.find(
         {"event_id": event_id, "round": rnd}, {"_id": 0}
     ).sort("match_number", 1).to_list(500)
@@ -1508,37 +1004,6 @@ async def propagate_knockout_winner(fixture: dict):
     target = next_fixtures[idx // 2]
     field = "team_a_id" if idx % 2 == 0 else "team_b_id"
     await db.fixtures.update_one({"id": target["id"]}, {"$set": {field: fixture["winner_id"]}})
-
-
-@api.post("/fixtures/{fixture_id}/init-score")
-async def init_score(fixture_id: str, _: dict = Depends(require_admin)):
-    doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Fixture not found")
-    ev = await db.events.find_one({"id": doc["event_id"]}, {"_id": 0})
-    score = default_score(ev["sport"])
-    await db.fixtures.update_one({"id": fixture_id}, {"$set": {"score": score, "status": "live"}})
-    updated = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
-    await ws_manager.broadcast({"type": "fixture_update", "event_id": doc["event_id"], "fixture": updated})
-    return {"ok": True, "score": score}
-
-
-# ---------- WebSocket ----------
-@app.websocket("/api/ws")
-async def websocket_endpoint(ws: WebSocket):
-    await ws_manager.connect(ws)
-    try:
-        # initial hello so clients can verify the channel
-        await ws.send_json({"type": "hello", "ts": datetime.now(timezone.utc).isoformat()})
-        while True:
-            # we don't expect any inbound messages but keep the socket alive
-            msg = await ws.receive_text()
-            if msg == "ping":
-                await ws.send_json({"type": "pong"})
-    except WebSocketDisconnect:
-        ws_manager.disconnect(ws)
-    except Exception:
-        ws_manager.disconnect(ws)
 
 
 # ---------- Standings ----------
@@ -1607,148 +1072,7 @@ async def delete_sponsor(sponsor_id: str, _: dict = Depends(require_admin)):
     return {"ok": True}
 
 
-# ---------- Services (catalog) ----------
-@api.get("/services", response_model=List[Service])
-async def list_services(category: Optional[str] = None, include_inactive: bool = False):
-    q = {}
-    if category:
-        q["category"] = category
-    if not include_inactive:
-        q["active"] = True
-    docs = await db.services.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
-    return [Service(**d) for d in docs]
-
-
-@api.get("/services/{service_id}", response_model=Service)
-async def get_service(service_id: str):
-    doc = await db.services.find_one({"id": service_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Service not found")
-    return Service(**doc)
-
-
-@api.post("/services", response_model=Service)
-async def create_service(body: ServiceCreate, _: dict = Depends(require_super_admin)):
-    s = Service(**body.model_dump())
-    await db.services.insert_one(s.model_dump())
-    return s
-
-
-@api.patch("/services/{service_id}", response_model=Service)
-async def update_service(service_id: str, body: dict, _: dict = Depends(require_super_admin)):
-    body.pop("id", None)
-    await db.services.update_one({"id": service_id}, {"$set": body})
-    doc = await db.services.find_one({"id": service_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Service not found")
-    return Service(**doc)
-
-
-@api.delete("/services/{service_id}")
-async def delete_service(service_id: str, _: dict = Depends(require_super_admin)):
-    await db.services.delete_one({"id": service_id})
-    return {"ok": True}
-
-
-# ---------- Bookings ----------
-@api.get("/bookings", response_model=List[Booking])
-async def list_bookings(user: dict = Depends(get_current_user)):
-    if user.get("role") in ("platform_admin", "admin"):
-        q = {}
-    elif user.get("role") == "company_admin":
-        q = {"company_id": user.get("company_id")}
-    else:
-        raise HTTPException(403, "Forbidden")
-    docs = await db.bookings.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
-    return [Booking(**d) for d in docs]
-
-
-@api.get("/bookings/{booking_id}", response_model=Booking)
-async def get_booking(booking_id: str, user: dict = Depends(get_current_user)):
-    doc = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Booking not found")
-    if user.get("role") == "company_admin" and doc["company_id"] != user.get("company_id"):
-        raise HTTPException(403, "Forbidden")
-    return Booking(**doc)
-
-
-@api.post("/bookings", response_model=Booking)
-async def create_booking(body: BookingCreate, user: dict = Depends(require_company_admin)):
-    svc = await db.services.find_one({"id": body.service_id}, {"_id": 0})
-    if not svc:
-        raise HTTPException(404, "Service not found")
-    company = await db.companies.find_one({"id": user.get("company_id")}, {"_id": 0})
-    if not company:
-        raise HTTPException(400, "Company missing")
-
-    variant_price = 0.0
-    variant_name = None
-    if body.variant_id:
-        v = next((v for v in svc.get("variants", []) if v["id"] == body.variant_id), None)
-        if v:
-            variant_price = float(v.get("extra_price", 0))
-            variant_name = v.get("name")
-
-    qty = max(1, int(body.quantity or 1))
-    base_price = float(svc.get("base_price", 0))
-    total = (base_price + variant_price) * qty
-
-    booking = Booking(
-        company_id=user["company_id"],
-        company_name=company.get("name", ""),
-        service_id=svc["id"],
-        service_name=svc["name"],
-        event_id=body.event_id,
-        quantity=qty,
-        config=body.config or {},
-        variant_id=body.variant_id,
-        variant_name=variant_name,
-        custom_text=body.custom_text or "",
-        notes=body.notes or "",
-        base_price=base_price,
-        variant_price=variant_price,
-        total_price=total,
-        currency=svc.get("currency", "USD"),
-        status="pending",
-        created_by=user["id"],
-    )
-    await db.bookings.insert_one(booking.model_dump())
-    return booking
-
-
-@api.patch("/bookings/{booking_id}", response_model=Booking)
-async def update_booking(booking_id: str, body: dict, user: dict = Depends(get_current_user)):
-    doc = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Booking not found")
-    is_platform = user.get("role") in ("platform_admin", "admin")
-    is_owner = user.get("role") == "company_admin" and doc["company_id"] == user.get("company_id")
-    if not (is_platform or is_owner):
-        raise HTTPException(403, "Forbidden")
-    # company admin can only update non-platform fields & while pending
-    if is_owner and not is_platform and doc.get("status") != "pending":
-        raise HTTPException(400, "Booking already processed")
-    if not is_platform:
-        body.pop("status", None)
-    body.pop("id", None)
-    body.pop("company_id", None)
-    body.pop("total_price", None)
-    await db.bookings.update_one({"id": booking_id}, {"$set": body})
-    updated = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
-    return Booking(**updated)
-
-
-@api.delete("/bookings/{booking_id}")
-async def delete_booking(booking_id: str, user: dict = Depends(get_current_user)):
-    doc = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
-    if not doc:
-        return {"ok": True}
-    if user.get("role") not in ("platform_admin", "admin"):
-        if user.get("role") != "company_admin" or doc["company_id"] != user.get("company_id"):
-            raise HTTPException(403, "Forbidden")
-    await db.bookings.delete_one({"id": booking_id})
-    return {"ok": True}
+# ---------- Services catalog + classic Bookings are wired via routes/bookings.py at bottom ----------
 
 
 # ---------- Player accounts (mobile + password) ----------
@@ -1867,56 +1191,7 @@ async def get_player_profile(profile_id: str, user: dict = Depends(get_current_u
     return doc
 
 
-# ---------- Vendors ----------
-@api.post("/vendors/signup", response_model=UserPublic)
-async def vendor_signup(body: VendorSignupBody, response: Response):
-    email = body.email.lower()
-    if await db.users.find_one({"email": email}):
-        raise HTTPException(400, "Email already in use")
-    user_id = str(uuid.uuid4())
-    await db.users.insert_one({
-        "id": user_id, "email": email, "name": body.contact_name, "role": "vendor",
-        "company_id": None, "mobile": body.mobile,
-        "password_hash": hash_password(body.password),
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-    vendor = Vendor(
-        user_id=user_id, business_name=body.business_name, vendor_type=body.vendor_type,
-        contact_name=body.contact_name, mobile=body.mobile, email=email, city=body.city,
-    )
-    await db.vendors.insert_one(vendor.model_dump())
-    token = create_access_token(user_id, email, "vendor", None)
-    set_auth_cookie(response, token)
-    return UserPublic(id=user_id, email=email, name=body.contact_name, role="vendor",
-                      company_id=None, company_name=None)
-
-
-@api.get("/vendors/me")
-async def get_my_vendor(user: dict = Depends(get_current_user)):
-    if user.get("role") != "vendor":
-        raise HTTPException(403, "Vendor only")
-    doc = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
-    if not doc:
-        raise HTTPException(404, "Vendor not found")
-    return doc
-
-
-@api.get("/vendors")
-async def list_vendors(approved: Optional[bool] = None, _: dict = Depends(require_platform_admin)):
-    flt = {}
-    if approved is not None:
-        flt["approved"] = approved
-    return await db.vendors.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
-
-
-@api.patch("/vendors/{vendor_id}/approve")
-async def approve_vendor(vendor_id: str, body: dict, _: dict = Depends(require_permission("manage_vendors"))):
-    approved = bool(body.get("approved", True))
-    await db.vendors.update_one({"id": vendor_id}, {"$set": {"approved": approved}})
-    return {"ok": True, "approved": approved}
-
-
-# ---------- Admin Detail Views: Vendor / Company / Player drilldowns ----------
+# ---------- Vendors / Vendor Listings are wired via routes/vendors.py at bottom ----------
 @api.get("/admin/vendors/{vendor_id}/detail")
 async def admin_vendor_detail(vendor_id: str, _: dict = Depends(require_platform_admin)):
     vendor = await db.vendors.find_one({"id": vendor_id}, {"_id": 0})
@@ -1980,128 +1255,7 @@ async def admin_player_detail(player_id: str, _: dict = Depends(require_platform
     }
 
 
-@api.get("/vendor-listings")
-async def list_public_listings(
-    vendor_type: Optional[str] = None,
-    city: Optional[str] = None,
-    sport: Optional[str] = None,
-):
-    flt = {"approved": True, "active": True}
-    if vendor_type:
-        flt["vendor_type"] = vendor_type
-    if city:
-        flt["city"] = {"$regex": f"^{city}$", "$options": "i"}
-    if sport:
-        flt["sports"] = sport
-    docs = await db.vendor_listings.find(flt, {"_id": 0, "vendor_id": 0}).sort("created_at", -1).to_list(500)
-    # Attach review summary + verified badge in one aggregation pass
-    listing_ids = [L["id"] for L in docs]
-    summaries = {}
-    if listing_ids:
-        async for s in db.reviews.aggregate([
-            {"$match": {"listing_id": {"$in": listing_ids}, "status": "visible"}},
-            {"$group": {"_id": "$listing_id", "avg": {"$avg": "$rating"}, "count": {"$sum": 1}}},
-        ]):
-            summaries[s["_id"]] = {"average": round(s["avg"] or 0, 2), "count": s["count"] or 0}
-    for L in docs:
-        s = summaries.get(L["id"], {"average": 0, "count": 0})
-        L["rating_average"] = s["average"]
-        L["rating_count"] = s["count"]
-        # Verified: ≥5 published reviews AND ≥4.0 average
-        L["verified"] = s["count"] >= 5 and s["average"] >= 4.0
-    return docs
-
-
-@api.get("/vendor-listings/cities")
-async def list_listing_cities(sport: Optional[str] = None, vendor_type: Optional[str] = None):
-    """Distinct cities for HR's location picker."""
-    flt = {"approved": True, "active": True}
-    if vendor_type:
-        flt["vendor_type"] = vendor_type
-    if sport:
-        flt["sports"] = sport
-    cities = await db.vendor_listings.distinct("city", flt)
-    return sorted([c for c in cities if c])
-
-
-@api.get("/vendor-listings/{listing_id}")
-async def get_public_listing(listing_id: str):
-    doc = await db.vendor_listings.find_one({"id": listing_id, "approved": True, "active": True}, {"_id": 0, "vendor_id": 0})
-    if not doc:
-        raise HTTPException(404, "Listing not available")
-    return doc
-
-
-@api.get("/vendors/me/listings")
-async def vendor_my_listings(user: dict = Depends(get_current_user)):
-    if user.get("role") != "vendor":
-        raise HTTPException(403, "Vendor only")
-    vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
-    if not vendor:
-        raise HTTPException(404, "Vendor not registered")
-    return await db.vendor_listings.find({"vendor_id": vendor["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
-
-
-@api.post("/vendors/me/listings", response_model=VendorListing)
-async def create_listing(body: VendorListingCreate, user: dict = Depends(get_current_user)):
-    if user.get("role") != "vendor":
-        raise HTTPException(403, "Vendor only")
-    vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
-    if not vendor:
-        raise HTTPException(404, "Vendor not registered")
-    payload = body.model_dump()
-    # Use body.vendor_type when provided, else fall back to vendor's primary registered type
-    listing_type = payload.pop("vendor_type", None) or vendor["vendor_type"]
-    listing = VendorListing(
-        vendor_id=vendor["id"], vendor_type=listing_type,
-        **payload, approved=False,
-    )
-    await db.vendor_listings.insert_one(listing.model_dump())
-    return listing
-
-
-@api.patch("/vendors/me/listings/{listing_id}")
-async def update_vendor_listing(listing_id: str, body: dict, user: dict = Depends(get_current_user)):
-    if user.get("role") != "vendor":
-        raise HTTPException(403, "Vendor only")
-    vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
-    listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
-    if not vendor or not listing or listing["vendor_id"] != vendor["id"]:
-        raise HTTPException(404, "Not found")
-    body.pop("id", None)
-    body.pop("vendor_id", None)
-    body.pop("approved", None)
-    # Changing vendor_type requires re-approval
-    if body.get("vendor_type") and body["vendor_type"] != listing.get("vendor_type"):
-        body["approved"] = False
-    await db.vendor_listings.update_one({"id": listing_id}, {"$set": body})
-    return await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
-
-
-@api.delete("/vendors/me/listings/{listing_id}")
-async def delete_vendor_listing(listing_id: str, user: dict = Depends(get_current_user)):
-    if user.get("role") != "vendor":
-        raise HTTPException(403, "Vendor only")
-    vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
-    listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
-    if vendor and listing and listing["vendor_id"] == vendor["id"]:
-        await db.vendor_listings.delete_one({"id": listing_id})
-    return {"ok": True}
-
-
-@api.get("/admin/listings")
-async def admin_list_listings(approved: Optional[bool] = None, _: dict = Depends(require_platform_admin)):
-    flt = {}
-    if approved is not None:
-        flt["approved"] = approved
-    return await db.vendor_listings.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
-
-
-@api.patch("/admin/listings/{listing_id}/approve")
-async def approve_listing(listing_id: str, body: dict, _: dict = Depends(require_permission("manage_listings"))):
-    approved = bool(body.get("approved", True))
-    await db.vendor_listings.update_one({"id": listing_id}, {"$set": {"approved": approved}})
-    return {"ok": True, "approved": approved}
+# ---------- Vendor listings + admin approval are wired via routes/vendors.py ----------
 
 
 # ---------- Vendor bookings ----------
@@ -2921,7 +2075,8 @@ async def seed_demo_data():
             await db.players.insert_one(p.model_dump())
 
     # Generate round robin fixtures
-    fixtures = generate_round_robin(team_ids, ev.id)
+    from routes.fixtures import generate_round_robin as _gen_rr
+    fixtures = _gen_rr(team_ids, ev.id)
     # mark a few completed and one live
     if fixtures:
         fixtures[0]["status"] = "completed"
@@ -3657,6 +2812,82 @@ cricket_routes.register(api, db, ws_manager, require_admin, propagate_knockout_w
 # Site settings / About / Contact (extracted into routes/settings.py)
 from routes import settings as settings_routes  # noqa: E402
 settings_routes.register(api, db, SiteSettings, require_platform_admin)
+
+# Auth / Company signup / Password reset (extracted into routes/auth.py)
+from routes import auth as auth_routes  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+
+auth_routes.register(api, db, SimpleNamespace(
+    UserPublic=UserPublic,
+    RegisterBody=RegisterBody,
+    LoginBody=LoginBody,
+    CompanySignupBody=CompanySignupBody,
+    Company=Company,
+    hash_password=hash_password,
+    verify_password=verify_password,
+    create_access_token=create_access_token,
+    set_auth_cookie=set_auth_cookie,
+    get_current_user=get_current_user,
+    require_company_admin=require_company_admin,
+    require_platform_admin=require_platform_admin,
+    _user_with_company=_user_with_company,
+))
+
+# Events / Teams / Team-roster players (extracted into routes/events.py)
+from routes import events as events_routes  # noqa: E402
+
+events_routes.register(api, db, SimpleNamespace(
+    Event=Event,
+    EventCreate=EventCreate,
+    Team=Team,
+    TeamCreate=TeamCreate,
+    Player=Player,
+    PlayerCreate=PlayerCreate,
+    get_current_user_optional=get_current_user_optional,
+    require_admin=require_admin,
+    require_company_admin=require_company_admin,
+))
+
+# Fixtures + WebSocket (extracted into routes/fixtures.py)
+from routes import fixtures as fixtures_routes  # noqa: E402
+
+fixtures_routes.register(api, app, db, ws_manager, SimpleNamespace(
+    Fixture=Fixture,
+    ScoreUpdate=ScoreUpdate,
+    require_admin=require_admin,
+    default_score=default_score,
+    propagate_knockout_winner=propagate_knockout_winner,
+))
+
+# Vendors + Vendor Listings (extracted into routes/vendors.py)
+from routes import vendors as vendors_routes  # noqa: E402
+
+vendors_routes.register(api, db, SimpleNamespace(
+    UserPublic=UserPublic,
+    VendorSignupBody=VendorSignupBody,
+    Vendor=Vendor,
+    VendorListing=VendorListing,
+    VendorListingCreate=VendorListingCreate,
+    hash_password=hash_password,
+    create_access_token=create_access_token,
+    set_auth_cookie=set_auth_cookie,
+    get_current_user=get_current_user,
+    require_platform_admin=require_platform_admin,
+    require_permission=require_permission,
+))
+
+# Services catalog + classic Bookings (extracted into routes/bookings.py)
+from routes import bookings as bookings_routes  # noqa: E402
+
+bookings_routes.register(api, db, SimpleNamespace(
+    Service=Service,
+    ServiceCreate=ServiceCreate,
+    Booking=Booking,
+    BookingCreate=BookingCreate,
+    get_current_user=get_current_user,
+    require_company_admin=require_company_admin,
+    require_super_admin=require_super_admin,
+))
 
 
 # Register router + static mount AFTER all @api.x definitions above

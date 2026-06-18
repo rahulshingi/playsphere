@@ -149,6 +149,12 @@ function EventCompaniesSection({ event, companies, reload, setCreds }) {
     reload();
   };
 
+  // Memoized: pool of companies the event hasn't already onboarded
+  const pickableCompanies = useMemo(
+    () => allCompanies.filter((c) => !companies.find((x) => x.id === c.id)),
+    [allCompanies, companies]
+  );
+
   return (
     <div data-testid="event-companies" className="border border-white/10 rounded-sm bg-[#141414] p-5">
       <div className="flex items-center gap-2 mb-4">
@@ -173,7 +179,7 @@ function EventCompaniesSection({ event, companies, reload, setCreds }) {
           <Select value={pickedId} onValueChange={setPickedId}>
             <SelectTrigger data-testid="ec-pick-company" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Pick a registered company" /></SelectTrigger>
             <SelectContent className="bg-[#141414] text-white border-white/10">
-              {allCompanies.filter((c) => !companies.find((x) => x.id === c.id)).map((c) => (
+              {pickableCompanies.map((c) => (
                 <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
               ))}
             </SelectContent>

@@ -117,7 +117,7 @@ export default function RegisterTeam() {
             )}
             <div className="space-y-2">
               {players.map((p, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2">
+                <div key={`player-slot-${i}`} className="grid grid-cols-12 gap-2">
                   <Input data-testid={`rt-player-name-${i}`} placeholder="Name" value={p.name} onChange={(e) => updatePlayer(i, "name", e.target.value)} className="col-span-6 bg-[#141414] border-white/10 text-white" />
                   <Input data-testid={`rt-player-role-${i}`} placeholder="Role" value={p.role} onChange={(e) => updatePlayer(i, "role", e.target.value)} className="col-span-4 bg-[#141414] border-white/10 text-white" />
                   <Input data-testid={`rt-player-jersey-${i}`} placeholder="#" value={p.jersey} onChange={(e) => updatePlayer(i, "jersey", e.target.value)} className="col-span-2 bg-[#141414] border-white/10 text-white" />

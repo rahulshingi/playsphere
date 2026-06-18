@@ -164,6 +164,22 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **About.jsx** — content now uses `whitespace-pre-line` (preserves admin-entered newlines), occupies full container width, legacy `<br>` literals normalised to real line breaks, bio text in PeopleGrid also wrapped.
 - **Admin editor** — About page editor (`PlatformAdmin.jsx`) shows a hint about Enter key for line breaks, larger textareas (rows 4–6) for better authoring.
 
+## Implemented (Feb 18, 2026 — Iteration 15) Performance pass + array-index keys
+- **`useMemo` for expensive renders** (3 hotspots flagged by code review):
+  - `CricketScorer.jsx::LivePanel` — `availableBatsmen` (filter + filter), `availableBowlers` (filter), `extrasTotal` (reduce). Now recompute only when their actual deps change instead of every render of the scorer.
+  - `EventTeamsManager.jsx::EventCompanies` — `pickableCompanies` (filter + find) memoized on `[allCompanies, companies]`.
+- **Array-index keys replaced with composite keys** (5 spots):
+  - `VendorDashboard.jsx` images — `${img || "empty"}-${i}`
+  - `RegisterTeam.jsx` players — `player-slot-${i}` (fixed-size form, index is stable here)
+  - `PlatformAdmin.jsx` fields / variants / people editors — `${kind}-${name || "new"}-${i}`
+  These prevent state-bleed between rows on add/delete in the absence of a UID-schema migration.
+- **Verified false positives** from the dev-tool code review (logged for future):
+  - "Undefined variable" — ruff lint across the entire backend reports 0 issues.
+  - "60 `is` vs `==`" — AST scan reports 0 real cases. All `is`/`is not` uses are vs `None`/`True`/`False` (PEP-8 compliant).
+  - "69 missing hook deps" — ESLint `react-hooks/exhaustive-deps` reports 0 issues on the 3 cited files. The dev-tool flags external imports (`api`, `encodeURIComponent`) as "missing deps", which is not the official React rule.
+  - "Remove `console` from `devLog.js`" — that's exactly the file's job; calls are already gated behind `if (process.env.NODE_ENV !== "production")`.
+- **No behavior change** — frontend home page screenshot smoke-tested OK; 29 fast cricket tests pass.
+
 ## Implemented (Feb 18, 2026 — Iteration 14) Cricket module decomposition
 - **Extracted 6 pure helpers** at module level in `routes/cricket.py`:
   - `_compute_ball_delta(extra, runs)` — pure scoring math (returns legal/bat_runs/team_runs/bowler_runs/extras_inc/swap_strike)

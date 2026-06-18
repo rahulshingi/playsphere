@@ -354,10 +354,26 @@ function LivePanel({ score, fixture, teamMap, busy, callApi }) {
 
   const xi = battingTeam?.id === fixture.team_a_id ? score.playing_xi?.team_a : score.playing_xi?.team_b;
   const bowlingXI = battingTeam?.id === fixture.team_a_id ? score.playing_xi?.team_b : score.playing_xi?.team_a;
-  const availableBatsmen = (xi || []).filter((p) => {
-    const rec = (inn.batsmen || []).find((b) => b.player_id === p.player_id);
-    return !rec || !rec.out;
-  }).filter((p) => p.player_id !== inn.striker_id && p.player_id !== inn.non_striker_id);
+
+  // Memoized: only recompute when batsmen list or striker/non-striker IDs change
+  const availableBatsmen = useMemo(() => (
+    (xi || [])
+      .filter((p) => {
+        const rec = (inn.batsmen || []).find((b) => b.player_id === p.player_id);
+        return !rec || !rec.out;
+      })
+      .filter((p) => p.player_id !== inn.striker_id && p.player_id !== inn.non_striker_id)
+  ), [xi, inn.batsmen, inn.striker_id, inn.non_striker_id]);
+
+  // Memoized: only recompute when the bowlers / current bowler changes
+  const availableBowlers = useMemo(() => (
+    (bowlingXI || []).filter((p) => p.player_id !== inn.current_bowler_id)
+  ), [bowlingXI, inn.current_bowler_id]);
+
+  // Memoized: extras total — only recompute when the extras dict changes
+  const extrasTotal = useMemo(() => (
+    Object.values(inn.extras || {}).reduce((a, b) => a + b, 0)
+  ), [inn.extras]);
 
   const [newBatter, setNewBatter] = useState("");
   const [newBowler, setNewBowler] = useState("");
@@ -416,7 +432,7 @@ function LivePanel({ score, fixture, teamMap, busy, callApi }) {
           <div className="text-right">
             <div className="font-mono text-[10px] uppercase text-neutral-500">Bowling</div>
             <div className="text-base font-semibold">{bowlingTeam?.name}</div>
-            <div className="text-xs font-mono text-neutral-500 mt-1">Extras: {Object.values(inn.extras || {}).reduce((a, b) => a + b, 0)}</div>
+            <div className="text-xs font-mono text-neutral-500 mt-1">Extras: {extrasTotal}</div>
           </div>
         </div>
       </div>
@@ -476,7 +492,7 @@ function LivePanel({ score, fixture, teamMap, busy, callApi }) {
             <Select value={newBowler} onValueChange={setNewBowler}>
               <SelectTrigger data-testid="new-bowler-select" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Select bowler" /></SelectTrigger>
               <SelectContent className="bg-[#141414] text-white border-white/10">
-                {(bowlingXI || []).filter((p) => p.player_id !== inn.current_bowler_id).map((p) => (
+                {availableBowlers.map((p) => (
                   <SelectItem key={p.player_id} value={p.player_id}>{p.name}</SelectItem>
                 ))}
               </SelectContent>

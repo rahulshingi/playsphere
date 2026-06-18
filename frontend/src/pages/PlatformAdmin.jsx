@@ -457,7 +457,7 @@ function ServiceEditor({ service, setService, onSave, onClose }) {
           </div>
           <div className="space-y-2 mt-3">
             {(service.config_fields || []).map((f, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center">
+              <div key={`field-${f.key || "new"}-${i}`} className="grid grid-cols-12 gap-2 items-center">
                 <Input placeholder="key" value={f.key} onChange={(e) => updField(i, { key: e.target.value })} className="col-span-3 bg-black/40 border-white/10 text-white" />
                 <Input placeholder="Label" value={f.label} onChange={(e) => updField(i, { label: e.target.value })} className="col-span-4 bg-black/40 border-white/10 text-white" />
                 <Select value={f.type} onValueChange={(v) => updField(i, { type: v })}>
@@ -481,7 +481,7 @@ function ServiceEditor({ service, setService, onSave, onClose }) {
           </div>
           <div className="space-y-2 mt-3">
             {(service.variants || []).map((v, i) => (
-              <div key={i} className="grid grid-cols-12 gap-2 items-center">
+              <div key={`variant-${v.name || "new"}-${i}`} className="grid grid-cols-12 gap-2 items-center">
                 <Input placeholder="Name" value={v.name} onChange={(e) => updVariant(i, { name: e.target.value })} className="col-span-3 bg-black/40 border-white/10 text-white" />
                 <Input placeholder="Image URL" value={v.image_url} onChange={(e) => updVariant(i, { image_url: e.target.value })} className="col-span-6 bg-black/40 border-white/10 text-white" />
                 <Input placeholder="±price" type="number" value={v.extra_price} onChange={(e) => updVariant(i, { extra_price: Number(e.target.value) || 0 })} className="col-span-2 bg-black/40 border-white/10 text-white" />
@@ -521,7 +521,7 @@ function PeopleEditor({ label, testid, people, onChange }) {
       </div>
       <div className="space-y-2 mt-2">
         {people.map((p, i) => (
-          <div key={i} className="grid grid-cols-12 gap-2 items-center">
+          <div key={`person-${p.name || "new"}-${i}`} className="grid grid-cols-12 gap-2 items-center">
             <Input data-testid={`${testid}-${i}-name`} placeholder="Name" value={p.name} onChange={(e) => upd(i, { name: e.target.value })} className="col-span-3 bg-black/40 border-white/10 text-white" />
             <Input data-testid={`${testid}-${i}-role`} placeholder="Role" value={p.role} onChange={(e) => upd(i, { role: e.target.value })} className="col-span-3 bg-black/40 border-white/10 text-white" />
             <div className="col-span-4"><ImageUpload value={p.image_url} onChange={(v) => upd(i, { image_url: v })} testid={`${testid}-${i}-image`} placeholder="Image — paste URL or upload" /></div>

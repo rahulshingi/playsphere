@@ -271,7 +271,7 @@ function ListingEditor({ listing, setListing, onSave, onClose }) {
           </div>
           <div className="space-y-2 mt-2">
             {(listing.images || []).map((img, i) => (
-              <div key={i} className="flex gap-2 items-center">
+              <div key={`${img || "empty"}-${i}`} className="flex gap-2 items-center">
                 <div className="flex-1"><ImageUpload value={img} onChange={(v) => updImage(i, v)} testid={`vl-img-${i}`} placeholder="https://… or upload venue photo" /></div>
                 <Button size="sm" variant="ghost" onClick={() => delImage(i)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
               </div>

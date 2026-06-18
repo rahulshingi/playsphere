@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
 import { SPORTS } from "@/lib/sports";
 import { MapPin, BadgeCheck, ChevronRight, Calendar, Clock } from "lucide-react";
+import VerifiedBadge from "@/components/VerifiedBadge";
 
 const VENDOR_TYPE_LABEL = {
   ground: "Grounds", court: "Courts", coach: "Coaches", referee: "Referees",
@@ -181,12 +182,17 @@ export default function VendorMarket() {
                   <div className="h-40 bg-black/40 relative">
                     {l.images?.[0] && <img src={l.images[0]} alt="" className="w-full h-full object-cover" />}
                     <span className="absolute top-2 left-2 text-[10px] font-mono uppercase px-2 py-0.5 rounded-sm bg-black/60 text-white">{l.city}</span>
-                    <span data-testid={`vm-verified-${l.id}`} className="absolute top-2 right-2 inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 rounded-sm bg-[#84CC16] text-black font-semibold shadow-[0_2px_8px_rgba(132,204,22,0.35)]">
-                      <BadgeCheck className="w-3 h-3" /> Verified
-                    </span>
+                    {l.verified && (
+                      <span data-testid={`vm-verified-${l.id}`} className="absolute top-2 right-2 inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest px-2 py-0.5 rounded-sm bg-[#84CC16] text-black font-semibold shadow-[0_2px_8px_rgba(132,204,22,0.35)]">
+                        <BadgeCheck className="w-3 h-3" /> Verified
+                      </span>
+                    )}
                   </div>
                   <div className="p-4">
-                    <div className="font-semibold">{l.title}</div>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="font-semibold">{l.title}</div>
+                      {(l.rating_count ?? 0) > 0 && <VerifiedBadge listing={l} />}
+                    </div>
                     <div className="text-xs text-neutral-400 mt-1 line-clamp-2">{l.description}</div>
                     <div className="flex items-end justify-between mt-3">
                       <div>
@@ -262,7 +268,10 @@ function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
         </div>
         <div className="p-6 space-y-4">
           <div>
-            <div className="font-display text-3xl tracking-wider">{listing.title}</div>
+            <div className="font-display text-3xl tracking-wider flex items-center gap-3 flex-wrap">
+              {listing.title}
+              <VerifiedBadge listing={listing} size="lg" />
+            </div>
             <div className="text-xs font-mono text-neutral-500 uppercase mt-1">{listing.city} · {listing.sports?.join(" · ") || ""}</div>
             <p className="text-sm text-neutral-300 mt-2">{listing.description}</p>
           </div>

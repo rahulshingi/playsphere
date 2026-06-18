@@ -1945,6 +1945,21 @@ async def list_public_listings(
     if sport:
         flt["sports"] = sport
     docs = await db.vendor_listings.find(flt, {"_id": 0, "vendor_id": 0}).sort("created_at", -1).to_list(500)
+    # Attach review summary + verified badge in one aggregation pass
+    listing_ids = [L["id"] for L in docs]
+    summaries = {}
+    if listing_ids:
+        async for s in db.reviews.aggregate([
+            {"$match": {"listing_id": {"$in": listing_ids}, "status": "visible"}},
+            {"$group": {"_id": "$listing_id", "avg": {"$avg": "$rating"}, "count": {"$sum": 1}}},
+        ]):
+            summaries[s["_id"]] = {"average": round(s["avg"] or 0, 2), "count": s["count"] or 0}
+    for L in docs:
+        s = summaries.get(L["id"], {"average": 0, "count": 0})
+        L["rating_average"] = s["average"]
+        L["rating_count"] = s["count"]
+        # Verified: ≥5 published reviews AND ≥4.0 average
+        L["verified"] = s["count"] >= 5 and s["average"] >= 4.0
     return docs
 
 

@@ -1,0 +1,42 @@
+{
+  "summary": "Iteration 12 — Validated multi-admin / RBAC backend + frontend, role-aware Nav guide link, Footer Guides-column removal, About page polish, and 4 role manual PDFs. BACKEND: new /app/backend/tests/test_rbac_admin.py runs 14/14 PASS — covers GET /api/admin/permissions/me (super=True, all perms), /api/auth/me surfaces is_super_admin+permissions, full Staff CRUD (create returns temp_password in invite payload, list, PATCH permissions, DELETE), super admin cannot be deleted nor modified via /api/admin/staff/{id} (both return 400), duplicate email rejected (400), and 403 enforcement: non-super staff blocked from GET/POST /api/admin/staff, DELETE /api/admin/staff/{id}, POST /api/services, PATCH /api/vendors/{id}/approve (no manage_vendors), PATCH /api/admin/listings/{id}/approve (no manage_listings). Granted-perm path verified: staff WITH manage_vendors successfully PATCHes /api/vendors/{id}/approve → 200. Full regression: 246 passed + 3 skipped + 3 PRE-EXISTING failures unrelated to this iteration (backend_test.py::test_stats and test_list_events expect >=3 events but only 2; test_multitenant.py::test_company_stats_scoped expects >=3 but 1 — all are seed-count assertions, not RBAC). FRONTEND: full e2e via Playwright on REACT_APP_BACKEND_URL. Super admin: nav-guide-admin → /manuals/kreeda-nation-platform-admin-manual.pdf ✓; nav-guide-{company,vendor,player} absent ✓; footer manual-{company,player,vendor,admin} all absent ✓; footer text does NOT contain 'Guides' column ✓; /platform-admin shows pa-tab-team ✓ + platform-new-service ✓; SUPER ADMIN red badge on seed admin row ✓. Team tab UI invite flow drove team-new-email + team-new-name + team-new-password + team-new-perm-manage_vendors → 'Create admin' → team-invite-banner rendered with email/temp_password/login URL ('Admin invited' toast shown) ✓; team-admin-* list grew to 2. Staff admin sign-in: pa-tab-team HIDDEN ✓, platform-new-service HIDDEN ✓, Approve/Revoke buttons present on Vendors tab (4 rows) ✓ (since staff was granted manage_vendors). About page: 4 elements use whitespace-pre-line, no literal <br> markup leaks through ✓. All 4 PDFs at /manuals/kreeda-nation-{platform-admin,company,vendor,player}-manual.pdf → 200 ✓. Cleanup of created TEST_ staff admins via DELETE /api/admin/staff/{id} succeeds.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "backend_test.py::TestMeta::test_stats / TestEvents::test_list_events", "issue": "Pre-existing seed-count assertion failures (expects >=3 events but only 2 returned). NOT related to iteration 12 RBAC changes. Tests should be updated to use a per-test seeding fixture rather than relying on global seed count."},
+      {"endpoint": "test_multitenant.py::TestStats::test_company_stats_scoped", "issue": "Pre-existing failure (expects >=3 but 1). Same root cause — relies on stale seed data."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_rbac_admin.py",
+    "/app/test_reports/pytest/iter12_rbac.xml",
+    "/app/test_reports/pytest/iter12_full.xml"
+  ],
+  "action_items": [
+    "NIT (data-testid naming mismatch with PRD): AdminTeam.jsx uses `team-new-email`, `team-new-name`, `team-new-password`, `team-new-perm-{perm}` but the review request listed `team-invite-email`, `team-invite-name`, `team-invite-password`, `team-perm-{perm}`. Functional behavior is correct — invite banner (`team-invite-banner`) and submit (`team-create-admin`) testids match. Either rename the inputs to match the documented contract, or update the PRD/test_credentials.md so future automation uses the actual testids.",
+    "Pre-existing (not iter12 scope): Fix three seed-count test failures in backend_test.py and test_multitenant.py — use isolated fixtures rather than asserting >= 3 against shared seed."
+  ],
+  "critical_code_review_comments": [
+    "server.py L144-167 (good): is_super_admin / has_permission / require_super_admin / require_permission are tightly scoped and consistent — super-admin always wins via early return.",
+    "server.py L2472-2505 (good): POST /api/admin/staff validates duplicate email, password length, AND permission allowlist before insert; returns invite payload with temp_password explicitly flagged as a MOCKED email handoff. Acceptable for current scope.",
+    "server.py L2513-2541: PATCH and DELETE /api/admin/staff/{id} correctly refuse to modify/delete an is_super_admin doc (400) and refuse self-delete — locks down the only escape hatch from the super role.",
+    "server.py L681-682 (minor): `out['permissions'] = list(user.get('permissions') or ALL_PERMISSIONS if user.get('is_super_admin') else user.get('permissions') or [])` — operator precedence here is `(perms or (ALL if super else perms)) or []`. It works in practice because ALL_PERMISSIONS is truthy, but the intent reads ambiguously. Recommend rewriting as an `if user.get('is_super_admin'): ... else: ...` block for clarity.",
+    "AdminTeam.jsx (good): Edit / Save / Delete actions are correctly hidden when `a.is_super_admin` is true; permission checkboxes pre-populate from current array; copy-invite UX present.",
+    "Nav.jsx + lib/guides.js (good): role → PDF mapping is centralised; only one testid (nav-guide-{role}) renders per session — verified zero leak to other roles.",
+    "Footer.jsx (good): Guides column fully removed — no orphaned manual-{role} testids remain in DOM.",
+    "About.jsx (good): `whitespace-pre-line` applied to long text blocks (4 occurrences) and literal <br> sequences are normalised — verified no '<br>' string appears in rendered innerText."
+  ],
+  "updated_files": ["/app/backend/tests/test_rbac_admin.py"],
+  "success_rate": {"backend": "100% on RBAC focus (14/14); 246 passed + 3 skipped + 3 pre-existing seed failures on full suite (no NEW failures)", "frontend": "100% — every assertion in the review request verified end-to-end (super UI, footer, nav guide, About page, PDFs, staff invite via UI, staff login → tab/button gating, perm-gated Approve button visibility)"},
+  "test_credentials": "Super: admin@kreedanation.com / admin123. Staff admins created on the fly via /api/admin/staff and cleaned up after each test (TEST_ prefix).",
+  "seed_data_creation": "Created and deleted ~5 TEST_-prefixed staff admins during pytest + playwright runs. No leftover state — all DELETEs returned 200. No modification to existing seed accounts.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "RBAC + role-aware-guide + footer-cleanup + About-polish + manuals milestone is GREEN. Next testing agents can rely on test_rbac_admin.py for regression. Note: real AdminTeam.jsx input testids are team-new-{email|name|password|perm-<perm>}, NOT team-invite-*. The 3 pre-existing failures in backend_test.py / test_multitenant.py predate this iteration and need a separate fix-up — they are seed-count assertions, not feature bugs. Email integration for staff invites is still MOCKED (temp_password surfaced in API response and in the banner UI for manual hand-off).",
+  "rca of the issue": "N/A — no functional bugs found in this iteration. Only PRD↔code data-testid naming nit (team-new-* vs team-invite-*) and pre-existing seed-count test failures unrelated to RBAC."
+}

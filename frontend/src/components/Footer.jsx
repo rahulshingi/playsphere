@@ -58,18 +58,13 @@ export default function Footer() {
           </ul>
         </div>
         <div>
-          <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Guides</div>
-          <ul className="space-y-2 text-sm">
-            <li><a className="hover:text-[#84CC16]" href="/manuals/kreeda-nation-company-manual.pdf" target="_blank" rel="noopener noreferrer" data-testid="manual-company">Company / HR manual</a></li>
-            <li><a className="hover:text-[#84CC16]" href="/manuals/kreeda-nation-player-manual.pdf" target="_blank" rel="noopener noreferrer" data-testid="manual-player">Player manual</a></li>
-            <li><a className="hover:text-[#84CC16]" href="/manuals/kreeda-nation-vendor-manual.pdf" target="_blank" rel="noopener noreferrer" data-testid="manual-vendor">Vendor manual</a></li>
-            <li><a className="hover:text-[#84CC16]" href="/manuals/kreeda-nation-platform-admin-manual.pdf" target="_blank" rel="noopener noreferrer" data-testid="manual-admin">Platform admin manual</a></li>
-          </ul>
-        </div>
-        <div>
           <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Contact</div>
           <p className="text-sm text-neutral-400" data-testid="footer-contact-email">contact@kreedanation.com</p>
           <p className="text-sm text-neutral-400" data-testid="footer-contact-phone">+91 9923114499</p>
+          <p className="text-xs text-neutral-500 font-mono mt-4">
+            Looking for a manual?<br/>
+            Sign in and your role-specific guide appears in the top nav.
+          </p>
         </div>
       </div>
       <div className="border-t border-white/5 py-5 text-center text-xs text-neutral-500 font-mono">

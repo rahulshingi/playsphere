@@ -129,6 +129,45 @@ async def require_platform_admin(user: dict = Depends(get_current_user)) -> dict
     return user
 
 
+# ---------- Granular admin permissions ----------
+ALL_PERMISSIONS = [
+    "manage_events",
+    "manage_vendors",
+    "manage_listings",
+    "manage_bookings",
+    "manage_reviews",
+    "manage_settings",
+    "manage_companies",
+]
+
+
+def is_super_admin(user: dict) -> bool:
+    return bool(user.get("role") in ("platform_admin", "admin") and user.get("is_super_admin"))
+
+
+def has_permission(user: dict, perm: str) -> bool:
+    if user.get("role") not in ("platform_admin", "admin"):
+        return False
+    if user.get("is_super_admin"):
+        return True
+    return perm in (user.get("permissions") or [])
+
+
+def require_permission(perm: str):
+    """Dependency factory: returns a dep that requires `perm` on the platform admin."""
+    async def _dep(user: dict = Depends(require_platform_admin)) -> dict:
+        if not has_permission(user, perm):
+            raise HTTPException(status_code=403, detail=f"Missing permission: {perm}")
+        return user
+    return _dep
+
+
+async def require_super_admin(user: dict = Depends(require_platform_admin)) -> dict:
+    if not is_super_admin(user):
+        raise HTTPException(status_code=403, detail="Super admin only")
+    return user
+
+
 async def require_company_admin(user: dict = Depends(get_current_user)) -> dict:
     if user.get("role") not in ("company_admin", "platform_admin", "admin"):
         raise HTTPException(status_code=403, detail="Company admin only")
@@ -157,6 +196,8 @@ class UserPublic(BaseModel):
     role: str
     company_id: Optional[str] = None
     company_name: Optional[str] = None
+    is_super_admin: Optional[bool] = False
+    permissions: Optional[List[str]] = None
 
 
 class RegisterBody(BaseModel):
@@ -635,6 +676,10 @@ async def _user_with_company(user: dict) -> dict:
         c = await db.companies.find_one({"id": out["company_id"]}, {"_id": 0, "name": 1})
         if c:
             out["company_name"] = c["name"]
+    # Surface platform-admin RBAC flags for the frontend
+    if user.get("role") in ("platform_admin", "admin"):
+        out["is_super_admin"] = bool(user.get("is_super_admin"))
+        out["permissions"] = list(user.get("permissions") or ALL_PERMISSIONS if user.get("is_super_admin") else user.get("permissions") or [])
     return out
 
 
@@ -1579,14 +1624,14 @@ async def get_service(service_id: str):
 
 
 @api.post("/services", response_model=Service)
-async def create_service(body: ServiceCreate, _: dict = Depends(require_platform_admin)):
+async def create_service(body: ServiceCreate, _: dict = Depends(require_super_admin)):
     s = Service(**body.model_dump())
     await db.services.insert_one(s.model_dump())
     return s
 
 
 @api.patch("/services/{service_id}", response_model=Service)
-async def update_service(service_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+async def update_service(service_id: str, body: dict, _: dict = Depends(require_super_admin)):
     body.pop("id", None)
     await db.services.update_one({"id": service_id}, {"$set": body})
     doc = await db.services.find_one({"id": service_id}, {"_id": 0})
@@ -1596,7 +1641,7 @@ async def update_service(service_id: str, body: dict, _: dict = Depends(require_
 
 
 @api.delete("/services/{service_id}")
-async def delete_service(service_id: str, _: dict = Depends(require_platform_admin)):
+async def delete_service(service_id: str, _: dict = Depends(require_super_admin)):
     await db.services.delete_one({"id": service_id})
     return {"ok": True}
 
@@ -1861,7 +1906,7 @@ async def list_vendors(approved: Optional[bool] = None, _: dict = Depends(requir
 
 
 @api.patch("/vendors/{vendor_id}/approve")
-async def approve_vendor(vendor_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+async def approve_vendor(vendor_id: str, body: dict, _: dict = Depends(require_permission("manage_vendors"))):
     approved = bool(body.get("approved", True))
     await db.vendors.update_one({"id": vendor_id}, {"$set": {"approved": approved}})
     return {"ok": True, "approved": approved}
@@ -2049,7 +2094,7 @@ async def admin_list_listings(approved: Optional[bool] = None, _: dict = Depends
 
 
 @api.patch("/admin/listings/{listing_id}/approve")
-async def approve_listing(listing_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+async def approve_listing(listing_id: str, body: dict, _: dict = Depends(require_permission("manage_listings"))):
     approved = bool(body.get("approved", True))
     await db.vendor_listings.update_one({"id": listing_id}, {"$set": {"approved": approved}})
     return {"ok": True, "approved": approved}
@@ -2348,7 +2393,7 @@ async def vendor_review_response(review_id: str, body: dict, user: dict = Depend
 
 
 @api.post("/admin/reviews/{review_id}/moderate")
-async def admin_moderate_review(review_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+async def admin_moderate_review(review_id: str, body: dict, _: dict = Depends(require_permission("manage_reviews"))):
     """Platform admin final verdict: publish (visible), reject, or override flag."""
     review = await db.reviews.find_one({"id": review_id}, {"_id": 0})
     if not review:
@@ -2375,6 +2420,128 @@ async def admin_reviews_queue(_: dict = Depends(require_platform_admin)):
         {"status": {"$in": ["pending_admin", "flagged"]}}, {"_id": 0}
     ).sort("moderated_at", -1).to_list(200)
     return docs
+
+
+# ---------- Staff admin management (super-admin only) ----------
+class StaffAdminCreate(BaseModel):
+    email: EmailStr
+    name: str
+    password: str
+    permissions: List[str] = Field(default_factory=list)
+
+
+class StaffAdminUpdate(BaseModel):
+    name: Optional[str] = None
+    permissions: Optional[List[str]] = None
+    password: Optional[str] = None
+
+
+def _staff_admin_public(doc: dict) -> dict:
+    return {
+        "id": doc["id"],
+        "email": doc["email"],
+        "name": doc.get("name", ""),
+        "role": doc.get("role", "platform_admin"),
+        "is_super_admin": bool(doc.get("is_super_admin")),
+        "permissions": list(doc.get("permissions") or []),
+        "created_at": doc.get("created_at"),
+    }
+
+
+@api.get("/admin/permissions/me")
+async def my_admin_permissions(user: dict = Depends(require_platform_admin)):
+    """Return the calling admin's permissions + super flag (used by FE to gate UI)."""
+    return {
+        "id": user["id"],
+        "email": user["email"],
+        "is_super_admin": bool(user.get("is_super_admin")),
+        "permissions": list(ALL_PERMISSIONS) if user.get("is_super_admin") else list(user.get("permissions") or []),
+        "all_permissions": list(ALL_PERMISSIONS),
+    }
+
+
+@api.get("/admin/staff")
+async def list_staff_admins(_: dict = Depends(require_super_admin)):
+    docs = await db.users.find(
+        {"role": "platform_admin"}, {"_id": 0, "password_hash": 0}
+    ).sort("created_at", -1).to_list(200)
+    return [_staff_admin_public(d) for d in docs]
+
+
+@api.post("/admin/staff")
+async def create_staff_admin(body: StaffAdminCreate, _: dict = Depends(require_super_admin)):
+    email = body.email.lower()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "Email already registered")
+    invalid = [p for p in (body.permissions or []) if p not in ALL_PERMISSIONS]
+    if invalid:
+        raise HTTPException(400, f"Invalid permissions: {invalid}")
+    if len(body.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    user_id = str(uuid.uuid4())
+    doc = {
+        "id": user_id,
+        "email": email,
+        "name": body.name.strip() or email.split("@")[0],
+        "role": "platform_admin",
+        "is_super_admin": False,
+        "permissions": list(body.permissions or []),
+        "company_id": None,
+        "password_hash": hash_password(body.password),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.users.insert_one(doc)
+    logger.info("STAFF ADMIN CREATED | %s | perms=%s", email, doc["permissions"])
+    # Mock invite "email" — surface credentials so super admin can share them
+    return {
+        "ok": True,
+        "admin": _staff_admin_public(doc),
+        "invite": {
+            "email": email,
+            "temp_password": body.password,
+            "login_url": "/login",
+            "note": "Share these credentials with the new admin. They can change their password from the profile after sign-in.",
+        },
+    }
+
+
+@api.patch("/admin/staff/{admin_id}")
+async def update_staff_admin(admin_id: str, body: StaffAdminUpdate, _: dict = Depends(require_super_admin)):
+    target = await db.users.find_one({"id": admin_id, "role": "platform_admin"}, {"_id": 0})
+    if not target:
+        raise HTTPException(404, "Admin not found")
+    if target.get("is_super_admin"):
+        raise HTTPException(400, "Cannot modify the super admin account from this endpoint")
+    upd = {}
+    if body.name is not None:
+        upd["name"] = body.name.strip()
+    if body.permissions is not None:
+        invalid = [p for p in body.permissions if p not in ALL_PERMISSIONS]
+        if invalid:
+            raise HTTPException(400, f"Invalid permissions: {invalid}")
+        upd["permissions"] = list(body.permissions)
+    if body.password is not None:
+        if len(body.password) < 6:
+            raise HTTPException(400, "Password must be at least 6 characters")
+        upd["password_hash"] = hash_password(body.password)
+    if upd:
+        await db.users.update_one({"id": admin_id}, {"$set": upd})
+    doc = await db.users.find_one({"id": admin_id}, {"_id": 0, "password_hash": 0})
+    return _staff_admin_public(doc)
+
+
+@api.delete("/admin/staff/{admin_id}")
+async def delete_staff_admin(admin_id: str, user: dict = Depends(require_super_admin)):
+    target = await db.users.find_one({"id": admin_id, "role": "platform_admin"}, {"_id": 0})
+    if not target:
+        raise HTTPException(404, "Admin not found")
+    if target.get("is_super_admin"):
+        raise HTTPException(400, "Cannot delete the super admin account")
+    if target["id"] == user["id"]:
+        raise HTTPException(400, "Cannot delete yourself")
+    await db.users.delete_one({"id": admin_id})
+    logger.info("STAFF ADMIN DELETED | %s", target.get("email"))
+    return {"ok": True}
 
 
 @api.get("/vendors/me/reviews")
@@ -2615,6 +2782,8 @@ async def seed_admin():
             "email": admin_email,
             "name": "Kreeda Nation Admin",
             "role": "platform_admin",
+            "is_super_admin": True,
+            "permissions": list(ALL_PERMISSIONS),
             "company_id": None,
             "password_hash": hash_password(admin_password),
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -2629,6 +2798,10 @@ async def seed_admin():
             updates["password_hash"] = hash_password(admin_password)
         if existing.get("name") in ("PlaySphere Admin", "PLAYSPHERE Admin"):
             updates["name"] = "Kreeda Nation Admin"
+        if not existing.get("is_super_admin"):
+            updates["is_super_admin"] = True
+        if not existing.get("permissions"):
+            updates["permissions"] = list(ALL_PERMISSIONS)
         if updates:
             await db.users.update_one({"email": admin_email}, {"$set": updates})
 

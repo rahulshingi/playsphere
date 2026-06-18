@@ -1,0 +1,31 @@
+// Role -> manual PDF mapping.
+// Used by the top Nav to surface a single, role-appropriate guide to logged-in users.
+export const ROLE_GUIDE = {
+  platform_admin: {
+    label: "Admin guide",
+    href: "/manuals/kreeda-nation-platform-admin-manual.pdf",
+    testid: "nav-guide-admin",
+  },
+  admin: {
+    label: "Admin guide",
+    href: "/manuals/kreeda-nation-platform-admin-manual.pdf",
+    testid: "nav-guide-admin",
+  },
+  company_admin: {
+    label: "HR guide",
+    href: "/manuals/kreeda-nation-company-manual.pdf",
+    testid: "nav-guide-company",
+  },
+  vendor: {
+    label: "Vendor guide",
+    href: "/manuals/kreeda-nation-vendor-manual.pdf",
+    testid: "nav-guide-vendor",
+  },
+  player: {
+    label: "Player guide",
+    href: "/manuals/kreeda-nation-player-manual.pdf",
+    testid: "nav-guide-player",
+  },
+};
+
+export const getRoleGuide = (role) => ROLE_GUIDE[role] || null;

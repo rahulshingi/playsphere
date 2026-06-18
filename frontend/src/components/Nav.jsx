@@ -3,7 +3,8 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { LogOut, Shield, Briefcase, Crown, User, Store, Menu, X } from "lucide-react";
+import { LogOut, Shield, Briefcase, Crown, User, Store, Menu, X, BookOpen } from "lucide-react";
+import { getRoleGuide } from "@/lib/guides";
 
 const LOGO_URL = "/kreeda-mark.png";
 
@@ -71,6 +72,7 @@ export default function Nav() {
   const isAuthed = user && user !== false;
   const roles = { isCompanyAdmin, isPlayer, isVendor, isPlatformAdmin };
   const extras = roleLinks(roles);
+  const guide = isAuthed ? getRoleGuide(user.role) : null;
 
   const closeMobile = () => setMobileOpen(false);
 
@@ -106,6 +108,18 @@ export default function Nav() {
         <nav className="hidden md:flex items-center gap-0.5 flex-1 justify-center">
           {publicLinks.map((n) => <DesktopLink key={n.to} link={n} />)}
           {extras.map((n) => <DesktopLink key={n.to} link={n} />)}
+          {guide && (
+            <a
+              key="guide-desktop"
+              href={guide.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid={guide.testid}
+              className="px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 text-neutral-400 hover:text-white transition-colors"
+            >
+              <BookOpen className="w-3.5 h-3.5" /> {guide.label}
+            </a>
+          )}
         </nav>
 
         {/* Right side actions */}
@@ -236,6 +250,22 @@ export default function Nav() {
                         </NavLink>
                       );
                     })}
+                  </>
+                )}
+
+                {guide && (
+                  <>
+                    <div className="text-[10px] font-mono uppercase text-neutral-500 px-2 mt-4 mb-1 tracking-widest">/ Help</div>
+                    <a
+                      href={guide.href}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={closeMobile}
+                      data-testid={`${guide.testid}-mobile`}
+                      className="px-3 py-3 text-base font-medium rounded-sm flex items-center gap-2 text-neutral-300 hover:bg-white/5 hover:text-white transition-colors"
+                    >
+                      <BookOpen className="w-4 h-4" /> {guide.label}
+                    </a>
                   </>
                 )}
 

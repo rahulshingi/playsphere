@@ -18,6 +18,7 @@ import ImageUpload from "@/components/ImageUpload";
 import DashboardPanel from "@/components/DashboardPanel";
 import SportsManager from "@/components/SportsManager";
 import { AdminReviewsQueue } from "@/components/Reviews";
+import AdminTeam from "@/components/AdminTeam";
 
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
 const onSportChange = (current, value) => ({
@@ -29,7 +30,7 @@ const onSportChange = (current, value) => ({
 const CATEGORIES = ["streaming", "apparel", "merchandise", "awards", "venue", "equipment", "training", "other"];
 
 export default function PlatformAdmin() {
-  const { ready, isPlatformAdmin } = useAuth();
+  const { ready, isPlatformAdmin, isSuperAdmin, hasPermission } = useAuth();
   const nav = useNavigate();
   const [services, setServices] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -125,9 +126,11 @@ export default function PlatformAdmin() {
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#FF3B30]">/ Kreeda Nation HQ</div>
         <div className="flex items-end justify-between">
           <h1 className="font-display text-6xl tracking-wide mt-3">PLATFORM ADMIN</h1>
-          <Button data-testid="platform-new-service" onClick={() => setEditing(blankService)} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
-            <Plus className="w-4 h-4 mr-1" /> New service
-          </Button>
+          {isSuperAdmin && (
+            <Button data-testid="platform-new-service" onClick={() => setEditing(blankService)} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
+              <Plus className="w-4 h-4 mr-1" /> New service
+            </Button>
+          )}
         </div>
 
         <Tabs defaultValue="dashboard" className="mt-10">
@@ -143,6 +146,9 @@ export default function PlatformAdmin() {
             <TabsTrigger value="settings" data-testid="pa-tab-settings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Settings</TabsTrigger>
             <TabsTrigger value="about" data-testid="pa-tab-about" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">About page</TabsTrigger>
             <TabsTrigger value="reviews" data-testid="pa-tab-reviews" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Reviews</TabsTrigger>
+            {isSuperAdmin && (
+              <TabsTrigger value="team" data-testid="pa-tab-team" className="data-[state=active]:bg-[#FF3B30] data-[state=active]:text-white rounded-sm">Team</TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="dashboard" className="mt-6">
@@ -164,8 +170,8 @@ export default function PlatformAdmin() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" variant="ghost" data-testid={`pa-edit-${s.id}`} onClick={() => setEditing({ ...s, images: s.images?.length ? s.images : [""] })} className="text-[#84CC16]">Edit</Button>
-                  <Button size="sm" variant="ghost" data-testid={`pa-delete-${s.id}`} onClick={() => deleteService(s.id)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
+                  {isSuperAdmin && <Button size="sm" variant="ghost" data-testid={`pa-edit-${s.id}`} onClick={() => setEditing({ ...s, images: s.images?.length ? s.images : [""] })} className="text-[#84CC16]">Edit</Button>}
+                  {isSuperAdmin && <Button size="sm" variant="ghost" data-testid={`pa-delete-${s.id}`} onClick={() => deleteService(s.id)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>}
                 </div>
               </div>
             ))}
@@ -225,7 +231,7 @@ export default function PlatformAdmin() {
                     </div>
                     <div className="flex gap-1 shrink-0">
                       <Button size="sm" variant="ghost" data-testid={`pa-event-open-${e.id}`} onClick={() => nav(`/events/${e.id}`)} className="text-[#84CC16]">Open</Button>
-                      <Button size="sm" variant="ghost" data-testid={`pa-event-del-${e.id}`} onClick={() => deleteEvent(e.id, e.name)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
+                      {hasPermission("manage_events") && <Button size="sm" variant="ghost" data-testid={`pa-event-del-${e.id}`} onClick={() => deleteEvent(e.id, e.name)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>}
                     </div>
                   </div>
                 ))}
@@ -265,10 +271,12 @@ export default function PlatformAdmin() {
                 </Link>
                 <div className="flex items-center gap-2 ml-3">
                   <span className={`text-[10px] font-mono uppercase border rounded-sm px-2 py-0.5 ${v.approved ? "text-[#84CC16] border-[#84CC16]/40" : "text-amber-400 border-amber-500/40"}`}>{v.approved ? "APPROVED" : "PENDING"}</span>
-                  <Button size="sm" data-testid={`pa-approve-vendor-${v.id}`} onClick={async () => { await api.patch(`/vendors/${v.id}/approve`, { approved: !v.approved }); load(); toast.success(v.approved ? "Revoked" : "Approved"); }}
-                    className={v.approved ? "bg-white/10 hover:bg-white/20 text-white rounded-sm" : "bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm"}>
-                    {v.approved ? "Revoke" : "Approve"}
-                  </Button>
+                  {hasPermission("manage_vendors") && (
+                    <Button size="sm" data-testid={`pa-approve-vendor-${v.id}`} onClick={async () => { await api.patch(`/vendors/${v.id}/approve`, { approved: !v.approved }); load(); toast.success(v.approved ? "Revoked" : "Approved"); }}
+                      className={v.approved ? "bg-white/10 hover:bg-white/20 text-white rounded-sm" : "bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm"}>
+                      {v.approved ? "Revoke" : "Approve"}
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -287,10 +295,12 @@ export default function PlatformAdmin() {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`text-[10px] font-mono uppercase border rounded-sm px-2 py-0.5 ${l.approved ? "text-[#84CC16] border-[#84CC16]/40" : "text-amber-400 border-amber-500/40"}`}>{l.approved ? "LIVE" : "PENDING"}</span>
-                  <Button size="sm" data-testid={`pa-approve-listing-${l.id}`} onClick={async () => { await api.patch(`/admin/listings/${l.id}/approve`, { approved: !l.approved }); load(); toast.success(l.approved ? "Hidden" : "Approved"); }}
-                    className={l.approved ? "bg-white/10 hover:bg-white/20 text-white rounded-sm" : "bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm"}>
-                    {l.approved ? "Unpublish" : "Approve"}
-                  </Button>
+                  {hasPermission("manage_listings") && (
+                    <Button size="sm" data-testid={`pa-approve-listing-${l.id}`} onClick={async () => { await api.patch(`/admin/listings/${l.id}/approve`, { approved: !l.approved }); load(); toast.success(l.approved ? "Hidden" : "Approved"); }}
+                      className={l.approved ? "bg-white/10 hover:bg-white/20 text-white rounded-sm" : "bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm"}>
+                      {l.approved ? "Unpublish" : "Approve"}
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
@@ -346,12 +356,15 @@ export default function PlatformAdmin() {
           <TabsContent value="about" className="mt-6">
             <div className="border border-white/10 rounded-sm bg-[#141414] p-6 max-w-3xl space-y-3">
               <div className="font-display tracking-wider text-2xl">ABOUT PAGE CONTENT</div>
+              <p className="text-xs text-neutral-500 font-mono">
+                Press <kbd className="px-1 py-0.5 bg-black/40 border border-white/10 rounded-sm">Enter</kbd> for a line break and a blank line for a new paragraph — both are preserved on /about.
+              </p>
               <Label className="text-xs font-mono uppercase text-neutral-500">Company description</Label>
-              <Textarea data-testid="about-desc" rows={3} value={about.company_description} onChange={(e) => setAbout({ ...about, company_description: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <Textarea data-testid="about-desc" rows={6} value={about.company_description} onChange={(e) => setAbout({ ...about, company_description: e.target.value })} className="bg-black/40 border-white/10 text-white" />
               <Label className="text-xs font-mono uppercase text-neutral-500">Mission</Label>
-              <Textarea data-testid="about-mission" rows={2} value={about.mission} onChange={(e) => setAbout({ ...about, mission: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <Textarea data-testid="about-mission" rows={4} value={about.mission} onChange={(e) => setAbout({ ...about, mission: e.target.value })} className="bg-black/40 border-white/10 text-white" />
               <Label className="text-xs font-mono uppercase text-neutral-500">Vision</Label>
-              <Textarea data-testid="about-vision" rows={2} value={about.vision} onChange={(e) => setAbout({ ...about, vision: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <Textarea data-testid="about-vision" rows={4} value={about.vision} onChange={(e) => setAbout({ ...about, vision: e.target.value })} className="bg-black/40 border-white/10 text-white" />
 
               <PeopleEditor label="Founders" testid="founders" people={about.founders || []} onChange={(p) => setAbout({ ...about, founders: p })} />
               <PeopleEditor label="Directors" testid="directors" people={about.directors || []} onChange={(p) => setAbout({ ...about, directors: p })} />
@@ -359,6 +372,12 @@ export default function PlatformAdmin() {
               <Button data-testid="about-save" onClick={async () => { await api.patch("/about", about); toast.success("About page updated"); load(); }} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Save About page</Button>
             </div>
           </TabsContent>
+
+          {isSuperAdmin && (
+            <TabsContent value="team" className="mt-6">
+              <AdminTeam />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 

@@ -157,7 +157,9 @@ def build(filename, role_label, role_color, title, tagline, sections):
         "Need help? Email <font color='#65A30D'><b>hello@kreedanation.io</b></font> — "
         "we usually reply within one business day. "
         "Forgot your password? Visit <b>/forgot-password</b> (works for HR, vendors and admins) "
-        "or <b>/players/forgot-password</b> for player accounts.", note))
+        "or <b>/players/forgot-password</b> for player accounts. "
+        "Tip: once you sign in, this guide is one click away from the <b>top navigation bar</b> — "
+        "no need to dig through the footer.", note))
     doc.build(story)
     print("wrote", out, "(", out.stat().st_size // 1024, "KB )")
 
@@ -224,6 +226,40 @@ vendor_sections = [
         ("p", "Yes — edit the listing and uncheck <b>Active</b>, or ask Kreeda Nation HQ to “Unpublish”. Bookings already in flight are unaffected."),
         ("h3", "Can multiple staff log in to the same vendor account?"),
         ("p", "Today it’s one email per business. Team logins are on the roadmap."),
+    ]},
+    {"title": "7. Verified vendor badge",
+     "blocks": [
+        ("p", "Once Kreeda Nation HQ approves your business AND you've collected at least one published review, a green <b>✓ Verified</b> badge appears on every live listing in /hire. Vendors with the badge convert ~2× better than unbadged ones — it tells HR teams a real human has played at your venue."),
+        ("tip", "Want the badge faster? After a confirmed booking, ask the HR team to leave a quick review from <b>/bookings → Past → Leave review</b>. You can also encourage them in person."),
+    ]},
+    {"title": "8. Happy-hour pricing &amp; venue schedules",
+     "blocks": [
+        ("p", "Ground / court listings support <b>Venue schedules</b> for slot-based bookings. Open a listing → <b>Schedule</b> tab to:"),
+        ("bul", [
+            "Add weekly availability windows (Mon–Sun, start / end time, slot length).",
+            "Set <b>Happy-hour pricing</b> — different price during off-peak hours (e.g., 50% off 11:00–15:00 weekdays).",
+            "Block specific dates (maintenance, weather, private events).",
+        ]),
+        ("tip", "Happy-hour discounts are calculated automatically when HR picks a start time that falls inside your happy-hour window — they see the discounted total live."),
+    ]},
+    {"title": "9. Cancellation &amp; reschedule policies",
+     "blocks": [
+        ("p", "Each listing has its own <b>Policy editor</b> (Edit listing → <b>Policies</b> section). You decide:"),
+        ("kv", [
+            ["Cancel window", "How many hours before slot start can HR cancel for free / partial / no refund."],
+            ["Reschedule window", "Until how close to slot start HR can reschedule to another date."],
+            ["Free reschedules", "Number of free reschedules per booking. After that you can charge a fee."],
+        ]),
+        ("warn", "Once an HR cancels or reschedules, the system honours <b>your</b> policy — no need to negotiate every time. Final amount and refund are computed automatically and shown in the booking timeline."),
+    ]},
+    {"title": "10. Reviews — your reputation engine",
+     "blocks": [
+        ("p", "After every confirmed booking, the HR team can leave a 1–5★ review on <b>/bookings → Past</b>. Reviews flow through a two-step approval pipeline:"),
+        ("num", [
+            "<b>You see it first</b> at <b>/vendor/dashboard → Reviews</b>. Approve to send to HQ, or flag if it is abusive / off-topic.",
+            "Kreeda Nation HQ publishes the review on your public listing OR rejects it if flagged.",
+        ]),
+        ("tip", "Your aggregate rating (average ★ + count) is shown on every marketplace listing once you have ≥1 published review — the same number that powers the Verified badge eligibility."),
     ]},
 ]
 
@@ -298,6 +334,20 @@ player_sections = [
         ]),
         ("p", "If you’re a <b>captain</b>, the event’s Teams tab is visible to you and you can add members to <i>your</i> team — same Pick / Quick-add options HR sees."),
         ("warn", "Tournament teams are managed by HR / captain. If you joined the wrong company by mistake, fix it under /players/me — your roster card on existing teams stays where HR placed it."),
+    ]},
+    {"title": "7. Watching matches live",
+     "blocks": [
+        ("p", "Every fixture in a live tournament has a <b>public scorecard URL</b> — <b>/live/&lt;fixture_id&gt;</b>. Share it with friends and family who don't have Kreeda Nation accounts; they'll see ball-by-ball updates streaming in real time without needing to log in."),
+        ("bul", [
+            "Click the fixture row in any event → the public Scorecard link is shown.",
+            "Cricket matches use a <b>CricHeroes-style</b> live view: toss, playing XI, batting/bowling cards, partnerships and free-hit indicators.",
+            "Score updates push instantly via WebSocket, with REST polling as a fallback — no manual refresh needed.",
+        ]),
+        ("tip", "If the tournament organiser added a YouTube/Twitch stream URL, a red <b>WATCH LIVE</b> button appears at the top of the event page."),
+    ]},
+    {"title": "8. Mobile experience",
+     "blocks": [
+        ("p", "Kreeda Nation is fully mobile-responsive. On phones / tablets the top-right <b>hamburger</b> icon opens a slide-in menu with every page you can access. Your player guide is always one tap away in the same menu under <i>Help</i>."),
     ]},
 ]
 
@@ -377,6 +427,37 @@ company_sections = [
             "Knockout brackets propagate winners automatically as you complete matches.",
             "Standings recalc on every completed match (3 pts win, 1 pt draw).",
         ]),
+    ]},
+    {"title": "8. CricHeroes-style cricket scoring",
+     "blocks": [
+        ("p", "Open any cricket fixture → <b>Update score</b> to launch the rich live scorer. The flow matches what your captains see on apps like CricHeroes, so the learning curve is near-zero:"),
+        ("num", [
+            "<b>Toss</b> — pick which team won and whether they chose to bat or bowl. The scorer auto-sets the batting / bowling sides.",
+            "<b>Playing XI</b> — choose the 11 players from each team. Required before the first ball.",
+            "<b>Striker / non-striker / bowler</b> — pick before the first delivery; the scorer rotates strike automatically on odd-run balls and end-of-over events.",
+            "<b>Ball by ball</b> — runs, wides, no-balls (with free-hit auto-flag), byes, leg-byes, wickets (caught/bowled/run-out etc.). Partnerships, overs, current run-rate and required rate all update live.",
+            "<b>Undo</b> any ball if you mis-tapped. The system recomputes batting / bowling cards and partnership widget instantly.",
+        ]),
+        ("tip", "Share <b>/live/&lt;fixture_id&gt;</b> with spectators who don't have an account — they get the same live scorecard with no login required."),
+    ]},
+    {"title": "9. Manage existing bookings (cancel / reschedule)",
+     "blocks": [
+        ("p", "Open <b>/bookings</b> → click any active booking. Depending on the vendor's policy you'll see:"),
+        ("bul", [
+            "<b>Cancel request</b> — free / partial refund / no refund based on hours-to-slot and the vendor's cancellation policy. The refund amount is computed live.",
+            "<b>Reschedule</b> — pick a new date + start time. Free reschedules are tracked per booking; once exhausted, the vendor's reschedule fee applies.",
+            "Every action writes a <b>notification</b> entry visible to you, the vendor and HQ — full audit trail.",
+        ]),
+        ("warn", "After a booking enters a final state (Confirmed, Rejected or Cancelled) only Kreeda Nation HQ can touch it. This protects everyone's audit log."),
+    ]},
+    {"title": "10. Upcoming bookings widget &amp; dashboard",
+     "blocks": [
+        ("p", "Your <b>/dashboard</b> shows an <b>Upcoming bookings</b> widget pinned at the top — the next 5 confirmed / pending slots across all your venues, with date, vendor and total. Click any card to jump straight into the booking detail."),
+        ("tip", "Look at the dashboard daily — vendor accept / decline actions surface here before email is wired up."),
+    ]},
+    {"title": "11. Where to find your guide",
+     "blocks": [
+        ("p", "Once signed in, this HR manual is always available from the <b>top navigation</b> — look for <b>HR guide</b> next to your menu items. The footer no longer carries role guides; we surface only the one relevant to your account so you never have to wonder which PDF to open."),
     ]},
 ]
 
@@ -473,6 +554,55 @@ admin_sections = [
             "Regenerate manuals after major product changes — run <code>python /app/scripts/generate_manuals.py</code>.",
         ]),
         ("warn", "Anything you do here affects every company on the platform. Test new services in a draft state (uncheck Active) before going live."),
+    ]},
+    {"title": "9. Multi-admin &amp; permissions (super admin only)",
+     "intro": "The seed account (admin@kreedanation.com) is the <b>Super Admin</b>. Only the super admin can add or remove other admins, create / delete services, and manage users at the platform level. Staff admins receive scoped permissions for day-to-day work.",
+     "blocks": [
+        ("h3", "Granular permissions available"),
+        ("kv", [
+            ["manage_events", "Create &amp; delete platform-organised tournaments."],
+            ["manage_vendors", "Approve / revoke vendor businesses."],
+            ["manage_listings", "Approve listings so they appear in /hire."],
+            ["manage_bookings", "Confirm or reject ground / coach bookings."],
+            ["manage_reviews", "Moderate the review queue (publish / reject)."],
+            ["manage_settings", "Edit site settings &amp; the public About page."],
+            ["manage_companies", "Manage company accounts."],
+        ]),
+        ("h3", "Invite a staff admin"),
+        ("num", [
+            "Open <b>/platform-admin → Team</b> tab (visible only to the super admin).",
+            "Enter email, name and a temporary password (≥ 6 chars).",
+            "Tick the permissions you want them to have. Leave blank for read-only access.",
+            "Click <b>Create admin</b>. A one-time invite panel appears with the login URL + temp password — copy and share securely.",
+        ]),
+        ("h3", "Edit or remove a staff admin"),
+        ("bul", [
+            "On the Team tab, click <b>Edit</b> on any staff admin row to add / remove permissions or update their name.",
+            "Click the trash icon to revoke access — they're signed out on their next request.",
+            "You cannot edit or delete the super admin from the UI; rotate it from the env / DB if needed.",
+        ]),
+        ("warn", "Service add / delete and admin add / delete are reserved for the super admin — UI buttons are hidden from staff admins automatically, and the backend rejects unauthorised calls with 403."),
+    ]},
+    {"title": "10. Drill-down detail pages",
+     "blocks": [
+        ("p", "Three click-through pages help HQ inspect every actor without leaving /platform-admin:"),
+        ("kv", [
+            ["/platform-admin/vendors/{id}", "Vendor + owner login + every listing, schedule, booking, and review attached to that vendor."],
+            ["/platform-admin/companies/{id}", "Company + HR contact + their events + roster + bookings + spend summary."],
+            ["/platform-admin/players/{id}", "Player profile, masked mobile, event history, current teams and profile view count."],
+        ]),
+        ("tip", "Use these pages when a vendor or HR raises a support ticket — you get the full context in one screen."),
+    ]},
+    {"title": "11. Review moderation &amp; custom sports",
+     "blocks": [
+        ("h3", "Review moderation queue"),
+        ("p", "The <b>Reviews</b> tab on /platform-admin shows every review the vendor approved (waiting for HQ publish) plus anything flagged. Publish to make it visible on the listing, or reject with an internal note."),
+        ("h3", "Custom sports CRUD"),
+        ("p", "The <b>Sports</b> tab lets you add / edit / remove the sports list that powers every dropdown in the platform (events, vendor listings, player profiles). Add quirky internal favourites like “Esports — Valorant” or “Padel” without a code change."),
+    ]},
+    {"title": "12. Where guides live now",
+     "blocks": [
+        ("p", "The footer no longer lists all four manuals — it cluttered the experience for logged-out visitors. Instead each signed-in user sees only <b>their</b> guide as a link in the top nav (HR sees HR guide, vendors see vendor guide, etc.). This admin manual appears as <b>Admin guide</b> when you sign in."),
     ]},
 ]
 

@@ -678,8 +678,12 @@ async def _user_with_company(user: dict) -> dict:
             out["company_name"] = c["name"]
     # Surface platform-admin RBAC flags for the frontend
     if user.get("role") in ("platform_admin", "admin"):
-        out["is_super_admin"] = bool(user.get("is_super_admin"))
-        out["permissions"] = list(user.get("permissions") or ALL_PERMISSIONS if user.get("is_super_admin") else user.get("permissions") or [])
+        super_flag = bool(user.get("is_super_admin"))
+        out["is_super_admin"] = super_flag
+        if super_flag:
+            out["permissions"] = list(ALL_PERMISSIONS)
+        else:
+            out["permissions"] = list(user.get("permissions") or [])
     return out
 
 

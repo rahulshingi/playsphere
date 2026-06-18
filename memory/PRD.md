@@ -146,24 +146,47 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **Settings routes extracted** to `/app/backend/routes/settings.py` (2nd module after cricket.py). Endpoints: `/companies/public`, `/settings` GET/PATCH, `/about` GET/PATCH, `/contact` POST, `/contact-messages` GET/PATCH. Verbatim move via `register(api, db, SiteSettings, require_platform_admin)` pattern. Server.py now ~2,985 lines (down from 3,719 at start of session).
 - **Test count**: 215 pass + 2 skipped (was 207 pass + 3 fail). 33/33 focus tests (28 vendor/player + 5 free-hit) all green.
 
+## Implemented (Feb 18, 2026 — Iteration 12) Multi-Admin RBAC + Role-Aware Guides + About polish
+- **Multi-admin / RBAC**: seed admin (`admin@kreedanation.com`) is the **Super Admin** (`is_super_admin=true`). Super admin is the ONLY role allowed to create/delete services AND add/edit/delete other admins.
+- **Granular permissions** (assignable to staff admins): `manage_events`, `manage_vendors`, `manage_listings`, `manage_bookings`, `manage_reviews`, `manage_settings`, `manage_companies`. Super admin gets all permissions implicitly.
+- **New endpoints**: `GET /api/admin/permissions/me`, `GET /api/admin/staff`, `POST /api/admin/staff`, `PATCH /api/admin/staff/{id}`, `DELETE /api/admin/staff/{id}`. Create returns an `invite` payload with `temp_password` (email integration still mocked). Super admin cannot be modified or deleted via these endpoints.
+- **Helpers** (`server.py`): `is_super_admin`, `has_permission`, `require_super_admin`, `require_permission(perm)`. Applied to service CRUD (super-only), vendor approve (`manage_vendors`), listing approve (`manage_listings`), review moderate (`manage_reviews`).
+- **Auth payload extended**: `/api/auth/me` and `/api/auth/login` now surface `is_super_admin` + `permissions` for platform admins. `AuthContext` exposes `isSuperAdmin`, `adminPermissions`, `hasPermission(perm)`.
+- **Team tab UI** in `/platform-admin` (`pa-tab-team`) — visible only to super admin. Components: `AdminTeam.jsx` (invite form, permission checklist, current admins list with SUPER ADMIN badge, edit/delete actions, copy-invite UX, dismissible invite banner).
+- **UI gating**: `platform-new-service`, service Edit/Delete buttons → super-only. Vendor Approve/Revoke → `manage_vendors`. Listing Approve/Unpublish → `manage_listings`. Event Delete → `manage_events`.
+
+### Role-aware guide link in Nav (footer Guides column removed)
+- **Footer.jsx**: `Guides` column dropped. Replaced with a short note instructing signed-in users to find their guide in the top nav.
+- **Nav.jsx + `lib/guides.js`**: signed-in users see exactly ONE PDF link (`nav-guide-{admin|company|vendor|player}`) pointing to the appropriate manual. Mobile drawer mirrors it under `/ Help`.
+- **Manuals refreshed**: `scripts/generate_manuals.py` updated with Verified badge, Happy-hour pricing, Cancellation/Reschedule policies, Reviews flow, CricHeroes-style scoring, public scorecard URL, mobile nav, drill-down detail pages, multi-admin RBAC sections. 4 PDFs regenerated.
+
+### About page polish
+- **About.jsx** — content now uses `whitespace-pre-line` (preserves admin-entered newlines), occupies full container width, legacy `<br>` literals normalised to real line breaks, bio text in PeopleGrid also wrapped.
+- **Admin editor** — About page editor (`PlatformAdmin.jsx`) shows a hint about Enter key for line breaks, larger textareas (rows 4–6) for better authoring.
+
+### Testing & regression
+- **`/app/backend/tests/test_rbac_admin.py`** — 14/14 tests covering all RBAC paths (super-only enforcement, permission-gated paths, staff CRUD, edge cases: super-immortal, duplicate email, perm allowlist).
+- Frontend e2e via Playwright validated: nav guide visibility, footer guide removal, team-tab gating, staff-admin invite flow, staff-admin login → button hiding, About page line-break rendering, all 4 manuals served at /manuals/*.
+
 ## Backlog
 ### P0
-- (none open) — CricHeroes match flow + all P1 items closed.
+- (none open)
 
 ### P1
-- **Browser-side wss:// handshake** — verify Kubernetes ingress is forwarding Upgrade/Connection headers for `/api/ws`. Backend WS itself is healthy; polling fallback masks this in UX.
-- **Email integration** (Resend/SendGrid) — currently mocked. Awaiting API key from user.
-- **Sponsor reach analytics** — track logo impressions across event pages for ROI.
+- **Browser-side wss:// handshake** — polling fallback masks this in UX; ingress upgrade headers still flaky.
+- **Email integration** (Resend/SendGrid) — currently mocked. Awaiting API key from user. Will unblock real staff-admin invites, booking notifications, and password resets.
+- **Pre-existing seed-count test failures** (3) in `backend_test.py` + `test_multitenant.py` — replace shared seed assumptions with per-test fixtures.
 
 ### P2
-- **Continue routes split** — extract `routes/auth.py`, `routes/events.py`, `routes/fixtures.py`, `routes/vendors.py`, `routes/bookings.py` following the `cricket.py` + `settings.py` pattern. (2/6 complete.)
-- **Cricket enhancements** (remaining): wagon wheel positions, super-over for tied matches.
-- **Editor lists UUIDs** — VendorDashboard images + RegisterTeam players + PlatformAdmin fields/variants use array-index keys; refactor to stable `_uid`s.
-- **Refactor large functions** — `seed_services` (300 lines), `seed_demo_data` (113 lines), `get_standings` (cyclomatic 17), `listing_availability` (14).
+- **Continue routes split** — `routes/auth.py`, `routes/events.py`, `routes/fixtures.py`, `routes/vendors.py`, `routes/bookings.py` (2/6 done).
+- **Cricket enhancements** — wagon wheel positions, super-over for tied matches.
+- **Editor lists UUIDs** — stable `_uid` schemas for VendorDashboard / RegisterTeam / PlatformAdmin editor arrays.
+- **Refactor large functions** — `seed_services`, `seed_demo_data`, `get_standings`, `listing_availability`.
 
 ## Test Credentials
-- Platform Admin: admin@kreedanation.com / admin123
+- Platform Admin (Super): admin@kreedanation.com / admin123
 - Company HR: hr@acme.com / hr123
 - Vendor: ravi@turf.in / vendor123
 - Player: player@acme.com / player123 (or +919000000001)
 - Viewer: viewer@kreedanation.com / viewer123
+- (Staff admins created on the fly via /platform-admin → Team or POST /api/admin/staff)

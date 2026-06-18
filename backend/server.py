@@ -1964,21 +1964,11 @@ async def seed_admin():
             await db.users.update_one({"email": admin_email}, {"$set": updates})
 
     viewer_email = "viewer@kreedanation.com"
-    # Migrate legacy viewer
+    # Migrate legacy viewer email if it still exists; do NOT create a new viewer
+    # account (production wants a clean slate — only the platform admin is seeded).
     if await db.users.find_one({"email": "viewer@playsphere.com"}) and not await db.users.find_one({"email": viewer_email}):
         await db.users.update_one({"email": "viewer@playsphere.com"}, {"$set": {"email": viewer_email}})
         logger.info(f"Migrated viewer email: viewer@playsphere.com -> {viewer_email}")
-    viewer = await db.users.find_one({"email": viewer_email})
-    if not viewer:
-        await db.users.insert_one({
-            "id": str(uuid.uuid4()),
-            "email": viewer_email,
-            "name": "Viewer",
-            "role": "viewer",
-            "company_id": None,
-            "password_hash": hash_password("viewer123"),
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        })
 
 
 async def _seed_demo_sponsors():
@@ -2912,7 +2902,8 @@ async def on_startup():
     await db.vendor_bookings.create_index("company_id")
     await db.vendor_bookings.create_index("vendor_id")
     await seed_admin()
-    await seed_demo_data()
+    # seed_demo_data() intentionally disabled (Feb 18, 2026) — production wants a clean slate.
+    # Only services + sports catalogs are still seeded so the platform UI has its lookups.
     await seed_services()
     await seed_sports()
 

@@ -164,7 +164,19 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **About.jsx** — content now uses `whitespace-pre-line` (preserves admin-entered newlines), occupies full container width, legacy `<br>` literals normalised to real line breaks, bio text in PeopleGrid also wrapped.
 - **Admin editor** — About page editor (`PlatformAdmin.jsx`) shows a hint about Enter key for line breaks, larger textareas (rows 4–6) for better authoring.
 
+## Implemented (Feb 18, 2026 — Iteration 16) Clean slate for production launch
+- **Wiped every demo entity** via `/app/scripts/wipe_to_clean_slate.py` — preserves only services (17), sports (11), platform admin user (1), site_settings, and About page content.
+- **Disabled demo-data seeding** — `seed_demo_data()` is no longer called from `on_startup()`. The viewer account (`viewer@kreedanation.com`) auto-seed inside `seed_admin()` was also removed.
+- Result: every page now shows 0/0/0/0 stats; no fake teams, events, players, vendors, listings, bookings or reviews. Production is ready for real data.
+- Reusable: re-run `python /app/scripts/wipe_to_clean_slate.py` any time to reset back to clean slate.
+
 ## Implemented (Feb 18, 2026 — Iteration 15) Performance pass + array-index keys
+- **`useMemo` for expensive renders** (3 hotspots flagged by code review):
+  - `CricketScorer.jsx::LivePanel` — `availableBatsmen`, `availableBowlers`, `extrasTotal` now recompute only on relevant deps.
+  - `EventTeamsManager.jsx::EventCompanies` — `pickableCompanies` memoized on `[allCompanies, companies]`.
+- **Array-index keys replaced with composite keys** (5 spots): VendorDashboard images, RegisterTeam player slots, PlatformAdmin field/variant/people editors.
+
+
 - **`useMemo` for expensive renders** (3 hotspots flagged by code review):
   - `CricketScorer.jsx::LivePanel` — `availableBatsmen` (filter + filter), `availableBowlers` (filter), `extrasTotal` (reduce). Now recompute only when their actual deps change instead of every render of the scorer.
   - `EventTeamsManager.jsx::EventCompanies` — `pickableCompanies` (filter + find) memoized on `[allCompanies, companies]`.

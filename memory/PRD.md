@@ -71,7 +71,32 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **35 new pytest tests** in `test_cricket_scoring.py` + `test_cricket_extended.py` covering: state machine, strike rotation, wicket types, extras accounting, innings completion, end-match propagation, validation (overs range, double toss, striker==non-striker, bogus winner, bowler not in bowling XI). 207/210 overall pass (3 vendor/player pre-existing failures untouched).
 - **Code quality fixes (Iter 11)**: Backend lint cleaned (E702 chained semicolons split, unused vars removed, defensive weekday init). Frontend stable keys on hardcoded lists (Home, About, PlayerDetail, LiveScorer). Empty catch blocks in `useFixtureSocket`, `AuthContext`, `EventTeamsManager` now log errors. Magic numbers in `useFixtureSocket` extracted to named constants. Production `console.warn` removed from craco config. Footer contact: `contact@kreedanation.com` / `+91 9923114499`.
 
-## Implemented (Feb 18, 2026 — Iteration 14) **Phase 1: Mobile Nav + Public Scorecard**
+## Implemented (Feb 18, 2026 — Iteration 15) **Phase 2: Cancellation policies + Happy-hour pricing + Mocked email**
+- **Cancellation & refund logic**:
+  - New `CancellationPolicy` model on `VendorListing` (`full_refund_hours_before`, `partial_refund_hours_before`, `partial_refund_percent`, `no_refund_window_hours`)
+  - New `POST /api/vendor-bookings/{id}/cancel` endpoint — auto-calculates refund tier from listing policy + hours-until-slot
+  - `VendorBooking` extended with `cancelled_at`, `refund_amount`, `refund_reason`
+  - Mocked email dispatched to both HR + vendor on cancellation
+- **Reschedule logic**:
+  - New `ReschedulePolicy` model (`free_reschedule_hours_before`, `max_reschedules`, `fee_amount`)
+  - New `POST /api/vendor-bookings/{id}/reschedule` endpoint — enforces max-reschedules count, charges fee inside the free-window cutoff
+  - `VendorBooking.previous_slots[]` stores every reschedule with timestamp, by-user, and fee charged
+- **Happy-hour pricing**:
+  - `VenueSchedule` extended with `happy_hours: [{label, days, start, end, factor}]`
+  - `listing_availability` endpoint applies happy-hour factor BEFORE falling back to weekend/peak — discount wins over surcharge
+  - Vendor schedule editor UI: new `HappyHoursEditor` panel with add/remove/day-toggle/factor controls (purple theme, `data-testid="hh-add"`, `hh-row-{i}`, etc.)
+- **Mocked email helper**:
+  - New `send_email(to, subject, body, kind)` function — logs to supervisor stdout with `[MOCK EMAIL kind=...]` prefix
+  - Single integration point for Resend/SendGrid when API key arrives (signature preserved)
+  - Wired into cancel + reschedule flows; legacy booking-create / status-change logs now also route through it
+- **Frontend bookings UI**:
+  - HR side: `HrCancelReschedule` component on every modifiable booking with inline reschedule form (date, time, hours) + cancel button
+  - Refund pill shown after cancellation (orange badge with policy reasoning)
+  - "Rescheduled Nx — last from …" subtitle on reschedule history
+- **10 new pytest tests** in `test_phase2_venue_features.py` covering: happy-hour application & clear, full/partial/no-refund tiers, double-cancel guard, free reschedule, fee-charged reschedule, max-reschedules enforcement, and mock email notification trail. **All pass.**
+- **Full focus suite**: 59 + 1 skipped (Phase 2 + Public scorecard + Cricket + Free-hit + Vendor/Player).
+
+
 - **Mobile responsive Nav** (`/app/frontend/src/components/Nav.jsx` rewrite):
   - Hamburger button (`data-testid="nav-mobile-toggle"`) appears below `md` breakpoint
   - Slide-out drawer (`data-testid="nav-mobile-drawer"`) via shadcn Sheet — right side, 85vw on mobile / 384px on tablet

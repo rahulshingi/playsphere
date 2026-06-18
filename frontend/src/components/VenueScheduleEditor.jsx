@@ -26,7 +26,7 @@ export default function VenueScheduleEditor({ listing, onClose }) {
     setSubUnits(u.data);
     setBlocks(b.data);
   };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [listing.id]);
+  useEffect(() => { load(); }, [listing.id]);
 
   const saveSchedule = async () => {
     try {
@@ -113,6 +113,9 @@ export default function VenueScheduleEditor({ listing, onClose }) {
             </div>
             <div className="mt-4"><Label className="text-xs uppercase font-mono text-neutral-500">Amenities</Label>
               <Input data-testid="vs-amenities" value={(schedule.amenities || []).join(", ")} onChange={(e) => setSchedule({ ...schedule, amenities: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} className="mt-1 bg-black/40 border-white/10 text-white" placeholder="parking, washroom, lights, equipment, changing room" /></div>
+
+            <HappyHoursEditor schedule={schedule} setSchedule={setSchedule} />
+
             <Button data-testid="vs-save" onClick={saveSchedule} className="mt-4 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Save schedule</Button>
           </section>
 
@@ -156,6 +159,78 @@ export default function VenueScheduleEditor({ listing, onClose }) {
             <Button data-testid="block-add" onClick={addBlock} className="mt-2 bg-[#FF3B30] hover:bg-[#DC2626] text-white rounded-sm">Add block</Button>
           </section>
         </div>
+      </div>
+    </div>
+  );
+}
+
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function HappyHoursEditor({ schedule, setSchedule }) {
+  const hh = schedule.happy_hours || [];
+  const update = (next) => setSchedule({ ...schedule, happy_hours: next });
+  const add = () => update([...hh, { label: "Happy Hour", days: [], start: "12:00", end: "16:00", factor: 0.8 }]);
+  const remove = (idx) => update(hh.filter((_, i) => i !== idx));
+  const patch = (idx, key, value) => update(hh.map((h, i) => (i === idx ? { ...h, [key]: value } : h)));
+  const toggleDay = (idx, day) => {
+    const set = new Set(hh[idx].days || []);
+    if (set.has(day)) set.delete(day);
+    else set.add(day);
+    patch(idx, "days", Array.from(set).sort());
+  };
+
+  return (
+    <div className="mt-5 border border-[#A855F7]/30 rounded-sm p-4 bg-[#A855F7]/5">
+      <div className="flex items-center justify-between">
+        <Label className="text-xs uppercase font-mono text-[#A855F7]">Happy hours (discounts)</Label>
+        <Button data-testid="hh-add" type="button" onClick={add} size="sm" className="bg-[#A855F7] hover:bg-[#9333EA] text-white rounded-sm">
+          <Plus className="w-3 h-3 mr-1" /> Add window
+        </Button>
+      </div>
+      {hh.length === 0 && (
+        <div className="text-xs text-neutral-500 mt-2">No happy hour windows. Add discounted off-peak slots to boost utilization.</div>
+      )}
+      <div className="space-y-2 mt-3">
+        {hh.map((h, idx) => (
+          <div key={`hh-${idx}`} data-testid={`hh-row-${idx}`} className="border border-white/10 rounded-sm p-3 bg-black/30">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 items-end">
+              <div>
+                <Label className="text-[10px] font-mono text-neutral-500">Label</Label>
+                <Input data-testid={`hh-label-${idx}`} value={h.label} onChange={(e) => patch(idx, "label", e.target.value)} className="mt-1 bg-black/40 border-white/10 text-white" />
+              </div>
+              <div>
+                <Label className="text-[10px] font-mono text-neutral-500">Start</Label>
+                <Input data-testid={`hh-start-${idx}`} type="time" value={h.start} onChange={(e) => patch(idx, "start", e.target.value)} className="mt-1 bg-black/40 border-white/10 text-white" />
+              </div>
+              <div>
+                <Label className="text-[10px] font-mono text-neutral-500">End</Label>
+                <Input data-testid={`hh-end-${idx}`} type="time" value={h.end} onChange={(e) => patch(idx, "end", e.target.value)} className="mt-1 bg-black/40 border-white/10 text-white" />
+              </div>
+              <div>
+                <Label className="text-[10px] font-mono text-neutral-500">Factor (e.g. 0.7 = 30% off)</Label>
+                <Input data-testid={`hh-factor-${idx}`} type="number" step="0.05" min="0" value={h.factor} onChange={(e) => patch(idx, "factor", Number(e.target.value))} className="mt-1 bg-black/40 border-white/10 text-white" />
+              </div>
+              <button data-testid={`hh-remove-${idx}`} type="button" onClick={() => remove(idx)} className="text-[#FF3B30] justify-self-end">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="mt-3">
+              <Label className="text-[10px] font-mono text-neutral-500">Days (leave all unselected to apply every day)</Label>
+              <div className="flex flex-wrap gap-1 mt-1">
+                {DAY_LABELS.map((label, di) => {
+                  const on = (h.days || []).includes(di);
+                  return (
+                    <button key={label} data-testid={`hh-day-${idx}-${di}`} type="button"
+                      onClick={() => toggleDay(idx, di)}
+                      className={`text-[10px] font-mono px-2 py-1 rounded-sm border ${on ? "bg-[#A855F7] text-white border-[#A855F7]" : "bg-black/40 text-neutral-400 border-white/10"}`}>
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

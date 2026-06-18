@@ -57,10 +57,33 @@ function VendorActions({ booking, onAct }) {
   );
 }
 
-function HrCancel({ booking, onCancel }) {
+function HrCancelReschedule({ booking, onCancel, onReschedule }) {
+  const [mode, setMode] = useState(null); // null | "cancel" | "reschedule"
+  const [date, setDate] = useState(booking.requested_date);
+  const [start, setStart] = useState(booking.start_time);
+  const [hours, setHours] = useState(booking.hours || 1);
+  if (mode === "reschedule") {
+    return (
+      <div className="mt-3 border-t border-white/5 pt-3 space-y-2">
+        <div className="font-mono text-[10px] uppercase text-neutral-500">/ Reschedule booking</div>
+        <div className="grid grid-cols-3 gap-2">
+          <Input type="date" data-testid={`vb-hr-reschedule-date-${booking.id}`} value={date} onChange={(e) => setDate(e.target.value)} className="bg-black/40 border-white/10 text-white text-sm" />
+          <Input type="time" data-testid={`vb-hr-reschedule-time-${booking.id}`} value={start} onChange={(e) => setStart(e.target.value.slice(0, 5))} className="bg-black/40 border-white/10 text-white text-sm" />
+          <Input type="number" min="1" data-testid={`vb-hr-reschedule-hours-${booking.id}`} value={hours} onChange={(e) => setHours(Number(e.target.value) || 1)} className="bg-black/40 border-white/10 text-white text-sm" />
+        </div>
+        <div className="flex gap-2">
+          <Button data-testid={`vb-hr-reschedule-submit-${booking.id}`} size="sm" onClick={() => onReschedule({ requested_date: date, start_time: start, hours })} className="bg-[#06B6D4] hover:bg-[#0891B2] text-black rounded-sm">
+            Submit reschedule
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => setMode(null)} className="text-neutral-400">Close</Button>
+        </div>
+      </div>
+    );
+  }
   return (
-    <div className="mt-3">
-      <Button data-testid={`vb-hr-cancel-${booking.id}`} size="sm" variant="ghost" onClick={onCancel} className="text-[#FF3B30]">Cancel request</Button>
+    <div className="mt-3 flex gap-2">
+      <Button data-testid={`vb-hr-cancel-${booking.id}`} size="sm" variant="ghost" onClick={onCancel} className="text-[#FF3B30]">Cancel booking</Button>
+      <Button data-testid={`vb-hr-reschedule-${booking.id}`} size="sm" variant="ghost" onClick={() => setMode("reschedule")} className="text-[#06B6D4]">Reschedule</Button>
     </div>
   );
 }
@@ -94,11 +117,14 @@ function BookingRow({ booking, role, onPatch }) {
   const { isVendor, isCompanyAdmin, isPlatformAdmin } = role;
   const canVendorAct = isVendor && booking.status === "pending";
   const canAdminAct = isPlatformAdmin && booking.status !== "cancelled";
-  const canHrCancel = isCompanyAdmin && ["pending", "vendor_accepted", "vendor_declined"].includes(booking.status);
+  const canHrModify = isCompanyAdmin && !["cancelled", "rejected", "completed"].includes(booking.status);
 
-  const hrCancel = () => {
-    if (!window.confirm("Cancel this booking request?")) return;
-    onPatch(booking.id, { status: "cancelled" });
+  const hrCancel = async () => {
+    if (!window.confirm("Cancel this booking? Refund will be auto-calculated from the listing policy.")) return;
+    onPatch(booking.id, { __action: "cancel" });
+  };
+  const hrReschedule = (payload) => {
+    onPatch(booking.id, { __action: "reschedule", ...payload });
   };
 
   return (
@@ -128,7 +154,17 @@ function BookingRow({ booking, role, onPatch }) {
       )}
 
       {canVendorAct && <VendorActions booking={booking} onAct={(s) => onPatch(booking.id, { status: s })} />}
-      {canHrCancel && <HrCancel booking={booking} onCancel={hrCancel} />}
+      {canHrModify && <HrCancelReschedule booking={booking} onCancel={hrCancel} onReschedule={hrReschedule} />}
+      {(booking.refund_amount !== null && booking.refund_amount !== undefined) && (
+        <div className="mt-2 text-[11px] text-[#F59E0B] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-sm px-3 py-2">
+          Refund: <span className="font-mono">{fmtPrice(booking.refund_amount, booking.currency)}</span> — {booking.refund_reason}
+        </div>
+      )}
+      {(booking.previous_slots || []).length > 0 && (
+        <div className="mt-2 text-[10px] text-neutral-400">
+          Rescheduled {booking.reschedule_count}× — last from {booking.previous_slots[booking.previous_slots.length - 1].requested_date} {booking.previous_slots[booking.previous_slots.length - 1].start_time}
+        </div>
+      )}
       {canAdminAct && (
         <AdminActions
           booking={booking}
@@ -146,9 +182,18 @@ export default function VendorBookings() {
 
   const onPatch = async (id, payload) => {
     try {
-      await api.patch(`/vendor-bookings/${id}`, payload);
-      const verb = payload.status?.replace("vendor_", "") || "updated";
-      toast.success(`Booking ${verb}`);
+      if (payload.__action === "cancel") {
+        await api.post(`/vendor-bookings/${id}/cancel`, { notes: payload.notes || "" });
+        toast.success("Booking cancelled");
+      } else if (payload.__action === "reschedule") {
+        const { __action, ...body } = payload; void __action;
+        await api.post(`/vendor-bookings/${id}/reschedule`, body);
+        toast.success("Booking rescheduled");
+      } else {
+        await api.patch(`/vendor-bookings/${id}`, payload);
+        const verb = payload.status?.replace("vendor_", "") || "updated";
+        toast.success(`Booking ${verb}`);
+      }
       reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };

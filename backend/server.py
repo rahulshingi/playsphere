@@ -489,6 +489,30 @@ class Vendor(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
+class CancellationPolicy(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    full_refund_hours_before: int = 24  # ≥ this many hours before slot: 100% refund
+    partial_refund_hours_before: int = 6  # ≥ this many hours: partial refund
+    partial_refund_percent: int = 50  # what % to refund in partial window
+    no_refund_window_hours: int = 2  # < this many hours: 0% refund
+
+
+class ReschedulePolicy(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    free_reschedule_hours_before: int = 24
+    max_reschedules: int = 2
+    fee_amount: float = 0
+
+
+class HappyHour(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    label: str = "Happy Hour"
+    days: List[int] = Field(default_factory=list)  # 0=Mon..6=Sun. Empty = all days
+    start: str = "00:00"
+    end: str = "00:00"
+    factor: float = 1.0  # e.g. 0.75 for 25% off
+
+
 class VendorListing(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -506,6 +530,8 @@ class VendorListing(BaseModel):
     facilities: List[str] = Field(default_factory=list)
     approved: bool = False
     active: bool = True
+    cancellation_policy: Optional[CancellationPolicy] = None
+    reschedule_policy: Optional[ReschedulePolicy] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -560,6 +586,11 @@ class VendorBooking(BaseModel):
     notifications: List[dict] = Field(default_factory=list)
     created_by: str
     hr_email: Optional[str] = None
+    reschedule_count: int = 0
+    previous_slots: List[dict] = Field(default_factory=list)
+    cancelled_at: Optional[str] = None
+    refund_amount: Optional[float] = None
+    refund_reason: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -1948,6 +1979,16 @@ def _hours_between(start: str, end: str) -> int:
         return 1
 
 
+def send_email(to: str, subject: str, body: str, kind: str = "generic") -> dict:
+    """Mocked email dispatcher. Logs to stdout/supervisor log so we can verify the flow end-to-end.
+    Swap-in point for Resend / SendGrid once an API key is available — preserve the (to, subject, body) signature."""
+    logger.warning(
+        "[MOCK EMAIL kind=%s] to=%s | subject=%s | %s",
+        kind, to or "<unset>", subject, (body or "").strip()[:500],
+    )
+    return {"to": to, "subject": subject, "kind": kind, "delivered": True, "mock": True}
+
+
 def _booking_notification(event: str, message: str, by: dict) -> dict:
     return {
         "event": event,
@@ -1958,15 +1999,15 @@ def _booking_notification(event: str, message: str, by: dict) -> dict:
     }
 
 
-async def _log_booking_change(booking: dict, event: str, message: str, by: dict):
-    """Append a notification entry and mirror to backend logs (mocked email until integration is wired)."""
+async def _log_booking_change(booking: dict, event: str, message: str, by: dict, email_to: Optional[str] = None, email_subject: Optional[str] = None):
+    """Append a notification entry and dispatch a (mocked) email for the booking change.
+    email_to defaults to the booking's hr_email. Pass an override to notify the vendor instead."""
     note = _booking_notification(event, message, by)
     await db.vendor_bookings.update_one({"id": booking["id"]}, {"$push": {"notifications": note}})
-    hr_email = booking.get("hr_email") or booking.get("company_name") or "<unknown>"
-    logger.warning(
-        "BOOKING NOTIFICATION for %s | booking=%s | %s — %s",
-        hr_email, booking["id"], event, message,
-    )
+    recipient = email_to or booking.get("hr_email")
+    subject = email_subject or f"Booking #{booking['id'][:8]} — {event.replace('_', ' ').title()}"
+    if recipient:
+        send_email(recipient, subject, message, kind=f"booking_{event}")
 
 
 def _normalize_booking_time(start: str, end_time: Optional[str], hours: Optional[int]) -> tuple:
@@ -2100,6 +2141,141 @@ async def update_vendor_booking(booking_id: str, body: dict, user: dict = Depend
         if admin_notes:
             msg += f" — note: {admin_notes}"
         await _log_booking_change(doc, "status_change", msg, user)
+    updated = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    return VendorBooking(**updated)
+
+
+# ---------- Cancellation & Refund ----------
+def _hours_until_slot(date: str, start_time: str) -> float:
+    """Return float hours from now until the booking's slot starts. Negative = already past."""
+    try:
+        # Treat slot as IST naive then compare against UTC-now for now (mock-grade).
+        slot_dt = datetime.fromisoformat(f"{date}T{start_time}:00")
+    except Exception:
+        return 0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return (slot_dt - now).total_seconds() / 3600
+
+
+def _calc_refund(booking: dict, listing: dict) -> tuple:
+    """Return (refund_amount, reason). Uses listing.cancellation_policy or defaults if unset."""
+    pol = (listing or {}).get("cancellation_policy") or {}
+    full_h = int(pol.get("full_refund_hours_before", 24))
+    part_h = int(pol.get("partial_refund_hours_before", 6))
+    part_pct = int(pol.get("partial_refund_percent", 50))
+    no_h = int(pol.get("no_refund_window_hours", 2))
+    hrs = _hours_until_slot(booking["requested_date"], booking["start_time"])
+    total = float(booking.get("total") or booking.get("price") or 0)
+    if hrs >= full_h:
+        return total, f"Full refund — cancelled {round(hrs)}h before slot (policy: ≥{full_h}h)"
+    if hrs >= part_h:
+        return round(total * part_pct / 100, 2), f"Partial refund {part_pct}% — cancelled {round(hrs)}h before slot"
+    if hrs >= no_h:
+        return 0, f"No refund — cancelled inside the {no_h}h–{part_h}h window"
+    return 0, "No refund — cancelled within the no-refund window or after slot start"
+
+
+@api.post("/vendor-bookings/{booking_id}/cancel", response_model=VendorBooking)
+async def cancel_vendor_booking(booking_id: str, body: dict, user: dict = Depends(get_current_user)):
+    """HR / Platform Admin can cancel a booking. Refund is auto-calculated from the listing policy."""
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Booking not found")
+    role = user.get("role")
+    # HR can cancel only their company's bookings; admins all
+    if role == "company_admin" and doc.get("company_id") != user.get("company_id"):
+        raise HTTPException(403, "Not your booking")
+    if role not in ("company_admin", "platform_admin", "admin"):
+        raise HTTPException(403, "Cancellation not allowed for this role")
+    if doc.get("status") in ("cancelled", "declined"):
+        raise HTTPException(400, "Already cancelled or declined")
+
+    listing = await db.vendor_listings.find_one({"id": doc["listing_id"]}, {"_id": 0}) or {}
+    refund, reason = _calc_refund(doc, listing)
+    when = datetime.now(timezone.utc).isoformat()
+    upd = {
+        "status": "cancelled",
+        "cancelled_at": when,
+        "refund_amount": refund,
+        "refund_reason": reason,
+    }
+    if body.get("notes"):
+        upd["admin_notes"] = (doc.get("admin_notes") or "") + f"\n[Cancel] {body['notes']}"
+    await db.vendor_bookings.update_one({"id": booking_id}, {"$set": upd})
+
+    # Notify both sides (mocked email + history)
+    summary = f"Booking on {doc['requested_date']} {doc['start_time']} cancelled. Refund: {doc.get('currency','INR')} {refund} — {reason}"
+    await _log_booking_change({**doc, **upd}, "cancelled_hr", summary, user, email_to=doc.get("hr_email"))
+    vendor_user = await db.users.find_one({"vendor_id": doc.get("vendor_id"), "role": "vendor"}, {"_id": 0, "email": 1}) or {}
+    if vendor_user.get("email"):
+        send_email(vendor_user["email"], f"Booking cancelled — {doc.get('listing_title')}", summary, kind="booking_cancelled_vendor")
+
+    updated = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    return VendorBooking(**updated)
+
+
+@api.post("/vendor-bookings/{booking_id}/reschedule", response_model=VendorBooking)
+async def reschedule_vendor_booking(booking_id: str, body: dict, user: dict = Depends(get_current_user)):
+    """HR / Platform Admin can request a reschedule. Validates against listing reschedule_policy."""
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Booking not found")
+    role = user.get("role")
+    if role == "company_admin" and doc.get("company_id") != user.get("company_id"):
+        raise HTTPException(403, "Not your booking")
+    if role not in ("company_admin", "platform_admin", "admin"):
+        raise HTTPException(403, "Reschedule not allowed for this role")
+    if doc.get("status") in ("cancelled", "declined", "completed"):
+        raise HTTPException(400, "Booking cannot be rescheduled in its current state")
+
+    new_date = (body.get("requested_date") or "").strip()
+    new_start = (body.get("start_time") or "").strip()
+    hours_arg = body.get("hours") or doc.get("hours") or 1
+    if not (new_date and new_start):
+        raise HTTPException(400, "requested_date and start_time are required")
+
+    listing = await db.vendor_listings.find_one({"id": doc["listing_id"]}, {"_id": 0}) or {}
+    pol = listing.get("reschedule_policy") or {}
+    max_resched = int(pol.get("max_reschedules", 2))
+    free_hrs = int(pol.get("free_reschedule_hours_before", 24))
+    fee = float(pol.get("fee_amount", 0))
+
+    if doc.get("reschedule_count", 0) >= max_resched:
+        raise HTTPException(400, f"Reschedule limit reached ({max_resched})")
+
+    hrs_to_orig = _hours_until_slot(doc["requested_date"], doc["start_time"])
+    applied_fee = 0.0 if hrs_to_orig >= free_hrs else fee
+
+    new_end, new_h = _normalize_booking_time(new_start, body.get("end_time"), hours_arg)
+    upd = {
+        "requested_date": new_date,
+        "start_time": new_start,
+        "end_time": new_end,
+        "hours": new_h,
+        "reschedule_count": doc.get("reschedule_count", 0) + 1,
+    }
+    # Push previous slot to history and apply upd
+    await db.vendor_bookings.update_one(
+        {"id": booking_id},
+        {"$set": upd, "$push": {"previous_slots": {
+            "requested_date": doc["requested_date"],
+            "start_time": doc["start_time"],
+            "end_time": doc["end_time"],
+            "rescheduled_at": datetime.now(timezone.utc).isoformat(),
+            "rescheduled_by": user.get("email"),
+            "fee_charged": applied_fee,
+        }}},
+    )
+
+    summary = (
+        f"Rescheduled from {doc['requested_date']} {doc['start_time']} to {new_date} {new_start} "
+        f"({new_h}h). Reschedule fee: {doc.get('currency','INR')} {applied_fee}"
+    )
+    await _log_booking_change({**doc, **upd}, "rescheduled", summary, user, email_to=doc.get("hr_email"))
+    vendor_user = await db.users.find_one({"vendor_id": doc.get("vendor_id"), "role": "vendor"}, {"_id": 0, "email": 1}) or {}
+    if vendor_user.get("email"):
+        send_email(vendor_user["email"], f"Booking rescheduled — {doc.get('listing_title')}", summary, kind="booking_rescheduled_vendor")
+
     updated = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
     return VendorBooking(**updated)
 
@@ -2870,8 +3046,10 @@ async def get_schedule(listing_id: str):
             "peak_hours": ["18:00", "19:00", "20:00", "21:00"],
             "peak_price_factor": 1.25,
             "weekend_price_factor": 1.2,
+            "happy_hours": [],
             "amenities": [],
         }
+    doc.setdefault("happy_hours", [])
     return doc
 
 
@@ -2879,9 +3057,26 @@ async def get_schedule(listing_id: str):
 async def update_schedule(listing_id: str, body: dict, user: dict = Depends(get_current_user)):
     await _require_vendor_owner(listing_id, user)
     allowed = {k: body[k] for k in ("opening_time", "closing_time", "slot_minutes", "peak_hours",
-                                     "peak_price_factor", "weekend_price_factor", "amenities") if k in body}
+                                     "peak_price_factor", "weekend_price_factor", "happy_hours", "amenities") if k in body}
     if not allowed:
         raise HTTPException(400, "no allowed fields")
+    # Sanitize happy_hours entries
+    if "happy_hours" in allowed:
+        cleaned = []
+        for hh in allowed["happy_hours"] or []:
+            if not isinstance(hh, dict):
+                continue
+            try:
+                cleaned.append({
+                    "label": str(hh.get("label") or "Happy Hour")[:40],
+                    "days": [int(d) for d in (hh.get("days") or []) if 0 <= int(d) <= 6],
+                    "start": str(hh.get("start") or "00:00"),
+                    "end": str(hh.get("end") or "00:00"),
+                    "factor": max(0.0, float(hh.get("factor") or 1.0)),
+                })
+            except (TypeError, ValueError):
+                continue
+        allowed["happy_hours"] = cleaned
     allowed["listing_id"] = listing_id
     await db.venue_schedules.update_one({"listing_id": listing_id}, {"$set": allowed}, upsert=True)
     return await db.venue_schedules.find_one({"listing_id": listing_id}, {"_id": 0})
@@ -2964,6 +3159,7 @@ async def listing_availability(listing_id: str, date: str, sub_unit_id: Optional
     peak = set(sched.get("peak_hours", []))
     peak_factor = float(sched.get("peak_price_factor", 1.0))
     weekend_factor = float(sched.get("weekend_price_factor", 1.0))
+    happy_hours = sched.get("happy_hours", []) or []
     base_price = float(listing.get("price", 0))
     weekday = 0
     try:
@@ -2971,6 +3167,19 @@ async def listing_availability(listing_id: str, date: str, sub_unit_id: Optional
     except Exception:
         raise HTTPException(400, "Invalid date")
     is_weekend = weekday >= 5
+
+    def _happy_hour_factor_for(slot_hhmm: str) -> Optional[tuple]:
+        slot_min = _hhmm_to_min(slot_hhmm)
+        for hh in happy_hours:
+            days = hh.get("days") or []
+            if days and weekday not in days:
+                continue
+            try:
+                if _hhmm_to_min(hh["start"]) <= slot_min < _hhmm_to_min(hh["end"]):
+                    return (float(hh.get("factor") or 1.0), hh.get("label") or "Happy Hour")
+            except (KeyError, ValueError):
+                continue
+        return None
 
     booked = await db.vendor_bookings.find({
         "listing_id": listing_id, "requested_date": date,
@@ -2996,11 +3205,20 @@ async def listing_availability(listing_id: str, date: str, sub_unit_id: Optional
                     status = "blocked"
                     break
         price = base_price
-        if is_weekend:
+        hh_label = None
+        hh = _happy_hour_factor_for(s)
+        if hh is not None:
+            # Happy hour wins over weekend/peak pricing
+            price *= hh[0]
+            hh_label = hh[1]
+        elif is_weekend:
             price *= weekend_factor
         elif s in peak:
             price *= peak_factor
-        slots.append({"time": s, "status": status, "price": round(price, 2)})
+        slot = {"time": s, "status": status, "price": round(price, 2)}
+        if hh_label:
+            slot["happy_hour"] = hh_label
+        slots.append(slot)
     return {
         "date": date, "weekday": weekday, "is_weekend": is_weekend,
         "opening_time": opening, "closing_time": closing,

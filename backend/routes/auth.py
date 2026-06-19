@@ -7,10 +7,39 @@ import os
 import uuid
 import secrets
 import logging
+import random
 from datetime import datetime, timezone, timedelta
 from fastapi import Depends, HTTPException, Response
 
+from email_service import send_otp_email, is_email_configured
+
 logger = logging.getLogger("kreeda.routes.auth")
+
+# Free / personal email providers — blocked from company signup
+FREE_EMAIL_DOMAINS = {
+    # Google
+    "gmail.com", "googlemail.com",
+    # Yahoo
+    "yahoo.com", "yahoo.co.in", "yahoo.co.uk", "ymail.com", "rocketmail.com",
+    # Microsoft
+    "hotmail.com", "hotmail.co.uk", "outlook.com", "live.com", "msn.com",
+    # Apple
+    "icloud.com", "me.com", "mac.com",
+    # AOL / Verizon
+    "aol.com",
+    # ProtonMail
+    "protonmail.com", "proton.me", "pm.me",
+    # Russian / German
+    "yandex.com", "yandex.ru", "gmx.com", "gmx.de", "web.de", "mail.ru",
+    # Indian personal
+    "rediffmail.com", "rediff.com",
+    # Other free / disposable
+    "tutanota.com", "fastmail.com", "hushmail.com", "inbox.com",
+    "zoho.com",  # personal Zoho — business uses zoho-domains
+    # Disposable / temporary
+    "mailinator.com", "10minutemail.com", "guerrillamail.com", "tempmail.com",
+    "trashmail.com", "throwawaymail.com", "yopmail.com",
+}
 
 
 def _slugify(s: str) -> str:
@@ -18,6 +47,19 @@ def _slugify(s: str) -> str:
     while "--" in out:
         out = out.replace("--", "-")
     return out or "company"
+
+
+def _domain_of(email: str) -> str:
+    return (email.split("@", 1)[1] if "@" in email else "").strip().lower()
+
+
+def _is_corporate_email(email: str) -> bool:
+    return _domain_of(email) not in FREE_EMAIL_DOMAINS
+
+
+def _generate_otp() -> str:
+    # 6-digit numeric, no ambiguous zero-padding issues — random.randint covers full 6-digit range
+    return f"{random.randint(0, 999999):06d}"
 
 
 def register(api, db, deps):
@@ -79,9 +121,74 @@ def register(api, db, deps):
     async def auth_me(user: dict = Depends(get_current_user)):
         return UserPublic(**await _user_with_company(user))
 
+    @api.post("/companies/signup/request-otp")
+    async def company_signup_request_otp(body: dict):
+        """Step 1 of company signup — verify the email belongs to a corporate domain
+        and dispatch a 6-digit OTP to it. The OTP is stored in `company_signup_otps`
+        with a 10-minute expiry. Re-requesting overwrites the previous code."""
+        email = ((body or {}).get("admin_email") or "").strip().lower()
+        company_name = ((body or {}).get("company_name") or "").strip()
+        if not email or "@" not in email:
+            raise HTTPException(400, "Valid email is required")
+        if not _is_corporate_email(email):
+            raise HTTPException(
+                400,
+                "Please use your official company email — public providers like Gmail, Yahoo, Outlook etc. aren't supported for company signups.",
+            )
+        if await db.users.find_one({"email": email}):
+            raise HTTPException(400, "An account already exists with that email — sign in instead.")
+        if not is_email_configured():
+            raise HTTPException(503, "Email service is not configured yet — please contact admin@kreedanation.com to complete onboarding.")
+
+        otp = _generate_otp()
+        now = datetime.now(timezone.utc)
+        expires = (now + timedelta(minutes=10)).isoformat()
+        await db.company_signup_otps.update_one(
+            {"email": email},
+            {"$set": {
+                "email": email,
+                "otp": otp,
+                "company_name": company_name,
+                "expires_at": expires,
+                "verified": False,
+                "attempts": 0,
+                "created_at": now.isoformat(),
+            }},
+            upsert=True,
+        )
+        sent = send_otp_email(to=email, otp=otp, company_name=company_name)
+        if not sent:
+            # Roll the OTP back so the caller doesn't think we sent anything
+            await db.company_signup_otps.delete_one({"email": email})
+            raise HTTPException(502, "We couldn't send the verification email right now. Please try again in a few minutes.")
+        logger.info("Company signup OTP issued | email=%s ttl=600s", email)
+        return {"ok": True, "expires_in": 600, "email": email}
+
     @api.post("/companies/signup", response_model=UserPublic)
     async def company_signup(body: CompanySignupBody, response: Response):
         email = body.admin_email.lower()
+        if not _is_corporate_email(email):
+            raise HTTPException(
+                400,
+                "Please use your official company email — public providers like Gmail, Yahoo, Outlook etc. aren't supported for company signups.",
+            )
+        # Require a verified OTP for the same email
+        otp_input = (getattr(body, "otp", None) or "").strip()
+        if not otp_input:
+            raise HTTPException(400, "Email verification code is required. Request one before signing up.")
+        rec = await db.company_signup_otps.find_one({"email": email})
+        if not rec:
+            raise HTTPException(400, "No verification code has been requested for this email. Request one first.")
+        if rec.get("expires_at") < datetime.now(timezone.utc).isoformat():
+            raise HTTPException(400, "Verification code has expired. Request a new one.")
+        if (rec.get("attempts") or 0) >= 5:
+            raise HTTPException(429, "Too many incorrect attempts. Request a new verification code.")
+        if otp_input != rec.get("otp"):
+            await db.company_signup_otps.update_one(
+                {"email": email}, {"$inc": {"attempts": 1}}
+            )
+            raise HTTPException(400, "Incorrect verification code. Please double-check the email we sent.")
+
         if await db.users.find_one({"email": email}):
             raise HTTPException(400, "Email already registered")
         base_slug = _slugify(body.company_name)
@@ -107,9 +214,14 @@ def register(api, db, deps):
             "role": "company_admin",
             "company_id": company.id,
             "password_hash": hash_password(body.admin_password),
+            "email_verified": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(user_doc)
+        # Mark OTP as consumed so it can't be reused
+        await db.company_signup_otps.update_one(
+            {"email": email}, {"$set": {"verified": True, "used_at": datetime.now(timezone.utc).isoformat()}}
+        )
         token = create_access_token(user_id, email, "company_admin", company.id)
         set_auth_cookie(response, token)
         return UserPublic(**await _user_with_company(user_doc))

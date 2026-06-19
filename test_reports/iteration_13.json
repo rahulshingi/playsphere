@@ -1,0 +1,35 @@
+{
+  "summary": "Comprehensive backend + frontend validation of the new company-signup hardening (free-email blocklist + SendGrid OTP verification). 16/16 backend pytest cases pass and the full FE 2-step flow works end-to-end including redirect to /dashboard with email_verified=true.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_company_signup_otp.py",
+    "/app/test_reports/pytest/iter13_otp.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "auth.py: request-otp returns 502 if SendGrid fails AND deletes the OTP record (good — caller can safely retry). Behaviour confirmed via logs.",
+    "Slug uniqueness loop in /companies/signup increments `n` correctly; no conflict with cleanup logic.",
+    "CompanySignupBody.otp is Optional[str]='' — endpoint correctly treats empty string as missing and raises 400.",
+    "FREE_EMAIL_DOMAINS list is comprehensive (gmail, yahoo, hotmail/outlook/live/msn, icloud, aol, proton, yandex, mail.ru, rediff, mailinator, etc.).",
+    "request-otp endpoint pre-rejects emails that already exist in users collection — prevents account takeover via OTP spam.",
+    "OTP doc is correctly upserted (one record per email), attempts reset to 0 on re-request, consumed (verified=true, used_at set) on successful signup."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_company_signup_otp.py (new)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% (5/5 flows)"},
+  "test_credentials": "admin@kreedanation.com / admin123 (verified login). All QA companies/users/OTPs created during the run were cleaned up.",
+  "seed_data_creation": "None left behind. Used unique qaN.acmecorp.io domains per test and cleaned up users/companies/company_signup_otps after each case.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend test suite at /app/backend/tests/test_company_signup_otp.py covers free-email blocklist (gmail/yahoo/hotmail/rediff/mailinator), request-otp persistence + overwrite, wrong-OTP attempts counter, 5-attempt 429 lockout, expired OTP, missing OTP, valid-OTP success (creates company + company_admin user with email_verified=true, sets session cookie), and regression for admin/player/vendor signup. Run with: pytest /app/backend/tests/test_company_signup_otp.py -v. Frontend 2-step flow at /signup-company is verified end-to-end (toast on free email, transition to step 2, resend cooldown disabled at start, wrong OTP error, back-to-details, valid OTP -> /dashboard).",
+  "rca_of_the_issue": "No issues found — feature works as specified."
+}

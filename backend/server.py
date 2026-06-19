@@ -218,6 +218,7 @@ class CompanySignupBody(BaseModel):
     admin_password: str
     contact_phone: Optional[str] = ""
     logo_url: Optional[str] = ""
+    otp: Optional[str] = ""  # 6-digit code from /companies/signup/request-otp
 
 
 class Company(BaseModel):

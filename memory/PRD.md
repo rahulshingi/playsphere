@@ -164,6 +164,16 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **About.jsx** — content now uses `whitespace-pre-line` (preserves admin-entered newlines), occupies full container width, legacy `<br>` literals normalised to real line breaks, bio text in PeopleGrid also wrapped.
 - **Admin editor** — About page editor (`PlatformAdmin.jsx`) shows a hint about Enter key for line breaks, larger textareas (rows 4–6) for better authoring.
 
+## Implemented (Feb 19, 2026 — Iteration 17) Corporate-email gating + SendGrid OTP for company signup
+- **Real email delivery wired** — `backend/email_service.py` wraps SendGrid (`sendgrid==6.12.5`). `send_otp_email(to, otp, company_name)` sends a branded HTML template via the configured `SENDER_EMAIL`. Failures log + return `False` (never raise) so callers control behaviour.
+- **Free-email blocklist** in `routes/auth.py::FREE_EMAIL_DOMAINS` — rejects gmail, yahoo, hotmail/outlook/live/msn, icloud, aol, proton, yandex, mail.ru, gmx, rediff, mailinator and other disposable/personal providers. Anything else (corporate/custom domains) is allowed.
+- **Two-step signup flow**:
+  - `POST /api/companies/signup/request-otp` — validates domain → generates 6-digit OTP → upserts in `company_signup_otps` (10-min TTL, 5-attempt lockout) → sends via SendGrid → returns `{ok, expires_in, email}`. Pre-rejects emails that already have an account.
+  - `POST /api/companies/signup` — now requires `otp` field. Validates the OTP (existence, expiry, attempts ≤ 5, exact match), creates company + company_admin user with `email_verified=true`, marks OTP record consumed (`verified=true, used_at=…`).
+- **Frontend** (`SignupCompany.jsx`) — rewritten as a 2-step UX (`details` → `verify`). Step 1 includes the "Use your official company email" hint with shield icon. Step 2 shows a 6-digit input, 10-minute countdown, 60s resend cooldown, back-to-edit-details link, and disables submission once the code expires. All inputs have `data-testid`s for QA.
+- **Env added**: `SENDGRID_API_KEY`, `SENDER_EMAIL`, `SENDER_NAME`, `FRONTEND_URL` in `backend/.env`. `requirements.txt` updated.
+- **Tests**: new `tests/test_company_signup_otp.py` — **16/16 backend cases** cover blocklist, OTP persistence, overwrite on re-request, wrong-attempt counter, 429 lockout, expiry, missing-OTP rejection, valid-OTP success path. Frontend Playwright **5/5 flows** verified end-to-end.
+
 ## Implemented (Feb 18, 2026 — Iteration 16) Clean slate for production launch
 - **Wiped every demo entity** via `/app/scripts/wipe_to_clean_slate.py` — preserves only services (17), sports (11), platform admin user (1), site_settings, and About page content.
 - **Disabled demo-data seeding** — `seed_demo_data()` is no longer called from `on_startup()`. The viewer account (`viewer@kreedanation.com`) auto-seed inside `seed_admin()` was also removed.

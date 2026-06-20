@@ -7,7 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Crown, Award, Undo2, ChevronRight, X } from "lucide-react";
+import { Crown, Award, ChevronRight, X } from "lucide-react";
+import CricketScoreboard from "@/components/cricket/CricketScoreboard";
+import BallEntryPanel from "@/components/cricket/BallEntryPanel";
+import { WicketPrompt, OverBreakPrompt } from "@/components/cricket/InningsPrompts";
 
 /**
  * CricHeroes-style cricket scorer.
@@ -375,13 +378,8 @@ function LivePanel({ score, fixture, teamMap, busy, callApi }) {
     Object.values(inn.extras || {}).reduce((a, b) => a + b, 0)
   ), [inn.extras]);
 
-  const [newBatter, setNewBatter] = useState("");
-  const [newBowler, setNewBowler] = useState("");
-  const [wicketType, setWicketType] = useState("");
-
   const sendBall = (runs, extra = null, wicket = null) => {
     callApi("ball", { runs, extra, wicket });
-    setWicketType("");
   };
 
   const inWicket = score.match_state === "wicket";
@@ -412,30 +410,7 @@ function LivePanel({ score, fixture, teamMap, busy, callApi }) {
 
   return (
     <div className="mt-6 space-y-4">
-      {/* Big scoreboard */}
-      <div className="bg-gradient-to-r from-[#0a0a0a] via-[#1a1a1a] to-[#0a0a0a] border border-white/10 rounded-sm p-6">
-        <div className="grid grid-cols-3 gap-4 items-center">
-          <div>
-            <div className="font-mono text-[10px] uppercase text-neutral-500">{battingTeam?.name}</div>
-            <div className="font-display text-5xl text-white mt-1">{inn.runs ?? 0}<span className="text-2xl text-neutral-500">/{inn.wickets ?? 0}</span></div>
-            <div className="text-xs font-mono text-neutral-500 mt-1">{overs} / {score.overs_limit} ov · RR {((inn.runs || 0) / ((inn.legal_balls || 1) / 6)).toFixed(2)}</div>
-          </div>
-          <div className="text-center">
-            {inn.target && (
-              <>
-                <div className="text-[10px] font-mono uppercase text-neutral-500">Target</div>
-                <div className="font-display text-3xl text-[#FF3B30]">{inn.target}</div>
-                <div className="text-xs text-neutral-400 mt-1">Need {Math.max(0, inn.target - inn.runs)} in {Math.max(0, score.overs_limit * 6 - inn.legal_balls)} balls</div>
-              </>
-            )}
-          </div>
-          <div className="text-right">
-            <div className="font-mono text-[10px] uppercase text-neutral-500">Bowling</div>
-            <div className="text-base font-semibold">{bowlingTeam?.name}</div>
-            <div className="text-xs font-mono text-neutral-500 mt-1">Extras: {extrasTotal}</div>
-          </div>
-        </div>
-      </div>
+      <CricketScoreboard inn={inn} score={score} battingTeam={battingTeam} bowlingTeam={bowlingTeam} overs={overs} extrasTotal={extrasTotal} />
 
       {/* Striker / Non-striker / Bowler */}
       <div className="grid grid-cols-3 gap-3">
@@ -465,90 +440,18 @@ function LivePanel({ score, fixture, teamMap, busy, callApi }) {
         </div>
       )}
 
-      {/* Wicket prompt */}
       {inWicket && (
-        <div className="border border-[#FF3B30]/40 bg-[#FF3B30]/10 rounded-sm p-4">
-          <div className="font-mono text-[10px] uppercase text-[#FF3B30]">/ WICKET — pick the new batsman</div>
-          <div className="flex gap-2 mt-3">
-            <Select value={newBatter} onValueChange={setNewBatter}>
-              <SelectTrigger data-testid="new-batsman-select" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Select incoming batsman" /></SelectTrigger>
-              <SelectContent className="bg-[#141414] text-white border-white/10">
-                {availableBatsmen.map((p) => (
-                  <SelectItem key={p.player_id} value={p.player_id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button data-testid="new-batsman-submit" disabled={!newBatter || busy} onClick={() => { callApi("new-batsman", { player_id: newBatter }); setNewBatter(""); }}
-              className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Send in</Button>
-          </div>
-        </div>
+        <WicketPrompt availableBatsmen={availableBatsmen} busy={busy}
+          onSubmit={(player_id) => callApi("new-batsman", { player_id })} />
       )}
 
-      {/* End of over prompt */}
       {overBreak && !inWicket && (
-        <div className="border border-[#84CC16]/40 bg-[#84CC16]/10 rounded-sm p-4">
-          <div className="font-mono text-[10px] uppercase text-[#84CC16]">/ END OF OVER — pick the next bowler</div>
-          <div className="flex gap-2 mt-3">
-            <Select value={newBowler} onValueChange={setNewBowler}>
-              <SelectTrigger data-testid="new-bowler-select" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Select bowler" /></SelectTrigger>
-              <SelectContent className="bg-[#141414] text-white border-white/10">
-                {availableBowlers.map((p) => (
-                  <SelectItem key={p.player_id} value={p.player_id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button data-testid="new-bowler-submit" disabled={!newBowler || busy} onClick={() => { callApi("new-bowler", { player_id: newBowler }); setNewBowler(""); }}
-              className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Confirm</Button>
-          </div>
-        </div>
+        <OverBreakPrompt availableBowlers={availableBowlers} busy={busy}
+          onSubmit={(player_id) => callApi("new-bowler", { player_id })} />
       )}
 
-      {/* Ball entry */}
       {!inWicket && !overBreak && (
-        <div className="border border-white/10 rounded-sm p-4 bg-[#141414]">
-          <div className="font-mono text-[10px] uppercase text-neutral-500">/ Record a ball</div>
-          <div className="grid grid-cols-4 sm:grid-cols-8 gap-2 mt-3">
-            {[0, 1, 2, 3, 4, 6].map((r) => (
-              <RunButton key={r} runs={r} testid={`ball-runs-${r}`} disabled={busy}
-                onClick={() => sendBall(r)} />
-            ))}
-            <RunButton runs="WD" testid="ball-wd" disabled={busy} accent onClick={() => sendBall(0, "wd")} />
-            <RunButton runs="NB" testid="ball-nb" disabled={busy} accent onClick={() => sendBall(0, "nb")} />
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-            <RunButton runs="1 BYE" testid="ball-b1" disabled={busy} onClick={() => sendBall(1, "b")} />
-            <RunButton runs="1 LB" testid="ball-lb1" disabled={busy} onClick={() => sendBall(1, "lb")} />
-            <RunButton runs="4 BYE" testid="ball-b4" disabled={busy} onClick={() => sendBall(4, "b")} />
-            <Button data-testid="ball-undo" disabled={busy} variant="outline" onClick={() => callApi("undo")}
-              className="border-white/10 bg-transparent text-neutral-300 hover:bg-white/5">
-              <Undo2 className="w-4 h-4 mr-1" /> Undo last
-            </Button>
-          </div>
-
-          {/* Wicket panel */}
-          <div className="mt-4 border-t border-white/10 pt-3">
-            <div className="font-mono text-[10px] uppercase text-neutral-500 flex items-center gap-2">
-              / Wicket
-              {freeHit && <span className="text-[#A855F7]">— free-hit: only runout dismisses</span>}
-            </div>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-2">
-              {["bowled", "caught", "lbw", "runout", "stumped", "hitwicket"].map((wt) => {
-                const disabled = busy || (freeHit && wt !== "runout");
-                return (
-                  <button key={wt} data-testid={`ball-wicket-${wt}`} disabled={disabled}
-                    onClick={() => sendBall(0, null, { type: wt })}
-                    className={`px-3 py-2 text-xs font-mono uppercase rounded-sm border ${
-                      disabled
-                        ? "border-white/10 text-neutral-600 cursor-not-allowed"
-                        : "border-[#FF3B30]/40 text-[#FF3B30] hover:bg-[#FF3B30]/10"
-                    }`}>
-                    {wt}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
+        <BallEntryPanel busy={busy} freeHit={freeHit} onSendBall={sendBall} onUndo={() => callApi("undo")} />
       )}
 
       {/* Cards */}
@@ -566,21 +469,6 @@ function LivePanel({ score, fixture, teamMap, busy, callApi }) {
         </Button>
       </div>
     </div>
-  );
-}
-
-function RunButton({ runs, onClick, disabled, accent, testid }) {
-  const isExtra = typeof runs === "string";
-  return (
-    <button data-testid={testid} disabled={disabled} onClick={onClick}
-      className={`px-3 py-3 text-base font-display tracking-wider rounded-sm border transition ${
-        accent ? "bg-[#FF3B30]/10 border-[#FF3B30]/40 text-[#FF3B30] hover:bg-[#FF3B30]/20"
-               : runs === 4 ? "bg-[#06B6D4]/10 border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/20"
-               : runs === 6 ? "bg-[#A855F7]/10 border-[#A855F7]/40 text-[#A855F7] hover:bg-[#A855F7]/20"
-               : "border-white/10 text-white hover:bg-white/5"
-      }`}>
-      {isExtra ? runs : (runs === 0 ? "·" : runs)}
-    </button>
   );
 }
 

@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 16 (refactor regression) - Verified that the PlatformAdmin/AdminTeam/CricketScorer split into /components/admin/* and /components/cricket/* is zero-regression. End-to-end UI tests cover login as super admin, all 14 PlatformAdmin tabs render with no console errors, ServiceEditor modal opens with name/category/price/currency/add-field/add-variant/save (Cancel closes), Events tab CRUD (create 'QA Refactor Cup' -> 'Event created' toast -> row visible -> delete with confirm), Settings tab (facebook_url save + contact_email save both toast OK), AboutTab (mission + founder via PeopleEditor + save), AccountsManager (role chips: organiser/company_admin/vendor/player + search + show-disabled toggle), AdminTeam (invite form has email/name/password + 7 permission checkboxes, creating an admin shows InviteCredentialsBanner with copy button, AdminRow delete works), Companies vs Organisers tab separation logic verified (both tabs render; clean-slate env has 0 rows of each so visual drilldown not exercised but Link href = /platform-admin/companies/{id} is intact). CricketScorer host page (/events/{id}) loads cleanly with title rendered and no JS errors after creating a cricket event.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_16.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CricketScorer.jsx is still 669 lines after extracting CricketScoreboard/BallEntryPanel/InningsPrompts. The remaining hooks/state machine (innings transitions, target chase tracking, undo stack) is the next chunk to split into a useCricketLiveState() hook + a separate WicketPicker file to push CricketScorer under 400 lines.",
+    "useFixtureSocket emits a noisy 'Socket error: Event' console.error on every initial connect attempt for events that have no fixture yet. Downgrade to console.warn (or suppress when readyState===0) so genuine WS errors are visible in production.",
+    "PlatformAdmin.jsx still inlines the Services list (lines 134-150) and the Bookings/Companies/Organisers lists. Those three remaining inline tabs (~80 lines) could each become a ServicesTab/CompaniesTab/OrganisersTab/BookingsTab module for true consistency with how Events/Vendors/Listings/Settings/About are factored.",
+    "EventsTab.jsx and AccountsManager.jsx import their own toast - acceptable, but consider extracting the 'confirm + delete + reload + toast' pattern into a small useConfirmDelete(url, name) hook since it's now duplicated across Events/Team/Vendors/Listings."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only iteration per request)", "frontend": "100% on all 14 tabs + service editor + events CRUD + settings save + about save + team invite/banner/delete + accounts chips + cricket event detail page"},
+  "test_credentials": "Super admin admin@kreedanation.com / admin123 (per /app/memory/test_credentials.md). One temp staff admin (qa-refactor-<ts>@kreedanation.com) was created via the invite flow and deleted in the same run. One event 'QA Refactor Cup' and one 'QA Cricket Smoke' were created and deleted in the same run.",
+  "seed_data_creation": "None persisted. All ephemeral test data (1 staff admin + 2 events) cleaned up via UI delete + dialog accept in the same Playwright run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Refactor is clean. data-testids in the moved files: ServiceEditor uses svc-name/svc-category/svc-currency/svc-price/svc-unit/svc-desc/svc-add-field/svc-add-variant/svc-save (NOT 'service-editor-*'). SettingsTab uses setting-facebook_url / setting-instagram_url / setting-linkedin_url / setting-twitter_url / setting-youtube_url and setting-contact_email plus settings-save and contact-save. AboutTab uses about-mission/about-vision/about-desc/about-save and PeopleEditor exposes founders-add and founders-{i}-name/role/bio (directors-add similarly). InviteAdminForm uses team-new-email/team-new-name/team-new-password/team-new-perm-{permName}/team-create-admin; banner is team-invite-banner with team-invite-copy; AdminRow uses team-admin-{id}, team-edit-{id}, team-delete-{id}, team-edit-name-{id}, team-edit-perm-{id}-{perm}, team-save-{id}. AccountsManager chips are accounts-role-{organiser|company_admin|vendor|player} (note: 'company_admin' NOT 'company'). PlatformAdmin tab triggers are pa-tab-{dashboard|services|events|sports|companies|organisers|bookings|vendors|listings|settings|about|reviews|accounts|team}. EventsTab uses pa-event-name/pa-event-sport/pa-event-format/pa-event-type/pa-event-venue/pa-event-banner/pa-event-stream/pa-create-event-btn and per-row pa-event-row-{id}, pa-event-open-{id}, pa-event-del-{id}. PlatformAdmin top-level: platform-new-service, pa-company-{id}, pa-organiser-{id}. The lone console.error in EventDetail page is from useFixtureSocket (pre-existing, not refactor-induced).",
+  "rca of the issue": "n/a - no regression found. Refactor is functionally identical to iteration_15 baseline; all testids were preserved verbatim and the original PlatformAdmin tab layout/wiring is unchanged. File-size targets achieved: PlatformAdmin 236 lines (was 715), AdminTeam 98 (was 265), with cricket sub-components 31+53+69=153 lines extracted from the old LivePanel."
+}

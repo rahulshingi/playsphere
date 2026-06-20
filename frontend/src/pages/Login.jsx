@@ -23,7 +23,7 @@ export default function Login() {
       toast.success("Welcome back");
       const role = r.user?.role || (r && r.user ? r.user.role : null);
       if (role === "platform_admin" || role === "admin") nav("/platform-admin");
-      else if (role === "company_admin") nav("/dashboard");
+      else if (role === "company_admin" || role === "organiser") nav("/dashboard");
       else if (role === "vendor") nav("/vendor/dashboard");
       else if (role === "player") nav("/players/me");
       else nav("/");

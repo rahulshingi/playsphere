@@ -176,17 +176,8 @@ def register(api, db, deps):
         return {"ok": True, "expires_in": 600, "email": email}
 
     async def _consume_signup_otp(*, email: str, otp_input: str, otp_collection: str):
-        """Validate + consume an OTP. Raises HTTPException on any failure."""
-        rec = await db[otp_collection].find_one({"email": email})
-        if not rec:
-            raise HTTPException(400, "No verification code has been requested for this email. Request one first.")
-        if rec.get("expires_at") < datetime.now(timezone.utc).isoformat():
-            raise HTTPException(400, "Verification code has expired. Request a new one.")
-        if (rec.get("attempts") or 0) >= 5:
-            raise HTTPException(429, "Too many incorrect attempts. Request a new verification code.")
-        if (otp_input or "").strip() != rec.get("otp"):
-            await db[otp_collection].update_one({"email": email}, {"$inc": {"attempts": 1}})
-            raise HTTPException(400, "Incorrect verification code. Please double-check the email we sent.")
+        """Closure-level wrapper around the module-level consumer (single source of truth)."""
+        await _consume_signup_otp_sync(db, otp_collection)(email, otp_input)
 
     @api.post("/companies/signup/request-otp")
     async def company_signup_request_otp(body: dict):

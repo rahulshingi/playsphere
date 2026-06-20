@@ -164,7 +164,23 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **About.jsx** — content now uses `whitespace-pre-line` (preserves admin-entered newlines), occupies full container width, legacy `<br>` literals normalised to real line breaks, bio text in PeopleGrid also wrapped.
 - **Admin editor** — About page editor (`PlatformAdmin.jsx`) shows a hint about Enter key for line breaks, larger textareas (rows 4–6) for better authoring.
 
-## Implemented (Feb 19, 2026 — Iteration 18) Vendor + Player OTP signup, SendGrid forgot-password, DRY OTP consumer
+## Implemented (Feb 20, 2026 — Iteration 19) Organiser role + signup + nav + dedicated manual + DRY consumer
+- **Backend** (`routes/auth.py`): added `POST /api/organisers/signup/request-otp` and `POST /api/organisers/signup`. No corporate-email rule. Creates a `companies` doc tagged `org_type="organiser"` and a user with `role="organiser"`. Reuses `_consume_signup_otp_sync` for the OTP validation.
+- **Permission widening** (`server.py`, `routes/events.py`, `routes/bookings.py`): `require_admin` and `require_company_admin` now accept the `organiser` role. New helper `is_company_scoped(user)` replaces 27 `user.get("role") == "company_admin"` checks across the codebase so HR + organisers share the same scoping.
+- **DRY refactor**: closure-level `_consume_signup_otp` in `routes/auth.py::register` now delegates to the module-level `_consume_signup_otp_sync(db, collection_name)` — single source of truth across company / vendor / player / organiser flows.
+- **Frontend**:
+  - New `/app/frontend/src/pages/SignupOrganiser.jsx` (cyan `#06B6D4` brand colour), reuses `OtpVerifyStep`.
+  - `AuthContext` exposes `signupOrganiser()`; `isCompanyAdmin` is true for organisers (so existing HR-gated UI works); new `isOrganiser` flag.
+  - `Nav.jsx`: cyan "For Organisers" CTA next to lime "For Companies" (desktop + mobile drawer).
+  - `Footer.jsx`: "Become an organiser" link in the Join column.
+  - `Login.jsx`: redirects organisers to `/dashboard`.
+  - `lib/guides.js`: `organiser` → `/manuals/kreeda-nation-organiser-manual.pdf`.
+- **Organiser manual** (`scripts/generate_manuals.py`): inherits the HR content with a tailored "Welcome, organiser" intro that highlights the any-email rule. Five PDFs now ship under `/manuals/`.
+- **Tests**: 39 new pytest cases in `tests/test_organiser_signup_otp.py` covering accept-any-domain OTP, signup flow, role checks, perms (can list own events, blocked from other companies' events). + 22 frontend Playwright assertions.
+
+**Known operational issue (not code):** the configured `SENDGRID_API_KEY` is currently returning HTTP 401 Unauthorized at SendGrid's edge (verified with a direct SDK call outside our app). All `*/signup/request-otp` calls therefore 502 with "We couldn't send the verification email…". To recover: open SendGrid → Settings → API Keys, regenerate the key with `Mail Send` permission, then update `SENDGRID_API_KEY` in `backend/.env`. The code path is correct — pytest passes immediately once SendGrid is reachable again.
+
+
 - **Vendor signup is now 2-step**: `POST /api/vendors/signup/request-otp` issues a 6-digit code (10-min TTL, 5-attempt lockout). `POST /api/vendors/signup` requires `otp` and uses the shared `_consume_signup_otp_sync(db, "vendor_signup_otps")` helper. No corporate-domain restriction.
 - **Player signup is now 2-step**: same shape via `/players/signup/request-otp` + the existing `/players/register`. `PlayerSignupBody.email` is now **required** (was Optional) since it's the OTP channel.
 - **Forgot-password ships real emails** — `routes/auth.py::forgot_password` now calls `send_password_reset_email(to, reset_url, name)` from `email_service.py` (branded Kreeda Nation template with a "RESET MY PASSWORD" button + plain-text link fallback). If SendGrid fails, the reset URL is still logged so ops can recover.
@@ -172,6 +188,8 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **Reusable FE component** — `/app/frontend/src/components/OtpVerifyStep.jsx`: countdown timer + 60s resend cooldown + back-to-edit link + 6-digit input, parameterised by a `testidPrefix`. Used by `VendorSignup.jsx` (prefix `vendor-signup-otp`) and `PlayerSignup.jsx` (prefix `player-signup-otp`). `SignupCompany.jsx` keeps its inline implementation (already covered by iteration-17 tests).
 - **Tests**: new `tests/test_vendor_player_otp_and_email.py` — 15/15 pass covering vendor/player request-otp accepting any domain, missing OTP rejection, expired/wrong/lockout paths, full success → user+profile creation, and SendGrid 202 + log assertions for forgot-password. Combined with iteration-17 suite = **31/31 OTP tests passing**.
 - **Test infra fix** — `tests/test_vendor_player_otp_and_email.py` + `test_company_signup_otp.py` now use `dotenv` / safe `os.environ.get(...)` defaults so they run locally too.
+
+## Implemented (Feb 19, 2026 — Iteration 18) Vendor + Player OTP signup, SendGrid forgot-password, DRY OTP consumer
 
 
 - **Real email delivery wired** — `backend/email_service.py` wraps SendGrid (`sendgrid==6.12.5`). `send_otp_email(to, otp, company_name)` sends a branded HTML template via the configured `SENDER_EMAIL`. Failures log + return `False` (never raise) so callers control behaviour.

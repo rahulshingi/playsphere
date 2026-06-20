@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { devError } from "./devLog";
+import { devError, devWarn } from "./devLog";
 
 /**
  * Subscribe to backend WebSocket and invoke onUpdate(payload) on every message.
@@ -88,7 +88,10 @@ export default function useFixtureSocket(onUpdate, pollFallback) {
         scheduleReconnect();
       };
       ws.onerror = (err) => {
-        devError("[useFixtureSocket] Socket error:", err);
+        // Downgraded to warn: initial connects on pages without an active fixture, or before the
+        // ingress upgrades the WS, will fire this. Polling fallback keeps data flowing — so this is
+        // expected noise, not an error. Genuine WS failures still surface (just at warn level).
+        devWarn("[useFixtureSocket] Socket error (falling back to polling):", err);
         socketHealthy = false;
         startPolling();
         try {

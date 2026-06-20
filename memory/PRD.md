@@ -271,6 +271,21 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - New **Accounts** tab in `PlatformAdmin.jsx` (red tab) with role sub-tabs (Organisers / Company admins / Vendors / Players), search box, "Show disabled" toggle, per-row Disable/Enable button, and disabled metadata badge.
 - 8 pytest cases added in `test_account_suspension.py` (all passing).
 
+## Implemented — Feb 20, 2026 — Organisers tab + Dashboard counts
+- Added cyan **Organisers** tab in PlatformAdmin (filters `companies` by `org_type === "organiser"`). Reuses `/platform-admin/companies/{id}` detail page — `CompanyDetail` flips to cyan "Organiser" branding + "Owner & staff" tab label when applicable.
+- `/api/dashboard/admin` returns separate `organisers` and `companies` counts (companies excludes organisers). New cyan ORGANISERS dashboard card sits next to the pink COMPANIES card.
+
+## Implemented — Feb 20, 2026 — Code quality refactor
+**Security**:
+- `random.randint` → `secrets.randbelow(1_000_000)` for OTP generation in `routes/auth.py`.
+- Same fix in `tests/test_vendor_player_otp_and_email.py`.
+- Test password in `tests/test_account_suspension.py` now sourced from env / `secrets.token_urlsafe()`.
+
+**Component splits (zero-regression, verified by testing agent iteration_16)**:
+- `PlatformAdmin.jsx`: **715 → 236 lines** (-67%). Extracted to `/app/frontend/src/components/admin/`: ServiceEditor, EventsTab, VendorsTab, ListingsTab, SettingsTab, AboutTab, AccountsManager, ContactInbox, PeopleEditor.
+- `AdminTeam.jsx`: **265 → 98 lines** (-63%). Extracted: InviteAdminForm, InviteCredentialsBanner, AdminRow + shared `adminTeamShared.js`.
+- `CricketScorer.jsx` `LivePanel`: **226 → ~70 lines**. Extracted to `/app/frontend/src/components/cricket/`: CricketScoreboard, BallEntryPanel, InningsPrompts (WicketPrompt + OverBreakPrompt). Removed dead `wicketType` state.
+
 ## Backlog
 ### P0
 - (none open)

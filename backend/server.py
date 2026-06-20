@@ -1079,6 +1079,10 @@ async def delete_sponsor(sponsor_id: str, _: dict = Depends(require_admin)):
 
 
 # ---------- Player accounts (mobile + password) ----------
+from routes.auth import _consume_signup_otp_sync as _make_otp_consumer  # noqa: E402
+_consume_player_otp = _make_otp_consumer(db, "player_signup_otps")
+
+
 @api.post("/players/register", response_model=UserPublic)
 async def player_register(body: PlayerSignupBody, response: Response):
     if await db.player_profiles.find_one({"mobile": body.mobile}):
@@ -1087,20 +1091,10 @@ async def player_register(body: PlayerSignupBody, response: Response):
     if await db.users.find_one({"email": email}):
         raise HTTPException(400, "Email already in use")
 
-    # OTP verification — mirrors company / vendor signup flow
     otp_input = (getattr(body, "otp", None) or "").strip()
     if not otp_input:
         raise HTTPException(400, "Email verification code is required. Request one before signing up.")
-    rec = await db.player_signup_otps.find_one({"email": email})
-    if not rec:
-        raise HTTPException(400, "No verification code has been requested for this email. Request one first.")
-    if rec.get("expires_at") < datetime.now(timezone.utc).isoformat():
-        raise HTTPException(400, "Verification code has expired. Request a new one.")
-    if (rec.get("attempts") or 0) >= 5:
-        raise HTTPException(429, "Too many incorrect attempts. Request a new verification code.")
-    if otp_input != rec.get("otp"):
-        await db.player_signup_otps.update_one({"email": email}, {"$inc": {"attempts": 1}})
-        raise HTTPException(400, "Incorrect verification code. Please double-check the email we sent.")
+    await _consume_player_otp(email, otp_input)
 
     user_id = str(uuid.uuid4())
     await db.users.insert_one({

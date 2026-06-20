@@ -57,6 +57,27 @@ def _is_corporate_email(email: str) -> bool:
     return _domain_of(email) not in FREE_EMAIL_DOMAINS
 
 
+def _consume_signup_otp_sync(db, collection_name: str):
+    """Standalone OTP consumer reusable by routes outside routes/auth.py.
+
+    Returns an async function (email, otp_input) -> None that validates the OTP record,
+    increments attempts on mismatch, and raises HTTPException on any failure. Marking the
+    OTP as 'used' is left to the caller (so they can do it after the user/profile insert
+    succeeds, preventing the OTP from being burnt if the downstream create fails)."""
+    async def _consume(email: str, otp_input: str):
+        rec = await db[collection_name].find_one({"email": email})
+        if not rec:
+            raise HTTPException(400, "No verification code has been requested for this email. Request one first.")
+        if rec.get("expires_at") < datetime.now(timezone.utc).isoformat():
+            raise HTTPException(400, "Verification code has expired. Request a new one.")
+        if (rec.get("attempts") or 0) >= 5:
+            raise HTTPException(429, "Too many incorrect attempts. Request a new verification code.")
+        if (otp_input or "").strip() != rec.get("otp"):
+            await db[collection_name].update_one({"email": email}, {"$inc": {"attempts": 1}})
+            raise HTTPException(400, "Incorrect verification code. Please double-check the email we sent.")
+    return _consume
+
+
 def _generate_otp() -> str:
     # 6-digit numeric, no ambiguous zero-padding issues — random.randint covers full 6-digit range
     return f"{random.randint(0, 999999):06d}"

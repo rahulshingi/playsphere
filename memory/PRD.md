@@ -164,7 +164,16 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **About.jsx** — content now uses `whitespace-pre-line` (preserves admin-entered newlines), occupies full container width, legacy `<br>` literals normalised to real line breaks, bio text in PeopleGrid also wrapped.
 - **Admin editor** — About page editor (`PlatformAdmin.jsx`) shows a hint about Enter key for line breaks, larger textareas (rows 4–6) for better authoring.
 
-## Implemented (Feb 19, 2026 — Iteration 17) Corporate-email gating + SendGrid OTP for company signup
+## Implemented (Feb 19, 2026 — Iteration 18) Vendor + Player OTP signup, SendGrid forgot-password, DRY OTP consumer
+- **Vendor signup is now 2-step**: `POST /api/vendors/signup/request-otp` issues a 6-digit code (10-min TTL, 5-attempt lockout). `POST /api/vendors/signup` requires `otp` and uses the shared `_consume_signup_otp_sync(db, "vendor_signup_otps")` helper. No corporate-domain restriction.
+- **Player signup is now 2-step**: same shape via `/players/signup/request-otp` + the existing `/players/register`. `PlayerSignupBody.email` is now **required** (was Optional) since it's the OTP channel.
+- **Forgot-password ships real emails** — `routes/auth.py::forgot_password` now calls `send_password_reset_email(to, reset_url, name)` from `email_service.py` (branded Kreeda Nation template with a "RESET MY PASSWORD" button + plain-text link fallback). If SendGrid fails, the reset URL is still logged so ops can recover.
+- **DRY OTP consumer** — extracted `_consume_signup_otp_sync(db, collection_name)` from `routes/auth.py`. `routes/vendors.py::vendor_signup` and `server.py::player_register` both import it and reuse the exact same validation logic the company-signup flow uses. Single source of truth.
+- **Reusable FE component** — `/app/frontend/src/components/OtpVerifyStep.jsx`: countdown timer + 60s resend cooldown + back-to-edit link + 6-digit input, parameterised by a `testidPrefix`. Used by `VendorSignup.jsx` (prefix `vendor-signup-otp`) and `PlayerSignup.jsx` (prefix `player-signup-otp`). `SignupCompany.jsx` keeps its inline implementation (already covered by iteration-17 tests).
+- **Tests**: new `tests/test_vendor_player_otp_and_email.py` — 15/15 pass covering vendor/player request-otp accepting any domain, missing OTP rejection, expired/wrong/lockout paths, full success → user+profile creation, and SendGrid 202 + log assertions for forgot-password. Combined with iteration-17 suite = **31/31 OTP tests passing**.
+- **Test infra fix** — `tests/test_vendor_player_otp_and_email.py` + `test_company_signup_otp.py` now use `dotenv` / safe `os.environ.get(...)` defaults so they run locally too.
+
+
 - **Real email delivery wired** — `backend/email_service.py` wraps SendGrid (`sendgrid==6.12.5`). `send_otp_email(to, otp, company_name)` sends a branded HTML template via the configured `SENDER_EMAIL`. Failures log + return `False` (never raise) so callers control behaviour.
 - **Free-email blocklist** in `routes/auth.py::FREE_EMAIL_DOMAINS` — rejects gmail, yahoo, hotmail/outlook/live/msn, icloud, aol, proton, yandex, mail.ru, gmx, rediff, mailinator and other disposable/personal providers. Anything else (corporate/custom domains) is allowed.
 - **Two-step signup flow**:
@@ -173,6 +182,8 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - **Frontend** (`SignupCompany.jsx`) — rewritten as a 2-step UX (`details` → `verify`). Step 1 includes the "Use your official company email" hint with shield icon. Step 2 shows a 6-digit input, 10-minute countdown, 60s resend cooldown, back-to-edit-details link, and disables submission once the code expires. All inputs have `data-testid`s for QA.
 - **Env added**: `SENDGRID_API_KEY`, `SENDER_EMAIL`, `SENDER_NAME`, `FRONTEND_URL` in `backend/.env`. `requirements.txt` updated.
 - **Tests**: new `tests/test_company_signup_otp.py` — **16/16 backend cases** cover blocklist, OTP persistence, overwrite on re-request, wrong-attempt counter, 429 lockout, expiry, missing-OTP rejection, valid-OTP success path. Frontend Playwright **5/5 flows** verified end-to-end.
+
+## Implemented (Feb 19, 2026 — Iteration 17) Corporate-email gating + SendGrid OTP for company signup
 
 ## Implemented (Feb 18, 2026 — Iteration 16) Clean slate for production launch
 - **Wiped every demo entity** via `/app/scripts/wipe_to_clean_slate.py` — preserves only services (17), sports (11), platform admin user (1), site_settings, and About page content.

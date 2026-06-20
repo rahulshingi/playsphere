@@ -19,7 +19,7 @@ import pytest
 import requests
 from motor.motor_asyncio import AsyncIOMotorClient
 
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "http://localhost:8001").rstrip("/")
 API = f"{BASE_URL}/api"
 
 # Mongo direct access for OTP introspection / mutation
@@ -119,7 +119,7 @@ class TestRequestOtpHappyPath:
         try:
             r1 = s.post(f"{API}/companies/signup/request-otp", json={"company_name": "X", "admin_email": email})
             assert r1.status_code == 200
-            first_otp = _otp_for(db, email)["otp"]
+            _otp_for(db, email)  # Ensure record exists before re-request overwrites it
             time.sleep(0.5)
             r2 = s.post(f"{API}/companies/signup/request-otp", json={"company_name": "X", "admin_email": email})
             assert r2.status_code == 200

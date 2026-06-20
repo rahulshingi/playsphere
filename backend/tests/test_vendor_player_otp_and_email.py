@@ -8,6 +8,8 @@ Covers:
 - Regression: company signup OTP flow (gmail blocked, corporate accepted) + admin login.
 """
 import os
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 import re
 import time
 import uuid
@@ -16,7 +18,7 @@ import pytest
 import requests
 from motor.motor_asyncio import AsyncIOMotorClient
 
-BASE_URL = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
+BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or "http://localhost:8001").rstrip("/")
 API = f"{BASE_URL}/api"
 
 MONGO_URL = os.environ["MONGO_URL"]

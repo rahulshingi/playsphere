@@ -261,7 +261,15 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 
 ### Testing & regression
 - **`/app/backend/tests/test_rbac_admin.py`** — 14/14 tests covering all RBAC paths (super-only enforcement, permission-gated paths, staff CRUD, edge cases: super-immortal, duplicate email, perm allowlist).
+- **`/app/backend/tests/test_account_suspension.py`** — 8/8 tests covering list/filter, disable→403 with exact contact message, re-enable→login restored, platform-admin protection, self-disable rejection, auth gating.
 - Frontend e2e via Playwright validated: nav guide visibility, footer guide removal, team-tab gating, staff-admin invite flow, staff-admin login → button hiding, About page line-break rendering, all 4 manuals served at /manuals/*.
+
+## Implemented — Feb 20, 2026 — Account Suspension (uniform)
+- `GET /api/admin/users[?role=…]` — lists organisers / company admins / vendors / players with `disabled` flag and contextual fields (company name / vendor business name).
+- `PATCH /api/admin/users/{id}/disabled` — toggles `disabled`; stamps `disabled_at` / `disabled_by`; refuses platform_admin, self, and unknown ids.
+- `POST /api/auth/login` now rejects disabled accounts with **HTTP 403** and detail `"Your account has been disabled. Please contact admin with admin email: admin@kreedanation.com"`.
+- New **Accounts** tab in `PlatformAdmin.jsx` (red tab) with role sub-tabs (Organisers / Company admins / Vendors / Players), search box, "Show disabled" toggle, per-row Disable/Enable button, and disabled metadata badge.
+- 8 pytest cases added in `test_account_suspension.py` (all passing).
 
 ## Backlog
 ### P0

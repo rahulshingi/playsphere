@@ -146,6 +146,7 @@ export default function PlatformAdmin() {
             <TabsTrigger value="settings" data-testid="pa-tab-settings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Settings</TabsTrigger>
             <TabsTrigger value="about" data-testid="pa-tab-about" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">About page</TabsTrigger>
             <TabsTrigger value="reviews" data-testid="pa-tab-reviews" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Reviews</TabsTrigger>
+            <TabsTrigger value="accounts" data-testid="pa-tab-accounts" className="data-[state=active]:bg-[#FF3B30] data-[state=active]:text-white rounded-sm">Accounts</TabsTrigger>
             {isSuperAdmin && (
               <TabsTrigger value="team" data-testid="pa-tab-team" className="data-[state=active]:bg-[#FF3B30] data-[state=active]:text-white rounded-sm">Team</TabsTrigger>
             )}
@@ -353,6 +354,10 @@ export default function PlatformAdmin() {
             </div>
           </TabsContent>
 
+          <TabsContent value="accounts" className="mt-6">
+            <AccountsManager />
+          </TabsContent>
+
           <TabsContent value="about" className="mt-6">
             <div className="border border-white/10 rounded-sm bg-[#141414] p-6 max-w-3xl space-y-3">
               <div className="font-display tracking-wider text-2xl">ABOUT PAGE CONTENT</div>
@@ -555,6 +560,131 @@ function ContactInbox() {
               {!m.read && <Button size="sm" variant="ghost" onClick={() => markRead(m.id)} className="text-[#84CC16] text-xs">Mark read</Button>}
             </div>
             <div className="text-sm text-neutral-300 mt-2 whitespace-pre-wrap">{m.message}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+const ROLE_TABS = [
+  { value: "organiser", label: "Organisers" },
+  { value: "company_admin", label: "Company admins" },
+  { value: "vendor", label: "Vendors" },
+  { value: "player", label: "Players" },
+];
+
+function AccountsManager() {
+  const [role, setRole] = useState("organiser");
+  const [users, setUsers] = useState([]);
+  const [showDisabled, setShowDisabled] = useState(true);
+  const [q, setQ] = useState("");
+  const [busyId, setBusyId] = useState(null);
+
+  const load = (r = role) => api.get(`/admin/users?role=${r}`).then((res) => setUsers(res.data)).catch((e) => toast.error(e.response?.data?.detail || "Failed to load accounts"));
+  useEffect(() => { load(role); }, [role]);
+
+  const toggleDisabled = async (u) => {
+    const next = !u.disabled;
+    const verb = next ? "disable" : "enable";
+    if (!window.confirm(`Are you sure you want to ${verb} ${u.email}?${next ? "\nThey will no longer be able to log in." : ""}`)) return;
+    try {
+      setBusyId(u.id);
+      await api.patch(`/admin/users/${u.id}/disabled`, { disabled: next });
+      toast.success(next ? "Account disabled" : "Account enabled");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed");
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const filtered = users.filter((u) => {
+    if (!showDisabled && u.disabled) return false;
+    if (!q.trim()) return true;
+    const hay = `${u.email} ${u.name || ""} ${u.company_name || ""} ${u.vendor_business_name || ""}`.toLowerCase();
+    return hay.includes(q.toLowerCase());
+  });
+
+  const counts = users.reduce((acc, u) => { acc.total++; if (u.disabled) acc.disabled++; return acc; }, { total: 0, disabled: 0 });
+
+  return (
+    <div className="border border-white/10 rounded-sm bg-[#141414] p-6">
+      <div className="font-display tracking-wider text-2xl">ACCOUNT SUSPENSION</div>
+      <p className="text-xs text-neutral-400 mt-1">
+        Disable any organiser, vendor, player, or company admin from logging in. Their data stays intact — they just see a contact-admin message at login until re-enabled.
+      </p>
+
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        {ROLE_TABS.map((t) => (
+          <Button
+            key={t.value}
+            data-testid={`accounts-role-${t.value}`}
+            size="sm"
+            onClick={() => setRole(t.value)}
+            className={role === t.value ? "bg-[#FF3B30] hover:bg-[#dc2626] text-white rounded-sm" : "bg-white/5 hover:bg-white/10 text-white rounded-sm"}
+          >
+            {t.label}
+          </Button>
+        ))}
+        <div className="ml-auto flex items-center gap-2">
+          <Input
+            data-testid="accounts-search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search email, name, company…"
+            className="bg-black/40 border-white/10 text-white text-sm w-64"
+          />
+          <label className="text-xs font-mono text-neutral-400 flex items-center gap-2">
+            <input type="checkbox" data-testid="accounts-show-disabled" checked={showDisabled} onChange={(e) => setShowDisabled(e.target.checked)} className="accent-[#84CC16]" />
+            Show disabled
+          </label>
+        </div>
+      </div>
+
+      <div className="text-[10px] font-mono uppercase text-neutral-500 mt-4">
+        / {counts.total} total · {counts.disabled} disabled · showing {filtered.length}
+      </div>
+
+      <div className="mt-3 space-y-2">
+        {filtered.length === 0 && <div className="text-neutral-500 text-sm text-center py-12 border border-dashed border-white/10 rounded-sm">No matching accounts.</div>}
+        {filtered.map((u) => (
+          <div
+            key={u.id}
+            data-testid={`account-row-${u.id}`}
+            className={`border rounded-sm p-4 flex items-center justify-between gap-3 ${u.disabled ? "border-amber-500/30 bg-amber-500/5" : "border-white/10 bg-black/30"}`}
+          >
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="font-semibold truncate">{u.name || u.email}</div>
+                {u.disabled && <span className="text-[10px] uppercase font-mono text-amber-400 border border-amber-500/40 rounded-sm px-1.5 py-0.5">DISABLED</span>}
+                {u.role === "organiser" && <span className="text-[10px] uppercase font-mono text-[#06B6D4] border border-[#06B6D4]/40 rounded-sm px-1.5 py-0.5">ORGANISER</span>}
+                {u.role === "company_admin" && <span className="text-[10px] uppercase font-mono text-[#84CC16] border border-[#84CC16]/40 rounded-sm px-1.5 py-0.5">COMPANY</span>}
+                {u.role === "vendor" && <span className="text-[10px] uppercase font-mono text-[#EC4899] border border-[#EC4899]/40 rounded-sm px-1.5 py-0.5">VENDOR{u.vendor_approved ? "" : " · PENDING"}</span>}
+                {u.role === "player" && <span className="text-[10px] uppercase font-mono text-[#FBBF24] border border-[#FBBF24]/40 rounded-sm px-1.5 py-0.5">PLAYER</span>}
+              </div>
+              <div className="text-xs font-mono text-neutral-500 mt-1 truncate">
+                {u.email}
+                {u.company_name && <> · {u.company_name}</>}
+                {u.vendor_business_name && <> · {u.vendor_business_name} ({u.vendor_type})</>}
+              </div>
+              {u.disabled && u.disabled_at && (
+                <div className="text-[10px] font-mono text-amber-300/80 mt-1">
+                  disabled {new Date(u.disabled_at).toLocaleString()}{u.disabled_by ? ` by ${u.disabled_by}` : ""}
+                </div>
+              )}
+            </div>
+            <Button
+              size="sm"
+              data-testid={`account-toggle-${u.id}`}
+              disabled={busyId === u.id}
+              onClick={() => toggleDisabled(u)}
+              className={u.disabled ? "bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm" : "bg-[#FF3B30] hover:bg-[#dc2626] text-white font-semibold rounded-sm"}
+            >
+              {busyId === u.id ? "…" : (u.disabled ? "Enable" : "Disable")}
+            </Button>
           </div>
         ))}
       </div>

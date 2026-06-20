@@ -1725,6 +1725,71 @@ async def delete_staff_admin(admin_id: str, user: dict = Depends(require_super_a
     return {"ok": True}
 
 
+# ---------- Account suspension (uniform for organisers / vendors / players / company admins) ----------
+# Roles a platform admin is allowed to disable. Platform admins themselves are managed via /admin/staff.
+SUSPENDABLE_ROLES = {"organiser", "vendor", "player", "company_admin"}
+
+
+@api.get("/admin/users")
+async def admin_list_users(role: str | None = None, _: dict = Depends(require_platform_admin)):
+    """List user accounts with optional ?role= filter. Returns disabled state + company name for context."""
+    query: dict = {"role": {"$in": list(SUSPENDABLE_ROLES)}}
+    if role:
+        if role not in SUSPENDABLE_ROLES:
+            raise HTTPException(400, f"Unsupported role filter. Allowed: {sorted(SUSPENDABLE_ROLES)}")
+        query["role"] = role
+    docs = await db.users.find(query, {"_id": 0, "password_hash": 0}).sort("created_at", -1).to_list(2000)
+    # Enrich with company name (organisers + company_admins) and vendor business name where applicable.
+    company_ids = list({d.get("company_id") for d in docs if d.get("company_id")})
+    companies = {}
+    if company_ids:
+        async for c in db.companies.find({"id": {"$in": company_ids}}, {"_id": 0, "id": 1, "name": 1, "org_type": 1}):
+            companies[c["id"]] = c
+    vendor_user_ids = [d["id"] for d in docs if d.get("role") == "vendor"]
+    vendor_map = {}
+    if vendor_user_ids:
+        async for v in db.vendors.find({"user_id": {"$in": vendor_user_ids}}, {"_id": 0, "user_id": 1, "business_name": 1, "vendor_type": 1, "approved": 1}):
+            vendor_map[v["user_id"]] = v
+    for d in docs:
+        d["disabled"] = bool(d.get("disabled"))
+        if d.get("company_id"):
+            c = companies.get(d["company_id"]) or {}
+            d["company_name"] = c.get("name")
+            d["org_type"] = c.get("org_type")
+        if d["role"] == "vendor":
+            v = vendor_map.get(d["id"]) or {}
+            d["vendor_business_name"] = v.get("business_name")
+            d["vendor_type"] = v.get("vendor_type")
+            d["vendor_approved"] = bool(v.get("approved"))
+    return docs
+
+
+@api.patch("/admin/users/{user_id}/disabled")
+async def admin_toggle_user_disabled(user_id: str, body: dict, actor: dict = Depends(require_platform_admin)):
+    """Enable or disable a user account. Body: {disabled: bool}.
+
+    Disabled users keep their data but cannot log in — they receive the canned admin-contact message.
+    """
+    target = await db.users.find_one({"id": user_id}, {"_id": 0, "password_hash": 0})
+    if not target:
+        raise HTTPException(404, "User not found")
+    if target.get("role") not in SUSPENDABLE_ROLES:
+        raise HTTPException(400, "This account type cannot be disabled here. Use /admin/staff for platform admins.")
+    if target["id"] == actor["id"]:
+        raise HTTPException(400, "You cannot disable your own account")
+    disabled = bool((body or {}).get("disabled", True))
+    await db.users.update_one(
+        {"id": user_id},
+        {"$set": {
+            "disabled": disabled,
+            "disabled_at": datetime.now(timezone.utc).isoformat() if disabled else None,
+            "disabled_by": actor["email"] if disabled else None,
+        }},
+    )
+    logger.info("USER %s | %s | by=%s", "DISABLED" if disabled else "ENABLED", target.get("email"), actor.get("email"))
+    return {"ok": True, "id": user_id, "disabled": disabled}
+
+
 @api.get("/vendors/me/reviews")
 async def vendor_pending_reviews(user: dict = Depends(get_current_user)):
     if user.get("role") != "vendor":

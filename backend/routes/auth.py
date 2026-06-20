@@ -129,6 +129,11 @@ def register(api, db, deps):
         user = await db.users.find_one({"email": email})
         if not user or not verify_password(body.password, user["password_hash"]):
             raise HTTPException(status_code=401, detail="Invalid email or password")
+        if user.get("disabled"):
+            raise HTTPException(
+                status_code=403,
+                detail="Your account has been disabled. Please contact admin with admin email: admin@kreedanation.com",
+            )
         token = create_access_token(user["id"], user["email"], user["role"], user.get("company_id"))
         set_auth_cookie(response, token)
         return UserPublic(**await _user_with_company(user))

@@ -139,7 +139,8 @@ export default function PlatformAdmin() {
             <TabsTrigger value="services" data-testid="pa-tab-services" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Services ({services.length})</TabsTrigger>
             <TabsTrigger value="events" data-testid="pa-tab-events" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Events ({events.length})</TabsTrigger>
             <TabsTrigger value="sports" data-testid="pa-tab-sports" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sports</TabsTrigger>
-            <TabsTrigger value="companies" data-testid="pa-tab-companies" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Companies ({companies.length})</TabsTrigger>
+            <TabsTrigger value="companies" data-testid="pa-tab-companies" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Companies ({companies.filter((c) => c.org_type !== "organiser").length})</TabsTrigger>
+            <TabsTrigger value="organisers" data-testid="pa-tab-organisers" className="data-[state=active]:bg-[#06B6D4] data-[state=active]:text-black rounded-sm">Organisers ({companies.filter((c) => c.org_type === "organiser").length})</TabsTrigger>
             <TabsTrigger value="bookings" data-testid="pa-tab-bookings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bookings ({bookings.length})</TabsTrigger>
             <TabsTrigger value="vendors" data-testid="pa-tab-vendors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Vendors ({vendors.length})</TabsTrigger>
             <TabsTrigger value="listings" data-testid="pa-tab-listings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Listings ({listings.length})</TabsTrigger>
@@ -241,13 +242,33 @@ export default function PlatformAdmin() {
           </TabsContent>
 
           <TabsContent value="companies" className="mt-6 space-y-2">
-            {companies.map((c) => (
+            {companies.filter((c) => c.org_type !== "organiser").map((c) => (
               <Link key={c.id} to={`/platform-admin/companies/${c.id}`} data-testid={`pa-company-${c.id}`}
                 className="block border border-white/10 rounded-sm p-4 bg-[#141414] hover:border-[#84CC16] transition-colors">
                 <div className="font-semibold">{c.name}</div>
                 <div className="text-xs font-mono text-neutral-500">{c.contact_email} · {c.contact_phone || "—"} · /{c.slug}</div>
               </Link>
             ))}
+            {companies.filter((c) => c.org_type !== "organiser").length === 0 && (
+              <div className="text-neutral-500 text-sm text-center py-12 border border-dashed border-white/10 rounded-sm">No companies registered yet.</div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="organisers" className="mt-6 space-y-2">
+            <p className="text-xs font-mono uppercase tracking-widest text-[#06B6D4] mb-2">/ Independent tournament organisers</p>
+            {companies.filter((c) => c.org_type === "organiser").map((c) => (
+              <Link key={c.id} to={`/platform-admin/companies/${c.id}`} data-testid={`pa-organiser-${c.id}`}
+                className="block border border-white/10 rounded-sm p-4 bg-[#141414] hover:border-[#06B6D4] transition-colors">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="font-semibold">{c.name}</div>
+                  <span className="text-[10px] uppercase font-mono text-[#06B6D4] border border-[#06B6D4]/40 rounded-sm px-1.5 py-0.5">ORGANISER</span>
+                </div>
+                <div className="text-xs font-mono text-neutral-500 mt-1">{c.contact_email} · {c.contact_phone || "—"} · /{c.slug}</div>
+              </Link>
+            ))}
+            {companies.filter((c) => c.org_type === "organiser").length === 0 && (
+              <div className="text-neutral-500 text-sm text-center py-12 border border-dashed border-white/10 rounded-sm">No organisers registered yet.</div>
+            )}
           </TabsContent>
 
           <TabsContent value="bookings" className="mt-6">

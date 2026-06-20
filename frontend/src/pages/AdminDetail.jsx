@@ -137,14 +137,15 @@ function VendorDetail({ data, tab, setTab }) {
 
 function CompanyDetail({ data, tab, setTab }) {
   const { company, members, players, bookings, events } = data;
+  const isOrganiser = company.org_type === "organiser";
   return (
     <>
       <div className="mt-4 border border-white/10 rounded-sm bg-[#141414] p-6">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <div className="font-mono text-[10px] uppercase text-[#84CC16]">/ Company</div>
+            <div className={`font-mono text-[10px] uppercase ${isOrganiser ? "text-[#06B6D4]" : "text-[#84CC16]"}`}>/ {isOrganiser ? "Organiser" : "Company"}</div>
             <h1 className="font-display text-3xl mt-1">{company.name}</h1>
-            <div className="font-mono text-xs text-neutral-500 mt-1">{company.slug || ""} · {company.industry || "—"}</div>
+            <div className="font-mono text-xs text-neutral-500 mt-1">{company.slug || ""} · {company.industry || (isOrganiser ? "Tournament organiser" : "—")}</div>
           </div>
         </div>
         <div className="grid sm:grid-cols-2 gap-2 mt-4">
@@ -155,7 +156,7 @@ function CompanyDetail({ data, tab, setTab }) {
 
       <TabBar tab={tab} setTab={setTab} tabs={[
         { k: "overview", label: "Overview" },
-        { k: "members", label: "Team members", count: members.length },
+        { k: "members", label: isOrganiser ? "Owner & staff" : "Team members", count: members.length },
         { k: "players", label: "Player profiles", count: players.length },
         { k: "events", label: "Events", count: events.length },
         { k: "bookings", label: "Bookings", count: bookings.length },

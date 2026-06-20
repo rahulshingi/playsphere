@@ -58,7 +58,7 @@ def register(api, db, deps):
     async def list_bookings(user: dict = Depends(get_current_user)):
         if user.get("role") in ("platform_admin", "admin"):
             q = {}
-        elif user.get("role") == "company_admin":
+        elif user.get("role") in ("company_admin", "organiser"):
             q = {"company_id": user.get("company_id")}
         else:
             raise HTTPException(403, "Forbidden")
@@ -70,7 +70,7 @@ def register(api, db, deps):
         doc = await db.bookings.find_one({"id": booking_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Booking not found")
-        if user.get("role") == "company_admin" and doc["company_id"] != user.get("company_id"):
+        if user.get("role") in ("company_admin", "organiser") and doc["company_id"] != user.get("company_id"):
             raise HTTPException(403, "Forbidden")
         return Booking(**doc)
 
@@ -123,7 +123,7 @@ def register(api, db, deps):
         if not doc:
             raise HTTPException(404, "Booking not found")
         is_platform = user.get("role") in ("platform_admin", "admin")
-        is_owner = user.get("role") == "company_admin" and doc["company_id"] == user.get("company_id")
+        is_owner = user.get("role") in ("company_admin", "organiser") and doc["company_id"] == user.get("company_id")
         if not (is_platform or is_owner):
             raise HTTPException(403, "Forbidden")
         if is_owner and not is_platform and doc.get("status") != "pending":

@@ -152,6 +152,14 @@ export default function Nav() {
                 Sign in
               </Button>
               <Button
+                data-testid="nav-signup-organiser-btn"
+                size="sm"
+                onClick={() => navigate("/signup-organiser")}
+                className="bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold rounded-sm hidden md:inline-flex"
+              >
+                For Organisers
+              </Button>
+              <Button
                 data-testid="nav-signup-company-btn"
                 size="sm"
                 onClick={() => navigate("/signup-company")}
@@ -289,6 +297,13 @@ export default function Nav() {
                       className="border-white/10 bg-transparent text-neutral-300 hover:bg-white/5 rounded-sm"
                     >
                       Sign in
+                    </Button>
+                    <Button
+                      data-testid="nav-mobile-signup-organiser"
+                      onClick={() => { closeMobile(); navigate("/signup-organiser"); }}
+                      className="bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold rounded-sm"
+                    >
+                      For Organisers
                     </Button>
                     <Button
                       data-testid="nav-mobile-signup"

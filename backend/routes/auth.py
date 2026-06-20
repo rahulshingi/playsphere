@@ -218,6 +218,65 @@ def register(api, db, deps):
             require_corporate=False,
         )
 
+    @api.post("/organisers/signup/request-otp")
+    async def organiser_signup_request_otp(body: dict):
+        return await _issue_signup_otp(
+            email=(body or {}).get("admin_email", ""),
+            display_name=(body or {}).get("organiser_name", ""),
+            label="Organiser signup",
+            otp_collection="organiser_signup_otps",
+            require_corporate=False,
+        )
+
+    @api.post("/organisers/signup", response_model=UserPublic)
+    async def organiser_signup(body: CompanySignupBody, response: Response):
+        """Independent tournament organiser signup. Mirrors company signup but with no
+        corporate-email rule. Creates a `companies` doc tagged `org_type="organiser"`
+        and a user with role `organiser` — same event/booking powers as company_admin."""
+        email = body.admin_email.lower()
+        otp_input = (getattr(body, "otp", None) or "").strip()
+        if not otp_input:
+            raise HTTPException(400, "Email verification code is required. Request one before signing up.")
+        await _consume_signup_otp(email=email, otp_input=otp_input, otp_collection="organiser_signup_otps")
+
+        if await db.users.find_one({"email": email}):
+            raise HTTPException(400, "Email already registered")
+        base_slug = _slugify(body.company_name)
+        slug = base_slug
+        n = 1
+        while await db.companies.find_one({"slug": slug}):
+            n += 1
+            slug = f"{base_slug}-{n}"
+        org = Company(
+            name=body.company_name,
+            slug=slug,
+            logo_url=body.logo_url or "",
+            contact_email=email,
+            contact_phone=body.contact_phone or "",
+        )
+        org_doc = org.model_dump()
+        org_doc["org_type"] = "organiser"  # distinguishes from corporate companies
+        user_id = str(uuid.uuid4())
+        org_doc["owner_user_id"] = user_id
+        await db.companies.insert_one(org_doc)
+        user_doc = {
+            "id": user_id,
+            "email": email,
+            "name": body.admin_name,
+            "role": "organiser",
+            "company_id": org.id,
+            "password_hash": hash_password(body.admin_password),
+            "email_verified": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(user_doc)
+        await db.organiser_signup_otps.update_one(
+            {"email": email}, {"$set": {"verified": True, "used_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        token = create_access_token(user_id, email, "organiser", org.id)
+        set_auth_cookie(response, token)
+        return UserPublic(**await _user_with_company(user_doc))
+
     @api.post("/companies/signup", response_model=UserPublic)
     async def company_signup(body: CompanySignupBody, response: Response):
         email = body.admin_email.lower()

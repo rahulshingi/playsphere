@@ -51,6 +51,16 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const signupOrganiser = async (body) => {
+    try {
+      const { data } = await api.post("/organisers/signup", body);
+      setUser(data);
+      return { ok: true, user: data };
+    } catch (e) {
+      return { ok: false, error: formatApiErrorDetail(e.response?.data?.detail) || e.message };
+    }
+  };
+
   const logout = async () => {
     try { await api.post("/auth/logout"); } catch (err) {
       devError("[AuthContext] Logout request failed:", err);
@@ -65,13 +75,15 @@ export const AuthProvider = ({ children }) => {
       login,
       register,
       signupCompany,
+      signupOrganiser,
       logout,
-      isAdmin: !!user && (user.role === "admin" || user.role === "platform_admin" || user.role === "company_admin"),
+      isAdmin: !!user && (user.role === "admin" || user.role === "platform_admin" || user.role === "company_admin" || user.role === "organiser"),
       isPlatformAdmin: !!user && (user.role === "platform_admin" || user.role === "admin"),
       isSuperAdmin: !!user && (user.role === "platform_admin" || user.role === "admin") && !!user.is_super_admin,
       adminPermissions: (user && user.permissions) || [],
       hasPermission: (perm) => !!user && (user.role === "platform_admin" || user.role === "admin") && (user.is_super_admin || (user.permissions || []).includes(perm)),
-      isCompanyAdmin: !!user && user.role === "company_admin",
+      isCompanyAdmin: !!user && (user.role === "company_admin" || user.role === "organiser"),
+      isOrganiser: !!user && user.role === "organiser",
       isPlayer: !!user && user.role === "player",
       isVendor: !!user && user.role === "vendor",
       companyId: user && user.company_id,

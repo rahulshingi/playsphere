@@ -16,6 +16,11 @@ export const ROLE_GUIDE = {
     href: "/manuals/kreeda-nation-company-manual.pdf",
     testid: "nav-guide-company",
   },
+  organiser: {
+    label: "Organiser guide",
+    href: "/manuals/kreeda-nation-organiser-manual.pdf",
+    testid: "nav-guide-organiser",
+  },
   vendor: {
     label: "Vendor guide",
     href: "/manuals/kreeda-nation-vendor-manual.pdf",

@@ -52,6 +52,7 @@ export default function Footer() {
           <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Join</div>
           <ul className="space-y-2 text-sm">
             <li><Link className="hover:text-[#84CC16]" to="/signup-company">Onboard a company</Link></li>
+            <li><Link className="hover:text-[#06B6D4]" to="/signup-organiser">Become an organiser</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/players/signup">Player account</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/vendor/signup">Become a vendor</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/login">Sign in</Link></li>

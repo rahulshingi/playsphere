@@ -623,6 +623,28 @@ build("kreeda-nation-company-manual.pdf", "HR / COMPANY", LIME_D,
       "Run end-to-end internal tournaments and hire services from one dashboard.",
       company_sections)
 
+# Organisers share the company workflow but onboard as independent brands.
+# Build them a dedicated PDF that emphasises that distinction.
+organiser_intro_sections = [
+    {"title": "1. Welcome, organiser",
+     "intro": "Kreeda Nation gives independent tournament organisers the same power tools the corporate HR teams use — minus the corporate-domain requirement.",
+     "blocks": [
+        ("p", "Sign up at <b>/signup-organiser</b> with <i>any</i> email — Gmail, Yahoo, Outlook or a custom domain all work. We verify it with a 6-digit code (sent right away from <b>admin@kreedanation.com</b>) before creating the workspace."),
+        ("kv", [
+            ["Email", "Any provider — public or branded."],
+            ["Phone", "Optional, helps vendors / players reach you fast."],
+            ["Brand name", "Shown publicly on event pages, fixtures and scorecards."],
+        ]),
+        ("tip", "Once signed in you'll land on <b>/dashboard</b> — same powerful layout HR teams use. Your <b>Organiser guide</b> link is always one click away in the top nav."),
+    ]},
+] + company_sections[1:]
+
+build("kreeda-nation-organiser-manual.pdf", "ORGANISER", "#06B6D4",
+      "Organiser manual",
+      "Run open tournaments, book vendors, score matches live — without needing a company.",
+      organiser_intro_sections)
+
+
 build("kreeda-nation-platform-admin-manual.pdf", "PLATFORM HQ", RED,
       "Platform admin manual",
       "Curate the marketplace, approve vendors, and oversee every company.",

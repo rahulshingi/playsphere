@@ -17,6 +17,7 @@ import Login from "@/pages/Login";
 import Register from "@/pages/Register";
 import RegisterTeam from "@/pages/RegisterTeam";
 import SignupCompany from "@/pages/SignupCompany";
+import SignupOrganiser from "@/pages/SignupOrganiser";
 import Services from "@/pages/Services";
 import ServiceDetail from "@/pages/ServiceDetail";
 import Dashboard from "@/pages/Dashboard";
@@ -63,6 +64,7 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/register-team" element={<RegisterTeam />} />
           <Route path="/signup-company" element={<SignupCompany />} />
+          <Route path="/signup-organiser" element={<SignupOrganiser />} />
 
           {/* Players */}
           <Route path="/players/signup" element={<PlayerSignup />} />

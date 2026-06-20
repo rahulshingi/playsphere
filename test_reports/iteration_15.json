@@ -1,0 +1,38 @@
+{
+  "summary": "Iteration 15 (Organiser signup flow + same-powers-as-company_admin RBAC). 8/8 NEW backend tests PASS, 31/31 regression OTP/signup tests PASS (39/39 total). Full UI flow verified: nav-signup-organiser-btn (cyan #06B6D4) routes to /signup-organiser, 2-step form works, 'Any email works' hint present, OTP banner shows, OTP from organiser_signup_otps completes signup and lands user on /dashboard (per direct API: returns role=organiser, company_id, company_name; org_type=organiser tagged on companies doc; OTP marked verified=true). UI login as organiser shows nav-guide-organiser ('Organiser guide' -> /manuals/kreeda-nation-organiser-manual.pdf, HEAD 200), Dashboard/Hire/Players/Manage nav appear (company_admin parity). Footer 'Become an organiser' -> /signup-organiser. Company signup still rejects free emails (regression intact).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Login redirect for organiser", "issue": "After /api/auth/login as organiser, UI lands on '/' instead of '/dashboard'. The role-based redirect map on /login does not include 'organiser'. Non-blocking — /dashboard is accessible from nav and works correctly. The signup flow does land on /dashboard correctly.", "affected_selectors": ["login-submit"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_organiser_signup_otp.py",
+    "/app/test_reports/pytest/iter15_organiser.xml"
+  ],
+  "action_items": [
+    "(Optional) Add 'organiser' to the role -> redirect-path map in /app/frontend/src/pages/Login.jsx (or wherever post-login routing decides) so direct UI login as organiser lands on /dashboard like other company-scoped roles do."
+  ],
+  "critical_code_review_comments": [
+    "routes/auth.py is now ~400 lines and still has duplicated signup logic between `company_signup` and `organiser_signup` (only difference is the corporate-email guard + org_type tag). Refactor into a shared `_create_company_scoped_account(role, otp_collection, org_type, require_corporate)` helper — same DRY improvement we flagged in iter 14 for vendor/player signup.",
+    "`_consume_signup_otp_sync` at the top of auth.py is defined but appears unused (the in-closure `_consume_signup_otp` is used everywhere). Either wire `_consume_signup_otp_sync` through `deps` so vendors.py / server.py:player_register can reuse it (the actual DRY win), or drop the dead helper. Currently we still have 3 inline OTP-consume copies.",
+    "server.py is still ~2.9K lines. Extracting events.py / bookings.py modules (which this iteration touched) into their own files would shrink the closure and make `require_company_admin`/`is_company_scoped` testable in isolation.",
+    "CompanySignupBody.otp is Optional[str] = ''. The handler then 400s if missing. Promote to required at the Pydantic schema layer so OpenAPI documents it and FastAPI's 422 takes over (consistency with other v2 endpoints).",
+    "Frontend Login.jsx post-login redirect needs `organiser` added to the role -> path map (see frontend_issues above)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_organiser_signup_otp.py (NEW — 8 tests covering OTP request/validation/lockout/full signup + RBAC + login + regression)"
+  ],
+  "success_rate": {"backend": "100% (8/8 new + 31/31 regression = 39/39)", "frontend": "100% on all required CTA/nav/footer/guide checks (login redirect quirk noted as minor)"},
+  "test_credentials": "admin@kreedanation.com / admin123 only. All organiser/company/user data created during tests is cleaned up in finally/teardown blocks (organiser_signup_otps, companies, events, users collections).",
+  "seed_data_creation": "None persisted. Test helpers /tmp/seed_organiser.py and /tmp/cleanup_organiser.py were used only for UI tests (bypassing SendGrid throttle) and every account is removed at teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression suite: /app/backend/tests/test_organiser_signup_otp.py (8 tests) + test_vendor_player_otp_and_email.py (15) + test_company_signup_otp.py (16) — run all three together to validate OTP-gated signup flows. Mongo collections: organiser_signup_otps, company_signup_otps, vendor_signup_otps, player_signup_otps. Frontend testids confirmed working: org-signup-{name,admin-name,phone,email,password,request-otp} -> org-signup-otp-{banner,input,back,resend,submit}. Nav: nav-signup-organiser-btn, nav-guide-organiser. SendGrid is sometimes flaky (occasional 502) — pytest tolerates retry; for UI use the /tmp/seed_organiser.py helper to bypass SendGrid when only verifying logged-in nav/footer/dashboard behaviour. The /tmp/seed_organiser.py + /tmp/cleanup_organiser.py scripts take CLI args (mongo_url, db_name, email, password, company_name).",
+  "rca of the issue": "Login redirect quirk: /app/frontend/src/context/AuthContext.jsx exposes isCompanyAdmin=true for organisers, but the post-login redirect in Login.jsx likely checks the literal role string 'company_admin' to decide /dashboard. Result: organiser lands on '/'. Reproduction: seed organiser via /tmp/seed_organiser.py, visit /login, sign in -> lands on '/'. Click 'Dashboard' in nav -> works correctly. Mitigation: add 'organiser' to the role map (or check isCompanyAdmin instead of role==='company_admin')."
+}

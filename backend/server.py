@@ -118,7 +118,7 @@ async def get_current_user_optional(request: Request) -> Optional[dict]:
 
 
 async def require_admin(user: dict = Depends(get_current_user)) -> dict:
-    if user.get("role") not in ("admin", "platform_admin", "company_admin"):
+    if user.get("role") not in ("admin", "platform_admin", "company_admin", "organiser"):
         raise HTTPException(status_code=403, detail="Admin only")
     return user
 
@@ -169,11 +169,17 @@ async def require_super_admin(user: dict = Depends(require_platform_admin)) -> d
 
 
 async def require_company_admin(user: dict = Depends(get_current_user)) -> dict:
-    if user.get("role") not in ("company_admin", "platform_admin", "admin"):
+    """Accept company_admin OR organiser — they share the same powers (events, bookings)."""
+    if user.get("role") not in ("company_admin", "organiser", "platform_admin", "admin"):
         raise HTTPException(status_code=403, detail="Company admin only")
-    if user.get("role") == "company_admin" and not user.get("company_id"):
+    if user.get("role") in ("company_admin", "organiser") and not user.get("company_id"):
         raise HTTPException(status_code=403, detail="No company assigned")
     return user
+
+
+def is_company_scoped(user: dict) -> bool:
+    """True for HR (company_admin) and Organisers — both are scoped to a single `company_id`."""
+    return user.get("role") in ("company_admin", "organiser")
 
 
 def set_auth_cookie(response: Response, token: str):
@@ -743,7 +749,7 @@ async def _can_manage_event(user: dict, event: dict) -> bool:
 async def _can_manage_team(user: dict, event: dict, team: dict) -> bool:
     if await _can_manage_event(user, event):
         # company_admin can only manage their own company's teams in inter_company
-        if user.get("role") == "company_admin" and event.get("event_type") == "inter_company":
+        if is_company_scoped(user) and event.get("event_type") == "inter_company":
             return team.get("company_id") == user.get("company_id")
         return True
     # captain?
@@ -859,7 +865,7 @@ async def create_event_team(event_id: str, body: TeamCreate, user: dict = Depend
     payload = body.model_dump()
     payload["event_id"] = event_id
     # company scoping
-    if user.get("role") == "company_admin":
+    if is_company_scoped(user):
         payload["company_id"] = user.get("company_id")
     elif not payload.get("company_id"):
         payload["company_id"] = ev.get("company_id")
@@ -877,7 +883,7 @@ async def set_team_captain(event_id: str, team_id: str, body: dict, user: dict =
     ev = await _get_event_or_404(event_id)
     t = await _get_team_or_404(team_id, event_id)
     if not await _can_manage_event(user, ev):
-        if user.get("role") == "company_admin" and t.get("company_id") != user.get("company_id"):
+        if is_company_scoped(user) and t.get("company_id") != user.get("company_id"):
             raise HTTPException(403, "Not your team")
         if user.get("role") not in ("platform_admin", "admin", "company_admin"):
             raise HTTPException(403, "Not allowed")

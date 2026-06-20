@@ -29,7 +29,7 @@ def register(api, db, deps):
         q: dict = {}
         if company_id:
             q["company_id"] = company_id
-        if scope == "mine" and user and user.get("role") == "company_admin":
+        if scope == "mine" and user and user.get("role") in ("company_admin", "organiser"):
             cid = user.get("company_id")
             if cid:
                 q = {"$or": [{"company_id": cid}, {"companies": cid}]}
@@ -67,7 +67,7 @@ def register(api, db, deps):
     @api.post("/events", response_model=Event)
     async def create_event(body: EventCreate, user: dict = Depends(require_admin)):
         payload = body.model_dump()
-        if user.get("role") == "company_admin":
+        if user.get("role") in ("company_admin", "organiser"):
             payload["company_id"] = user.get("company_id")
         ev = Event(**payload)
         await db.events.insert_one(ev.model_dump())
@@ -79,7 +79,7 @@ def register(api, db, deps):
         existing = await db.events.find_one({"id": event_id}, {"_id": 0})
         if not existing:
             raise HTTPException(404, "Event not found")
-        if user.get("role") == "company_admin" and existing.get("company_id") != user.get("company_id"):
+        if user.get("role") in ("company_admin", "organiser") and existing.get("company_id") != user.get("company_id"):
             raise HTTPException(403, "Not your event")
         await db.events.update_one({"id": event_id}, {"$set": body})
         doc = await db.events.find_one({"id": event_id}, {"_id": 0})
@@ -90,7 +90,7 @@ def register(api, db, deps):
         existing = await db.events.find_one({"id": event_id}, {"_id": 0})
         if not existing:
             return {"ok": True}
-        if user.get("role") == "company_admin" and existing.get("company_id") != user.get("company_id"):
+        if user.get("role") in ("company_admin", "organiser") and existing.get("company_id") != user.get("company_id"):
             raise HTTPException(403, "Not your event")
         await db.events.delete_one({"id": event_id})
         await db.teams.update_many({"event_id": event_id}, {"$set": {"event_id": None}})

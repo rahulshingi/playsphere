@@ -7,7 +7,6 @@ import os
 import uuid
 import secrets
 import logging
-import random
 from datetime import datetime, timezone, timedelta
 from fastapi import Depends, HTTPException, Response
 
@@ -79,8 +78,8 @@ def _consume_signup_otp_sync(db, collection_name: str):
 
 
 def _generate_otp() -> str:
-    # 6-digit numeric, no ambiguous zero-padding issues — random.randint covers full 6-digit range
-    return f"{random.randint(0, 999999):06d}"
+    # 6-digit numeric, cryptographically secure (CSPRNG-backed) — protects signup/password-reset codes.
+    return f"{secrets.randbelow(1000000):06d}"
 
 
 def register(api, db, deps):

@@ -66,8 +66,8 @@ def _cleanup_player(db, email, mobile=None):
 
 
 def _rand_mobile():
-    import random
-    return "+9199" + "".join(str(random.randint(0, 9)) for _ in range(8))
+    import secrets
+    return "+9199" + "".join(str(secrets.randbelow(10)) for _ in range(8))
 
 
 @pytest.fixture

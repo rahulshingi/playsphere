@@ -13,6 +13,7 @@ Covers:
 import os
 import uuid
 import asyncio
+import secrets
 
 import pytest
 import requests
@@ -50,7 +51,8 @@ def organiser_account():
     mongo_url = os.environ["MONGO_URL"]
     db_name = os.environ["DB_NAME"]
     email = f"test-organiser-{uuid.uuid4().hex[:8]}@example.com"
-    password = "test123"
+    # Generated per-test fixture; no value to a leak — but using secrets keeps the scanner happy.
+    password = os.environ.get("TEST_SEED_PASSWORD") or secrets.token_urlsafe(12)
 
     async def _setup():
         client = AsyncIOMotorClient(mongo_url)

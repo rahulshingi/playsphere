@@ -7,6 +7,7 @@ const STAT_GROUPS = {
     { key: "events_total", label: "Events", icon: Calendar, accent: "#84CC16" },
     { key: "events_ongoing", label: "Ongoing", icon: Activity, accent: "#06B6D4" },
     { key: "companies", label: "Companies", icon: TrendingUp, accent: "#EC4899" },
+    { key: "organisers", label: "Organisers", icon: TrendingUp, accent: "#06B6D4" },
     { key: "vendors_total", label: "Vendors", icon: ShoppingCart, accent: "#F59E0B" },
     { key: "vendors_pending", label: "Pending vendors", icon: Activity, accent: "#FF3B30" },
     { key: "listings_pending", label: "Pending listings", icon: Activity, accent: "#FF3B30" },

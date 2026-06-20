@@ -2576,12 +2576,15 @@ async def delete_sport(sport_id: str, _: dict = Depends(require_platform_admin))
 # ---------- Dashboards ----------
 @api.get("/dashboard/admin")
 async def dashboard_admin(_: dict = Depends(require_platform_admin)):
+    organisers = await db.companies.count_documents({"org_type": "organiser"})
+    all_companies = await db.companies.count_documents({})
     return {
         "events_total": await db.events.count_documents({}),
         "events_ongoing": await db.events.count_documents({"status": "ongoing"}),
         "events_upcoming": await db.events.count_documents({"status": "upcoming"}),
         "events_completed": await db.events.count_documents({"status": "completed"}),
-        "companies": await db.companies.count_documents({}),
+        "companies": all_companies - organisers,
+        "organisers": organisers,
         "vendors_total": await db.vendors.count_documents({}),
         "vendors_pending": await db.vendors.count_documents({"approved": {"$ne": True}}),
         "listings_total": await db.vendor_listings.count_documents({}),

@@ -11,7 +11,7 @@ import random
 from datetime import datetime, timezone, timedelta
 from fastapi import Depends, HTTPException, Response
 
-from email_service import send_otp_email, is_email_configured
+from email_service import send_otp_email, send_password_reset_email, is_email_configured
 
 logger = logging.getLogger("kreeda.routes.auth")
 
@@ -121,16 +121,13 @@ def register(api, db, deps):
     async def auth_me(user: dict = Depends(get_current_user)):
         return UserPublic(**await _user_with_company(user))
 
-    @api.post("/companies/signup/request-otp")
-    async def company_signup_request_otp(body: dict):
-        """Step 1 of company signup — verify the email belongs to a corporate domain
-        and dispatch a 6-digit OTP to it. The OTP is stored in `company_signup_otps`
-        with a 10-minute expiry. Re-requesting overwrites the previous code."""
-        email = ((body or {}).get("admin_email") or "").strip().lower()
-        company_name = ((body or {}).get("company_name") or "").strip()
+    async def _issue_signup_otp(*, email: str, label: str, display_name: str = "",
+                                otp_collection: str, require_corporate: bool):
+        """Shared OTP issuance for company / vendor / player signup flows."""
+        email = email.strip().lower()
         if not email or "@" not in email:
             raise HTTPException(400, "Valid email is required")
-        if not _is_corporate_email(email):
+        if require_corporate and not _is_corporate_email(email):
             raise HTTPException(
                 400,
                 "Please use your official company email — public providers like Gmail, Yahoo, Outlook etc. aren't supported for company signups.",
@@ -139,30 +136,66 @@ def register(api, db, deps):
             raise HTTPException(400, "An account already exists with that email — sign in instead.")
         if not is_email_configured():
             raise HTTPException(503, "Email service is not configured yet — please contact admin@kreedanation.com to complete onboarding.")
-
         otp = _generate_otp()
         now = datetime.now(timezone.utc)
-        expires = (now + timedelta(minutes=10)).isoformat()
-        await db.company_signup_otps.update_one(
+        await db[otp_collection].update_one(
             {"email": email},
             {"$set": {
-                "email": email,
-                "otp": otp,
-                "company_name": company_name,
-                "expires_at": expires,
-                "verified": False,
-                "attempts": 0,
+                "email": email, "otp": otp, "display_name": display_name,
+                "expires_at": (now + timedelta(minutes=10)).isoformat(),
+                "verified": False, "attempts": 0,
                 "created_at": now.isoformat(),
             }},
             upsert=True,
         )
-        sent = send_otp_email(to=email, otp=otp, company_name=company_name)
-        if not sent:
-            # Roll the OTP back so the caller doesn't think we sent anything
-            await db.company_signup_otps.delete_one({"email": email})
+        if not send_otp_email(to=email, otp=otp, company_name=display_name):
+            await db[otp_collection].delete_one({"email": email})
             raise HTTPException(502, "We couldn't send the verification email right now. Please try again in a few minutes.")
-        logger.info("Company signup OTP issued | email=%s ttl=600s", email)
+        logger.info("%s OTP issued | email=%s ttl=600s", label, email)
         return {"ok": True, "expires_in": 600, "email": email}
+
+    async def _consume_signup_otp(*, email: str, otp_input: str, otp_collection: str):
+        """Validate + consume an OTP. Raises HTTPException on any failure."""
+        rec = await db[otp_collection].find_one({"email": email})
+        if not rec:
+            raise HTTPException(400, "No verification code has been requested for this email. Request one first.")
+        if rec.get("expires_at") < datetime.now(timezone.utc).isoformat():
+            raise HTTPException(400, "Verification code has expired. Request a new one.")
+        if (rec.get("attempts") or 0) >= 5:
+            raise HTTPException(429, "Too many incorrect attempts. Request a new verification code.")
+        if (otp_input or "").strip() != rec.get("otp"):
+            await db[otp_collection].update_one({"email": email}, {"$inc": {"attempts": 1}})
+            raise HTTPException(400, "Incorrect verification code. Please double-check the email we sent.")
+
+    @api.post("/companies/signup/request-otp")
+    async def company_signup_request_otp(body: dict):
+        return await _issue_signup_otp(
+            email=(body or {}).get("admin_email", ""),
+            display_name=(body or {}).get("company_name", ""),
+            label="Company signup",
+            otp_collection="company_signup_otps",
+            require_corporate=True,
+        )
+
+    @api.post("/vendors/signup/request-otp")
+    async def vendor_signup_request_otp(body: dict):
+        return await _issue_signup_otp(
+            email=(body or {}).get("email", ""),
+            display_name=(body or {}).get("business_name", ""),
+            label="Vendor signup",
+            otp_collection="vendor_signup_otps",
+            require_corporate=False,
+        )
+
+    @api.post("/players/signup/request-otp")
+    async def player_signup_request_otp(body: dict):
+        return await _issue_signup_otp(
+            email=(body or {}).get("email", ""),
+            display_name=(body or {}).get("name", ""),
+            label="Player signup",
+            otp_collection="player_signup_otps",
+            require_corporate=False,
+        )
 
     @api.post("/companies/signup", response_model=UserPublic)
     async def company_signup(body: CompanySignupBody, response: Response):
@@ -172,22 +205,10 @@ def register(api, db, deps):
                 400,
                 "Please use your official company email — public providers like Gmail, Yahoo, Outlook etc. aren't supported for company signups.",
             )
-        # Require a verified OTP for the same email
         otp_input = (getattr(body, "otp", None) or "").strip()
         if not otp_input:
             raise HTTPException(400, "Email verification code is required. Request one before signing up.")
-        rec = await db.company_signup_otps.find_one({"email": email})
-        if not rec:
-            raise HTTPException(400, "No verification code has been requested for this email. Request one first.")
-        if rec.get("expires_at") < datetime.now(timezone.utc).isoformat():
-            raise HTTPException(400, "Verification code has expired. Request a new one.")
-        if (rec.get("attempts") or 0) >= 5:
-            raise HTTPException(429, "Too many incorrect attempts. Request a new verification code.")
-        if otp_input != rec.get("otp"):
-            await db.company_signup_otps.update_one(
-                {"email": email}, {"$inc": {"attempts": 1}}
-            )
-            raise HTTPException(400, "Incorrect verification code. Please double-check the email we sent.")
+        await _consume_signup_otp(email=email, otp_input=otp_input, otp_collection="company_signup_otps")
 
         if await db.users.find_one({"email": email}):
             raise HTTPException(400, "Email already registered")
@@ -218,7 +239,6 @@ def register(api, db, deps):
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(user_doc)
-        # Mark OTP as consumed so it can't be reused
         await db.company_signup_otps.update_one(
             {"email": email}, {"$set": {"verified": True, "used_at": datetime.now(timezone.utc).isoformat()}}
         )
@@ -254,7 +274,7 @@ def register(api, db, deps):
         if not email:
             raise HTTPException(400, "email required")
         user = await db.users.find_one({"email": email})
-        # Don't leak whether email exists; respond OK either way
+        # Don't leak whether email exists; respond OK either way.
         if user:
             token = secrets.token_urlsafe(32)
             expires_at = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
@@ -264,9 +284,14 @@ def register(api, db, deps):
                 "expires_at": expires_at, "used": False,
                 "created_at": datetime.now(timezone.utc).isoformat(),
             })
-            frontend = os.environ.get("FRONTEND_URL", "")
-            reset_url = f"{frontend}/reset-password?token={token}" if frontend else f"/reset-password?token={token}"
-            logger.warning("PASSWORD RESET LINK for %s: %s", email, reset_url)
+            frontend = os.environ.get("FRONTEND_URL") or ""
+            reset_url = f"{frontend.rstrip('/')}/reset-password?token={token}" if frontend else f"/reset-password?token={token}"
+            # Send via SendGrid; if it fails, the link is still in the backend log as a fallback for ops.
+            sent = send_password_reset_email(to=email, reset_url=reset_url, name=user.get("name", ""))
+            if not sent:
+                logger.warning("PASSWORD RESET LINK for %s: %s", email, reset_url)
+            else:
+                logger.info("PASSWORD RESET EMAIL sent for %s", email)
         return {"ok": True}
 
     @api.post("/players/reset-password")

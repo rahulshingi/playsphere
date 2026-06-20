@@ -82,9 +82,34 @@ def send_otp_email(to: str, otp: str, company_name: str = "") -> bool:
         <div style="font-size:11px;letter-spacing:.3em;color:#84CC16;text-transform:uppercase;font-family:ui-monospace,monospace;">/ Verify your email</div>
         <h1 style="font-size:30px;letter-spacing:.05em;margin:12px 0 24px;color:#fff;">KREEDA NATION</h1>
         <p>{greeting}</p>
-        <p>To finish creating your company workspace on Kreeda Nation, enter this 6-digit code on the signup page:</p>
+        <p>To finish creating your Kreeda Nation account, enter this 6-digit code on the signup page:</p>
         <div style="font-size:42px;letter-spacing:.4em;font-weight:700;color:#84CC16;background:#0a0a0a;border:1px solid #84CC1640;border-radius:4px;padding:18px;text-align:center;margin:24px 0;font-family:ui-monospace,monospace;">{otp}</div>
         <p style="font-size:13px;color:#a3a3a3;">The code expires in <b>10 minutes</b>. If you didn't request this, you can safely ignore the email — no account will be created.</p>
+        <hr style="border:none;border-top:1px solid #ffffff14;margin:28px 0;"/>
+        <p style="font-size:11px;color:#737373;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.2em;">Kreeda Nation · Where teams compete, connect &amp; grow</p>
+      </div>
+    </div>
+    """
+    return send_email(to=to, subject=subject, html=html)
+
+
+def send_password_reset_email(to: str, reset_url: str, name: str = "") -> bool:
+    """One-time password-reset link mail for any account type (HR, vendor, player, admin)."""
+    subject = "Reset your Kreeda Nation password"
+    greeting = f"Hi{(' ' + name) if name else ''},"
+    html = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#e5e5e5;padding:32px 20px;">
+      <div style="max-width:560px;margin:auto;background:#141414;border:1px solid #ffffff14;border-radius:6px;padding:32px;">
+        <div style="font-size:11px;letter-spacing:.3em;color:#84CC16;text-transform:uppercase;font-family:ui-monospace,monospace;">/ Password reset</div>
+        <h1 style="font-size:30px;letter-spacing:.05em;margin:12px 0 24px;color:#fff;">KREEDA NATION</h1>
+        <p>{greeting}</p>
+        <p>We received a request to reset the password for this email. Click the button below to choose a new one:</p>
+        <p style="text-align:center;margin:28px 0;">
+          <a href="{reset_url}" style="display:inline-block;background:#84CC16;color:#000;font-weight:700;padding:14px 32px;border-radius:4px;text-decoration:none;letter-spacing:.05em;">RESET MY PASSWORD</a>
+        </p>
+        <p style="font-size:12px;color:#a3a3a3;">Or paste this link into your browser:</p>
+        <p style="font-size:12px;color:#84CC16;word-break:break-all;font-family:ui-monospace,monospace;">{reset_url}</p>
+        <p style="font-size:13px;color:#a3a3a3;margin-top:24px;">The link expires in <b>1 hour</b>. If you didn't request this, you can safely ignore the email — your password won't change.</p>
         <hr style="border:none;border-top:1px solid #ffffff14;margin:28px 0;"/>
         <p style="font-size:11px;color:#737373;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.2em;">Kreeda Nation · Where teams compete, connect &amp; grow</p>
       </div>

@@ -1,0 +1,37 @@
+{
+  "summary": "Iteration 14 (vendor + player signup OTP + SendGrid forgot-password) — 15/15 backend tests PASS, 2/2 frontend flows PASS. Vendor & player OTP-gated signup works end-to-end with cookies set, OTP marked verified, email_verified=true. Forgot-password real-emails admin@kreedanation.com via SendGrid (status=202) and silently no-ops on unknown emails. Company-signup OTP regression also re-verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/players/me (after signup)", "issues": ["Date of Birth field uses the browser-default native date input (mm/dd/yyyy) instead of the shadcn Calendar component — inconsistent with the rest of the app's dark/branded UI. Pre-existing; not in scope for this iteration but worth noting."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_vendor_player_otp_and_email.py",
+    "/app/test_reports/pytest/iter14_otp.xml",
+    "/app/backend/tests/test_company_signup_otp.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend `/app/backend/routes/auth.py` correctly refactors OTP issuance into a shared `_issue_signup_otp(...)` helper but `vendors.py` and `server.py:player_register` still inline the OTP-consume logic instead of using the shared `_consume_signup_otp` (duplicated 6+ lines, 3x). Refactor opportunity: import / wire `_consume_signup_otp` through `deps` and reuse it from vendor & player signup endpoints to keep one source of truth.",
+    "Forgot-password gracefully falls back to logging the reset URL when SendGrid fails — good. Consider also returning a deterministic 5xx-internal counter / alerting hook so ops knows when SendGrid silently degrades (currently only WARNING in logs).",
+    "PlayerSignupBody / VendorSignupBody still type `otp` as Optional[str]=\"\" — the runtime check `if not otp_input` raises a 400, which is fine, but it would be cleaner (and self-documenting in OpenAPI) to make `otp: str` required at the schema level.",
+    "`/app/backend/server.py` is 2937 lines — still well over the 700-line guideline. Recommend continuing the route-module extraction that auth.py / vendors.py already started (players.py, listings.py, bookings.py)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_vendor_player_otp_and_email.py (NEW)",
+    "/app/backend/tests/test_company_signup_otp.py (minor — accept 422 for legacy player-register-without-email regression assertion now that email is required)"
+  ],
+  "success_rate": {"backend": "100% (15/15 new + 16/16 regression)", "frontend": "100% (2/2 — vendor + player OTP flows)"},
+  "test_credentials": "admin@kreedanation.com / admin123 (only; all vendor/player accounts are created + cleaned up per test).",
+  "seed_data_creation": "None — every vendor/player/company created in tests is removed in tearDown / finally blocks.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reusable backend suite at /app/backend/tests/test_vendor_player_otp_and_email.py covers vendor + player OTP request/consume/expiry/attempts/lockout, valid-OTP signup success, and SendGrid-backed forgot-password (asserts the kreeda.email 'Email sent ... status=202' + kreeda.routes.auth 'PASSWORD RESET EMAIL sent' log lines). Mongo collections to watch: vendor_signup_otps, player_signup_otps, company_signup_otps. Frontend testids confirmed working: vendor-signup-{business,type,contact,city,mobile,email,password,request-otp} → vendor-signup-otp-{banner,input,back,resend,submit}; player-signup-{name,mobile,email,password,company,request-otp} → player-signup-otp-{banner,input,back,resend,submit}. OTP read via pymongo (/root/.venv/bin/python) — no temp helper endpoint exists.",
+  "rca of the issue": "N/A — no issues found."
+}

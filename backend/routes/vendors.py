@@ -27,11 +27,28 @@ def register(api, db, deps):
         email = body.email.lower()
         if await db.users.find_one({"email": email}):
             raise HTTPException(400, "Email already in use")
+
+        # OTP verification — required for self-signups (mirrors company-signup flow)
+        otp_input = (getattr(body, "otp", None) or "").strip()
+        if not otp_input:
+            raise HTTPException(400, "Email verification code is required. Request one before signing up.")
+        rec = await db.vendor_signup_otps.find_one({"email": email})
+        if not rec:
+            raise HTTPException(400, "No verification code has been requested for this email. Request one first.")
+        if rec.get("expires_at") < datetime.now(timezone.utc).isoformat():
+            raise HTTPException(400, "Verification code has expired. Request a new one.")
+        if (rec.get("attempts") or 0) >= 5:
+            raise HTTPException(429, "Too many incorrect attempts. Request a new verification code.")
+        if otp_input != rec.get("otp"):
+            await db.vendor_signup_otps.update_one({"email": email}, {"$inc": {"attempts": 1}})
+            raise HTTPException(400, "Incorrect verification code. Please double-check the email we sent.")
+
         user_id = str(uuid.uuid4())
         await db.users.insert_one({
             "id": user_id, "email": email, "name": body.contact_name, "role": "vendor",
             "company_id": None, "mobile": body.mobile,
             "password_hash": hash_password(body.password),
+            "email_verified": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
         vendor = Vendor(
@@ -39,6 +56,9 @@ def register(api, db, deps):
             contact_name=body.contact_name, mobile=body.mobile, email=email, city=body.city,
         )
         await db.vendors.insert_one(vendor.model_dump())
+        await db.vendor_signup_otps.update_one(
+            {"email": email}, {"$set": {"verified": True, "used_at": datetime.now(timezone.utc).isoformat()}}
+        )
         token = create_access_token(user_id, email, "vendor", None)
         set_auth_cookie(response, token)
         return UserPublic(id=user_id, email=email, name=body.contact_name, role="vendor",

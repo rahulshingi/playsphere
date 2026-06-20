@@ -473,8 +473,9 @@ class PlayerSignupBody(BaseModel):
     name: str
     mobile: str
     password: str
+    email: EmailStr  # required — used for OTP verification before account creation
     company_id: Optional[str] = None
-    email: Optional[EmailStr] = None
+    otp: Optional[str] = ""  # 6-digit code from /players/signup/request-otp
 
 
 class PlayerLoginBody(BaseModel):
@@ -515,6 +516,7 @@ class VendorSignupBody(BaseModel):
     email: EmailStr
     password: str
     city: str
+    otp: Optional[str] = ""  # 6-digit code from /vendors/signup/request-otp
 
 
 class Vendor(BaseModel):
@@ -1081,9 +1083,25 @@ async def delete_sponsor(sponsor_id: str, _: dict = Depends(require_admin)):
 async def player_register(body: PlayerSignupBody, response: Response):
     if await db.player_profiles.find_one({"mobile": body.mobile}):
         raise HTTPException(400, "Mobile already registered")
-    email = (body.email or f"player_{body.mobile}@players.playsphere.app").lower()
+    email = body.email.lower()
     if await db.users.find_one({"email": email}):
         raise HTTPException(400, "Email already in use")
+
+    # OTP verification — mirrors company / vendor signup flow
+    otp_input = (getattr(body, "otp", None) or "").strip()
+    if not otp_input:
+        raise HTTPException(400, "Email verification code is required. Request one before signing up.")
+    rec = await db.player_signup_otps.find_one({"email": email})
+    if not rec:
+        raise HTTPException(400, "No verification code has been requested for this email. Request one first.")
+    if rec.get("expires_at") < datetime.now(timezone.utc).isoformat():
+        raise HTTPException(400, "Verification code has expired. Request a new one.")
+    if (rec.get("attempts") or 0) >= 5:
+        raise HTTPException(429, "Too many incorrect attempts. Request a new verification code.")
+    if otp_input != rec.get("otp"):
+        await db.player_signup_otps.update_one({"email": email}, {"$inc": {"attempts": 1}})
+        raise HTTPException(400, "Incorrect verification code. Please double-check the email we sent.")
+
     user_id = str(uuid.uuid4())
     await db.users.insert_one({
         "id": user_id,
@@ -1093,6 +1111,7 @@ async def player_register(body: PlayerSignupBody, response: Response):
         "company_id": body.company_id,
         "mobile": body.mobile,
         "password_hash": hash_password(body.password),
+        "email_verified": True,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     company_name = None
@@ -1104,6 +1123,9 @@ async def player_register(body: PlayerSignupBody, response: Response):
         company_id=body.company_id, company_name=company_name,
     )
     await db.player_profiles.insert_one(profile.model_dump())
+    await db.player_signup_otps.update_one(
+        {"email": email}, {"$set": {"verified": True, "used_at": datetime.now(timezone.utc).isoformat()}}
+    )
     token = create_access_token(user_id, email, "player", body.company_id)
     set_auth_cookie(response, token)
     return UserPublic(id=user_id, email=email, name=body.name, role="player",

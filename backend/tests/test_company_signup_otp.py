@@ -274,8 +274,8 @@ class TestRegression:
             r = s.post(f"{API}/players/register", json={
                 "name": "QA Player", "mobile": mobile, "password": "player123",
             })
-            # could conflict; accept 200 or 400(mobile already)
-            assert r.status_code in (200, 400)
+            # iteration 14+: email + otp now required; this minimal payload is intentionally rejected
+            assert r.status_code in (200, 400, 422)
             if r.status_code == 200:
                 s2 = requests.Session()
                 rl = s2.post(f"{API}/players/login", json={"mobile": mobile, "password": "player123"})

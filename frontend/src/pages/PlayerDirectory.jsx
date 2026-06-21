@@ -8,16 +8,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, MapPin, ExternalLink } from "lucide-react";
 import { SPORT_SCHEMAS } from "@/lib/sportProfileSchema";
+import PlayerFilters from "@/components/player/PlayerFilters";
+
+const EMPTY_FILTERS = { q: "", sport: "", role: "", hand: "", city: "" };
 
 export function PlayerSearch() {
   const { user, ready } = useAuth();
   const nav = useNavigate();
-  const [q, setQ] = useState("");
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [items, setItems] = useState([]);
 
   const load = () => {
-    const url = q ? `/players/profiles?q=${encodeURIComponent(q)}` : "/players/profiles";
-    api.get(url).then((r) => setItems(r.data));
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
+    const qs = params.toString();
+    api.get(qs ? `/players/profiles?${qs}` : "/players/profiles").then((r) => setItems(r.data));
   };
 
   useEffect(() => {
@@ -31,35 +36,65 @@ export function PlayerSearch() {
       <div className="max-w-6xl mx-auto px-6 pt-12 pb-24">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Players</div>
         <h1 className="font-display text-5xl tracking-wide mt-2">FIND PLAYERS</h1>
-        <p className="text-neutral-400 mt-2 text-sm">Search across every player registered on Kreeda Nation.</p>
+        <p className="text-neutral-400 mt-2 text-sm">Search across every player registered on Kreeda Nation — filter by sport, role and playing style.</p>
 
-        <form onSubmit={(e) => { e.preventDefault(); load(); }} className="mt-8 flex gap-2 max-w-xl">
-          <Input data-testid="player-search-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, city or mobile" className="bg-[#141414] border-white/10 text-white" />
-          <Button data-testid="player-search-btn" type="submit" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Search</Button>
-        </form>
+        <PlayerFilters filters={filters} setFilters={setFilters} onSearch={load} />
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-8">
+        <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mt-4">
+          / {items.length} player{items.length === 1 ? "" : "s"} match
+        </div>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
           {items.map((p) => (
-            <Link key={p.id} to={`/players/profiles/${p.id}`} data-testid={`player-search-card-${p.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-4 hover-lift block">
-              <div className="flex items-center gap-3">
-                <img src={p.photo_url || "https://images.pexels.com/photos/2216610/pexels-photo-2216610.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"} className="w-14 h-14 rounded-sm object-cover" alt="" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold truncate">{p.name}</div>
-                  <div className="text-[10px] font-mono uppercase text-neutral-500 truncate">{p.role || "any"} · {p.city || "—"}</div>
-                </div>
-                <div className="text-right">
-                  <div className="font-mono text-sm text-[#84CC16]">{p.view_count || 0}</div>
-                  <div className="text-[10px] font-mono text-neutral-500 uppercase flex items-center gap-1 justify-end"><Eye className="w-3 h-3" /> views</div>
-                </div>
-              </div>
-              {p.company_name && <div className="text-[10px] font-mono text-neutral-400 mt-2 uppercase tracking-widest">@ {p.company_name}</div>}
-            </Link>
+            <PlayerCard key={p.id} p={p} sportFilter={filters.sport} />
           ))}
           {items.length === 0 && <div className="col-span-full text-center text-neutral-500 py-20">No players match.</div>}
         </div>
       </div>
       <Footer />
     </div>
+  );
+}
+
+/** Card on the search grid. Highlights the role for the filtered sport (or cricket default). */
+function PlayerCard({ p, sportFilter }) {
+  const sport = sportFilter || p.interested_sports?.[0] || "cricket";
+  const schema = SPORT_SCHEMAS[sport];
+  const sp = p.sport_profiles?.[sport] || {};
+  // Pick a "primary role" label: schema role-like field, or legacy cricket role for cricket.
+  let primary = sp.role || sp.position || sp.specialty || sp.domain;
+  if (!primary && sport === "cricket") primary = p.role;
+  const accent = schema?.color || "#84CC16";
+  return (
+    <Link to={`/players/profiles/${p.id}`} data-testid={`player-search-card-${p.id}`}
+      className="border border-white/10 rounded-sm bg-[#141414] p-4 hover-lift block">
+      <div className="flex items-center gap-3">
+        <img src={p.photo_url || "https://images.pexels.com/photos/2216610/pexels-photo-2216610.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"} className="w-14 h-14 rounded-sm object-cover" alt="" />
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold truncate">{p.name}</div>
+          <div className="text-[10px] font-mono uppercase text-neutral-500 truncate flex items-center gap-1.5">
+            <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: accent }} />
+            {primary ? primary.replace(/-/g, " ") : "any"} · {p.city || "—"}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="font-mono text-sm text-[#84CC16]">{p.view_count || 0}</div>
+          <div className="text-[10px] font-mono text-neutral-500 uppercase flex items-center gap-1 justify-end"><Eye className="w-3 h-3" /> views</div>
+        </div>
+      </div>
+      {p.company_name && <div className="text-[10px] font-mono text-neutral-400 mt-2 uppercase tracking-widest">@ {p.company_name}</div>}
+      {/* Sport tags */}
+      {(p.interested_sports?.length > 0) && (
+        <div className="flex flex-wrap gap-1 mt-3">
+          {p.interested_sports.slice(0, 5).map((s) => (
+            <span key={s} className="text-[9px] font-mono uppercase border border-white/10 rounded-sm px-1.5 py-0.5"
+              style={{ color: SPORT_SCHEMAS[s]?.color || "#84CC16" }}>
+              {SPORT_SCHEMAS[s]?.label || s}
+            </span>
+          ))}
+        </div>
+      )}
+    </Link>
   );
 }
 

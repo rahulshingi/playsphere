@@ -307,6 +307,11 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - `PlayerDirectory.jsx` public view now renders one `SportCards` card per interested sport (with legacy cricket fallback).
 - **Verified end-to-end by testing agent iteration_17 (13/13 steps passed)** including: chip selection, dynamic form rendering, save+reload persistence, remove-sport flow, public profile cards, and the legacy-player auto-migration path.
 
+## Implemented — Feb 21, 2026 — Player Sport Filter (recruiting tool)
+- `GET /api/players/profiles` now accepts `sport`, `role`, `hand`, `city` query params (in addition to existing `q`). For `sport=cricket` the filter also matches legacy cricket-only profiles (no `interested_sports` field). For other sports, matches `interested_sports` array. `role` checks `sport_profiles.{sport}.{role|position|specialty|domain}`; `hand` checks `{batting_hand|preferred_foot|shooting_hand|hand|preferred_color}` — both fall back to legacy cricket fields when `sport=cricket`.
+- New `/app/frontend/src/components/player/PlayerFilters.jsx` — 5-up filter bar (name+mobile, city, sport, role, hand/style). Role + hand selects auto-populate from the chosen sport's schema (so picking Football shows Position dropdown with goalkeeper/defender/midfielder/forward/winger, Chess shows Title with CM/FM/IM/GM, etc.). Disabled until a sport is chosen.
+- `PlayerDirectory.jsx` `PlayerSearch` rewritten: filter URL params, result count header, redesigned `PlayerCard` with sport-color role accent + sport tag chips at the bottom of each card. Verified across 8 filter combinations via curl + 3-screenshot smoke test (Cricket+bowler returns 1, Football+midfielder returns 2, no-filter returns all).
+
 ## Backlog
 ### P0
 - (none open)

@@ -1184,9 +1184,19 @@ async def update_my_profile(body: dict, user: dict = Depends(get_current_user)):
 async def list_player_profiles(
     company_id: Optional[str] = None,
     q: Optional[str] = None,
+    sport: Optional[str] = None,
+    role: Optional[str] = None,
+    hand: Optional[str] = None,
+    city: Optional[str] = None,
     limit: int = 500,
     user: dict = Depends(get_current_user),
 ):
+    """Search players. Optional filters:
+    - sport: only return players who picked this sport in interested_sports (cricket also matches legacy profiles).
+    - role: filter by the primary role field of that sport (role / position / specialty / domain — schema-dependent).
+    - hand: filter by hand-style field (batting_hand / preferred_foot / shooting_hand / hand / preferred_color).
+    - city: case-insensitive city contains.
+    """
     flt = {}
     if company_id:
         flt["company_id"] = company_id
@@ -1196,7 +1206,47 @@ async def list_player_profiles(
             {"city": {"$regex": q, "$options": "i"}},
             {"mobile": {"$regex": q, "$options": "i"}},
         ]
-    # Sort newest-first so freshly-registered players surface immediately, then alphabetical fallback.
+    if city:
+        flt["city"] = {"$regex": city, "$options": "i"}
+
+    if sport:
+        # Match either the new interested_sports array OR the legacy cricket-only profiles
+        # (those have no interested_sports field but valid cricket role/style fields).
+        if sport == "cricket":
+            flt["$or"] = (flt.get("$or") or []) + [
+                {"interested_sports": "cricket"},
+                # Legacy: missing or empty interested_sports + any cricket data
+                {"$and": [
+                    {"$or": [{"interested_sports": {"$exists": False}}, {"interested_sports": {"$size": 0}}]},
+                    {"$or": [{"role": {"$exists": True, "$nin": [None, ""]}}, {"batting_hand": {"$exists": True, "$nin": [None, ""]}}]},
+                ]},
+            ]
+        else:
+            flt["interested_sports"] = sport
+
+    # Role + hand are sport-scoped: they only make sense alongside a sport filter.
+    if sport and (role or hand):
+        # Primary "role-like" field varies per sport. For cricket legacy we also match the top-level
+        # `role` / `batting_hand` fields. For other sports we use sport_profiles.{sport}.{key}.
+        and_clauses = []
+        ROLE_KEYS = ["role", "position", "specialty", "domain"]
+        HAND_KEYS = ["batting_hand", "preferred_foot", "shooting_hand", "hand", "preferred_color"]
+        if role:
+            ors = [{f"sport_profiles.{sport}.{k}": role} for k in ROLE_KEYS]
+            if sport == "cricket":
+                ors.append({"role": role})  # legacy
+            and_clauses.append({"$or": ors})
+        if hand:
+            ors = [{f"sport_profiles.{sport}.{k}": hand} for k in HAND_KEYS]
+            if sport == "cricket":
+                ors.append({"batting_hand": hand})  # legacy
+            and_clauses.append({"$or": ors})
+        # Merge: AND-combine with any existing $or (q+sport-legacy)
+        if "$and" in flt:
+            flt["$and"].extend(and_clauses)
+        else:
+            flt["$and"] = and_clauses
+
     limit = max(1, min(int(limit), 2000))
     docs = await db.player_profiles.find(flt, {"_id": 0}).sort([("created_at", -1), ("name", 1)]).to_list(limit)
     # Mask mobile for non-self viewers (keep last 4 digits)

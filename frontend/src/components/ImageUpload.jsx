@@ -4,11 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Upload, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
+import { compressImage } from "@/lib/compressImage";
 
 /**
  * Combined image input: paste a URL OR upload a file.
+ * Files are compressed client-side (≤1280×1280, JPEG q≥0.5, ≤500KB) before upload
+ * so we keep storage costs low and uploads fast on slow networks.
  * Calls `onChange(url)` whenever the resolved image URL changes.
- * Returns the FULL absolute URL for uploads (prefixed with REACT_APP_BACKEND_URL).
  */
 export default function ImageUpload({ value, onChange, placeholder = "https://… or upload", testid = "image-upload" }) {
   const ref = useRef(null);
@@ -18,15 +20,16 @@ export default function ImageUpload({ value, onChange, placeholder = "https://�
     if (!file) return;
     setBusy(true);
     try {
+      const compressed = await compressImage(file).catch(() => file);
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", compressed);
       const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
-      // Backend returns a path like /api/uploads/<name>; turn into absolute URL.
       const abs = `${process.env.REACT_APP_BACKEND_URL}${data.url}`;
       onChange(abs);
-      toast.success("Image uploaded");
+      const kb = Math.round(compressed.size / 1024);
+      toast.success(`Image uploaded · ${kb} KB`);
     } catch (e) {
-      toast.error(e.response?.data?.detail || "Upload failed");
+      toast.error(e.response?.data?.detail || e.message || "Upload failed");
     } finally {
       setBusy(false);
     }

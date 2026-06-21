@@ -12,6 +12,7 @@ import { Trophy, MapPin, Calendar, Wifi, Youtube, Edit3 } from "lucide-react";
 import LiveScorer from "@/components/LiveScorer";
 import CricketScorer from "@/components/CricketScorer";
 import EventTeamsManager from "@/components/EventTeamsManager";
+import EventSponsorshipManager from "@/components/sponsorship/EventSponsorshipManager";
 import useFixtureSocket from "@/lib/useFixtureSocket";
 import { toast } from "sonner";
 
@@ -137,6 +138,7 @@ export default function EventDetail() {
             {canSeeTeamsTab && <TabsTrigger value="teams" data-testid="tab-teams" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">{["chess", "quiz", "hackathon"].includes(event.sport) ? "Players" : "Teams"}</TabsTrigger>}
             {event.format === "knockout" && <TabsTrigger value="bracket" data-testid="tab-bracket" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bracket</TabsTrigger>}
             <TabsTrigger value="sponsors" data-testid="tab-sponsors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sponsors ({sponsors.length})</TabsTrigger>
+            <TabsTrigger value="sponsorship" data-testid="tab-sponsorship" className="data-[state=active]:bg-[#FACC15] data-[state=active]:text-black rounded-sm">Sponsorship</TabsTrigger>
           </TabsList>
 
           <TabsContent value="fixtures" className="mt-6">
@@ -155,6 +157,13 @@ export default function EventDetail() {
           )}
           <TabsContent value="sponsors" className="mt-6">
             <EventSponsors eventId={event.id} sponsors={sponsors} isAdmin={isAdmin} reload={loadAll} />
+          </TabsContent>
+          <TabsContent value="sponsorship" className="mt-6">
+            <EventSponsorshipManager
+              event={event}
+              canManage={isPlatformAdmin || (isCompanyAdmin && companyId === event.company_id)}
+              reload={loadAll}
+            />
           </TabsContent>
         </Tabs>
       </div>

@@ -61,6 +61,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const refreshMe = async () => {
+    try {
+      const { data } = await api.get("/auth/me");
+      setUser(data);
+      return data;
+    } catch {
+      setUser(false);
+      return null;
+    }
+  };
+
   const logout = async () => {
     try { await api.post("/auth/logout"); } catch (err) {
       devError("[AuthContext] Logout request failed:", err);
@@ -76,6 +87,7 @@ export const AuthProvider = ({ children }) => {
       register,
       signupCompany,
       signupOrganiser,
+      refreshMe,
       logout,
       isAdmin: !!user && (user.role === "admin" || user.role === "platform_admin" || user.role === "company_admin" || user.role === "organiser"),
       isPlatformAdmin: !!user && (user.role === "platform_admin" || user.role === "admin"),
@@ -86,6 +98,8 @@ export const AuthProvider = ({ children }) => {
       isOrganiser: !!user && user.role === "organiser",
       isPlayer: !!user && user.role === "player",
       isVendor: !!user && user.role === "vendor",
+      isSponsor: !!user && user.role === "sponsor",
+      canSponsor: !!user && (user.role === "sponsor" || user.role === "company_admin"),
       companyId: user && user.company_id,
       companyName: user && user.company_name,
     }}>

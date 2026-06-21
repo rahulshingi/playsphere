@@ -312,6 +312,12 @@ class Event(BaseModel):
     stream_url: Optional[str] = ""
     company_id: Optional[str] = None
     companies: List[str] = Field(default_factory=list)
+    # ---- Sponsorship marketplace ----
+    accept_sponsorships: bool = False
+    sponsorship_requirements: Dict[str, Any] = Field(default_factory=dict)
+    # opportunities: [{id, name, type, price, currency, quantity_available, benefits, status, awarded_to_sponsor_id, awarded_to_name}]
+    sponsorship_opportunities: List[Dict[str, Any]] = Field(default_factory=list)
+    data_share_agreement: bool = False
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -327,6 +333,57 @@ class EventCreate(BaseModel):
     banner_url: Optional[str] = ""
     stream_url: Optional[str] = ""
     companies: List[str] = Field(default_factory=list)
+
+
+# ============================================================================
+#  SPONSORSHIP MARKETPLACE
+# ============================================================================
+class SponsorProfile(BaseModel):
+    """Sponsor profile. user_id may belong to a 'sponsor' OR 'company_admin' role —
+    company admins can both run sponsored events AND sponsor other organisers' events."""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    company_name: str
+    contact_person: Optional[str] = ""
+    industry: Optional[str] = ""
+    location: Optional[str] = ""
+    target_locations: List[str] = Field(default_factory=list)
+    target_event_types: List[str] = Field(default_factory=list)  # e.g. corporate-sports, family-day, sports-day
+    target_audience: Optional[str] = ""
+    budget_range: Optional[str] = ""  # free text like "₹10,000 – ₹50,000"
+    website: Optional[str] = ""
+    logo_url: Optional[str] = ""
+    sponsor_interests: List[str] = Field(default_factory=list)  # sport slugs + corporate-sports/employee-engagement etc.
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class SponsorSignupBody(BaseModel):
+    email: str
+    password: str
+    company_name: str
+    contact_person: Optional[str] = ""
+
+
+class SponsorshipInterest(BaseModel):
+    """Sponsor-side expression of interest in an opportunity. Organiser approves/rejects."""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    event_id: str
+    event_name: Optional[str] = ""
+    opportunity_id: str
+    opportunity_name: Optional[str] = ""
+    opportunity_price: Optional[float] = 0
+    sponsor_id: str
+    sponsor_user_id: str
+    sponsor_company_name: Optional[str] = ""
+    sponsor_industry: Optional[str] = ""
+    sponsor_budget_range: Optional[str] = ""
+    sponsor_website: Optional[str] = ""
+    proposal_message: Optional[str] = ""
+    status: Literal["pending", "accepted", "rejected"] = "pending"
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    decided_at: Optional[str] = None
 
 
 class Fixture(BaseModel):
@@ -2111,6 +2168,160 @@ async def root():
     return {"name": "Kreeda Nation API", "tagline": "Where Teams Compete, Connect & Grow"}
 
 
+# ============================================================================
+#  SPONSORSHIP MARKETPLACE — Phase 1: profiles, opportunities, interests
+# ============================================================================
+def _require_sponsor_or_company(user: dict = Depends(get_current_user)) -> dict:
+    """Sponsorship browse + interest actions are open to dedicated sponsor users AND
+    company admins (per product spec — companies can sponsor other organisers' events)."""
+    if user.get("role") not in ("sponsor", "company_admin"):
+        raise HTTPException(403, "Only sponsors or company admins can perform this action")
+    return user
+
+
+@api.post("/auth/sponsors/signup", response_model=UserPublic)
+async def sponsor_signup(body: SponsorSignupBody, response: Response):
+    email = body.email.lower().strip()
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(400, "An account with this email already exists")
+    if len(body.password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    user_id = str(uuid.uuid4())
+    await db.users.insert_one({
+        "id": user_id, "email": email, "name": body.contact_person or body.company_name,
+        "role": "sponsor", "password_hash": hash_password(body.password),
+        "email_verified": True, "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    profile = SponsorProfile(user_id=user_id, company_name=body.company_name.strip(), contact_person=body.contact_person or "")
+    await db.sponsor_profiles.insert_one(profile.model_dump())
+    token = create_access_token(user_id, email, "sponsor", None)
+    set_auth_cookie(response, token)
+    logger.info("SPONSOR SIGNUP | %s | %s", email, body.company_name)
+    return UserPublic(id=user_id, email=email, name=body.contact_person or body.company_name, role="sponsor", company_id=None, company=None)
+
+
+async def _resolve_sponsor_profile(user: dict) -> Optional[dict]:
+    """Look up the sponsor profile for the current user. Auto-creates a stub for
+    company admins so they can populate their sponsor-facing info on first visit."""
+    profile = await db.sponsor_profiles.find_one({"user_id": user["id"]}, {"_id": 0})
+    if profile:
+        return profile
+    if user.get("role") == "company_admin":
+        # Bootstrap an empty sponsor profile reusing the company name as default.
+        company = await db.companies.find_one({"id": user.get("company_id")}, {"_id": 0, "name": 1})
+        stub = SponsorProfile(user_id=user["id"], company_name=(company or {}).get("name") or user.get("name") or "Unnamed company")
+        await db.sponsor_profiles.insert_one(stub.model_dump())
+        return stub.model_dump()
+    return None
+
+
+@api.get("/sponsor-profile/me")
+async def sponsor_get_me(user: dict = Depends(_require_sponsor_or_company)):
+    profile = await _resolve_sponsor_profile(user)
+    if not profile:
+        raise HTTPException(404, "Sponsor profile not found")
+    return profile
+
+
+@api.patch("/sponsor-profile/me")
+async def sponsor_update_me(body: dict, user: dict = Depends(_require_sponsor_or_company)):
+    profile = await _resolve_sponsor_profile(user)
+    if not profile:
+        raise HTTPException(404, "Sponsor profile not found")
+    EDITABLE = {"company_name", "contact_person", "industry", "location", "target_locations",
+                "target_event_types", "target_audience", "budget_range", "website", "logo_url", "sponsor_interests"}
+    updates = {k: v for k, v in (body or {}).items() if k in EDITABLE}
+    if not updates:
+        return profile
+    await db.sponsor_profiles.update_one({"user_id": user["id"]}, {"$set": updates})
+    profile.update(updates)
+    return profile
+
+
+def _opportunity_active_count(opp: dict) -> int:
+    """Number of 'available' slots remaining for an opportunity. 'sold' slots are excluded."""
+    return max(0, int(opp.get("quantity_available", 0)) - int(opp.get("sold_count", 0)))
+
+
+@api.get("/events/{event_id}/sponsorships")
+async def list_event_sponsorships(event_id: str):
+    """Public — anyone (even not logged in) can browse the sponsorships of an event.
+    Returns each opportunity with derived `slots_remaining` and `sold_to` list."""
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(404, "Event not found")
+    opps = event.get("sponsorship_opportunities") or []
+    for o in opps:
+        o["slots_remaining"] = _opportunity_active_count(o)
+    return {
+        "event_id": event_id,
+        "event_name": event.get("name"),
+        "accept_sponsorships": bool(event.get("accept_sponsorships")),
+        "data_share_agreement": bool(event.get("data_share_agreement")),
+        "requirements": event.get("sponsorship_requirements") or {},
+        "opportunities": opps,
+    }
+
+
+async def _ensure_event_owner(event_id: str, user: dict) -> dict:
+    """Platform admins, the event's owning company admin, and organisers of the event
+    can mutate its sponsorship opportunities."""
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not event:
+        raise HTTPException(404, "Event not found")
+    role = user.get("role")
+    if role == "platform_admin":
+        return event
+    if role in ("company_admin", "organiser") and (event.get("company_id") == user.get("company_id")):
+        return event
+    raise HTTPException(403, "Not allowed to modify this event")
+
+
+@api.post("/events/{event_id}/sponsorships")
+async def add_event_sponsorship(event_id: str, body: dict, user: dict = Depends(get_current_user)):
+    await _ensure_event_owner(event_id, user)
+    name = (body or {}).get("name", "").strip()
+    if not name:
+        raise HTTPException(400, "Sponsorship name required")
+    opp = {
+        "id": str(uuid.uuid4()),
+        "name": name,
+        "type": body.get("type") or "associate",
+        "price": float(body.get("price") or 0),
+        "currency": body.get("currency") or "INR",
+        "quantity_available": int(body.get("quantity_available") or 1),
+        "sold_count": 0,
+        "benefits": body.get("benefits") or "",
+        "status": "available",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.events.update_one({"id": event_id}, {"$push": {"sponsorship_opportunities": opp}})
+    return opp
+
+
+@api.patch("/events/{event_id}/sponsorships/{opp_id}")
+async def update_event_sponsorship(event_id: str, opp_id: str, body: dict, user: dict = Depends(get_current_user)):
+    event = await _ensure_event_owner(event_id, user)
+    opps = event.get("sponsorship_opportunities") or []
+    idx = next((i for i, o in enumerate(opps) if o.get("id") == opp_id), -1)
+    if idx < 0:
+        raise HTTPException(404, "Opportunity not found")
+    EDITABLE = {"name", "type", "price", "currency", "quantity_available", "benefits"}
+    for k, v in (body or {}).items():
+        if k in EDITABLE:
+            opps[idx][k] = v
+    await db.events.update_one({"id": event_id}, {"$set": {"sponsorship_opportunities": opps}})
+    return opps[idx]
+
+
+@api.delete("/events/{event_id}/sponsorships/{opp_id}")
+async def delete_event_sponsorship(event_id: str, opp_id: str, user: dict = Depends(get_current_user)):
+    event = await _ensure_event_owner(event_id, user)
+    opps = [o for o in (event.get("sponsorship_opportunities") or []) if o.get("id") != opp_id]
+    await db.events.update_one({"id": event_id}, {"$set": {"sponsorship_opportunities": opps}})
+    return {"ok": True}
+
+
 # Uploads (define route + mount BEFORE including router)
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -2128,8 +2339,8 @@ async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_cu
     name = f"{uuid.uuid4().hex}.{ext}"
     dest = UPLOAD_DIR / name
     contents = await file.read()
-    if len(contents) > 5 * 1024 * 1024:
-        raise HTTPException(400, "File too large (max 5 MB)")
+    if len(contents) > 1 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 1 MB after client-side compression)")
     dest.write_bytes(contents)
     return {"url": f"/api/uploads/{name}", "filename": name, "size": len(contents)}
 

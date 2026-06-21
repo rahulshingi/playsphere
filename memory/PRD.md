@@ -323,6 +323,32 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - Both editor (`/players/me`) and public profile (`/players/profiles/{id}`) now show the career-stats dashboard.
 - Verified end-to-end via curl + screenshot: a seeded cricket fixture with 78(50) batting & 3/28(4ov) bowling produced the exact auto-aggregated values (batting avg 78.0, SR 156.0, economy 7.0, bowling avg 9.33).
 
+## Implemented — Feb 22, 2026 — Sponsorship Marketplace (Phase 1)
+**Backend** (`server.py`):
+- Extended `Event` model with `accept_sponsorships`, `sponsorship_requirements` (dict — reach, participants, audience, demographics, social-media reach, livestream views, venue, category, brochure URL), `sponsorship_opportunities` (list with id/name/type/price/quantity/sold_count/benefits/status/awarded_to fields), `data_share_agreement` (bool).
+- New `SponsorProfile` model (`sponsor_profiles` collection): company_name, contact_person, industry, location, target_locations, target_event_types, target_audience, budget_range, website, logo_url, sponsor_interests.
+- New `SponsorshipInterest` model (collection scaffolded, endpoints for Phase 2).
+- New endpoints:
+  - `POST /api/auth/sponsors/signup` — email+password sponsor signup, creates user `role=sponsor` + auto sponsor_profile.
+  - `GET/PATCH /api/sponsor-profile/me` — gated to `sponsor` OR `company_admin` roles. Company admins get an auto-bootstrap profile so they can both run AND sponsor events.
+  - `GET /api/events/{id}/sponsorships` — PUBLIC listing of opportunities + requirements (no auth needed).
+  - `POST/PATCH/DELETE /api/events/{id}/sponsorships[/{opp_id}]` — owner-only opportunity CRUD (platform_admin OR same-company organiser/company_admin).
+
+**Frontend**:
+- New `/sponsor/signup` page with clean signup form (`SignupSponsor.jsx`).
+- New `/sponsors/me` sponsor profile editor (`SponsorProfile.jsx`) with chip-select for interests & event types, logo upload.
+- New Sponsorship tab in `/events/{id}` (`EventSponsorshipManager.jsx`) — owner toggles "Accept sponsorships", fills 10 requirement fields, locks data-share agreement, and manages multiple opportunities inline (add/edit/remove with name/type/price/qty/benefits). Non-owners get a read-only public view with "AVAILABLE · N slots" / "SOLD" / "Sponsored by …" badges.
+- `AuthContext` gained `isSponsor`, `canSponsor` (sponsor OR company_admin), and `refreshMe()` helper.
+- `Nav.jsx` shows "Sponsor hub" link for company admins and "Sponsor profile" / "Browse events" for the sponsor role.
+- Routes wired in `App.js`: `/sponsor/signup`, `/sponsors/me`.
+
+**Image optimization** (across all uploads):
+- New `/app/frontend/src/lib/compressImage.js` — HTML5 canvas pipeline: scales down to ≤1280×1280, JPEG q≥0.5, hard cap 500 KB. GIF/SVG preserved unchanged (with 2 MB cap).
+- `ImageUpload.jsx` now compresses client-side BEFORE upload and shows the resulting KB size in the success toast.
+- Server-side cap tightened from 5 MB → 1 MB safety net (client should already deliver ≤500 KB).
+
+Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm interested" CTA, organiser interest queue (accept/reject), public "Sponsored by …" badge wiring, admin sponsorship metrics dashboard.
+
 ## Backlog
 ### P0
 - (none open)

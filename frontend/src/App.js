@@ -32,6 +32,8 @@ import { PlayerSearch, PlayerProfileView } from "@/pages/PlayerDirectory";
 import VendorSignup from "@/pages/VendorSignup";
 import VendorDashboard from "@/pages/VendorDashboard";
 import VendorMarket from "@/pages/VendorMarket";
+import SignupSponsor from "@/pages/SignupSponsor";
+import SponsorProfile from "@/pages/SponsorProfile";
 import About from "@/pages/About";
 import Contact from "@/pages/Contact";
 
@@ -80,6 +82,10 @@ function App() {
           {/* Vendors */}
           <Route path="/vendor/signup" element={<VendorSignup />} />
           <Route path="/vendor/dashboard" element={<VendorDashboard />} />
+
+          {/* Sponsorship marketplace */}
+          <Route path="/sponsor/signup" element={<SignupSponsor />} />
+          <Route path="/sponsors/me" element={<SponsorProfile />} />
         </Routes>
       </BrowserRouter>
       <Toaster position="top-right" theme="dark" />

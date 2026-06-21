@@ -16,12 +16,13 @@ const publicLinks = [
   { to: "/contact", label: "Contact" },
 ];
 
-function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isPlatformAdmin }) {
+function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin }) {
   const out = [];
   if (isCompanyAdmin) {
     out.push({ to: "/dashboard", label: "Dashboard", icon: Briefcase, accent: "#84CC16" });
     out.push({ to: "/hire", label: "Hire" });
     out.push({ to: "/players/profiles", label: "Players" });
+    out.push({ to: "/sponsors/me", label: "Sponsor hub", accent: "#FACC15" });
     out.push({ to: "/admin", label: "Manage", icon: Shield, accent: "#84CC16" });
   }
   if (isPlayer) {
@@ -31,6 +32,10 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isPlatformAdmin }) {
   if (isVendor) {
     out.push({ to: "/vendor/dashboard", label: "Vendor", icon: Store, accent: "#EC4899" });
     out.push({ to: "/bookings", label: "Requests" });
+  }
+  if (isSponsor) {
+    out.push({ to: "/sponsors/me", label: "Sponsor profile", icon: Briefcase, accent: "#FACC15" });
+    out.push({ to: "/events", label: "Browse events" });
   }
   if (isPlatformAdmin) {
     out.push({ to: "/platform-admin", label: "HQ", icon: Crown, accent: "#FF3B30" });
@@ -66,11 +71,11 @@ function DesktopLink({ link }) {
 }
 
 export default function Nav() {
-  const { user, isCompanyAdmin, isPlatformAdmin, isPlayer, isVendor, companyName, logout } = useAuth();
+  const { user, isCompanyAdmin, isPlatformAdmin, isPlayer, isVendor, isSponsor, companyName, logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isAuthed = user && user !== false;
-  const roles = { isCompanyAdmin, isPlayer, isVendor, isPlatformAdmin };
+  const roles = { isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin };
   const extras = roleLinks(roles);
   const guide = isAuthed ? getRoleGuide(user.role) : null;
 

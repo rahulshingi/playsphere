@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
 import DashboardPanel from "@/components/DashboardPanel";
 import SportsManager from "@/components/SportsManager";
+import SponsorshipMetricsCard from "@/components/sponsorship/SponsorshipMetricsCard";
 import { AdminReviewsQueue } from "@/components/Reviews";
 import AdminTeam from "@/components/AdminTeam";
 import ServiceEditor from "@/components/admin/ServiceEditor";
@@ -128,7 +129,7 @@ export default function PlatformAdmin() {
             )}
           </TabsList>
 
-          <TabsContent value="dashboard" className="mt-6"><DashboardPanel role="admin" /></TabsContent>
+          <TabsContent value="dashboard" className="mt-6"><DashboardPanel role="admin" /><SponsorshipMetricsCard /></TabsContent>
           <TabsContent value="sports" className="mt-6"><SportsManager /></TabsContent>
 
           <TabsContent value="services" className="mt-6 space-y-2">

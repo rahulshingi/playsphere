@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import api from "@/lib/api";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, Save, Megaphone, IndianRupee } from "lucide-react";
+import { Plus, Trash2, Save, Megaphone, IndianRupee, Check, X } from "lucide-react";
 
 const REQS_FIELDS = [
   { key: "expected_reach", label: "Expected reach", type: "number", placeholder: "50000" },
@@ -84,26 +86,15 @@ export default function EventSponsorshipManager({ event, canManage, reload }) {
 
   // ---- READ-ONLY view (non-owners or organiser who hasn't enabled marketplace yet) ----
   if (!canManage) {
-    return (
-      <div className="space-y-3">
-        {!accept && (
-          <div className="text-neutral-500 text-center py-12 border border-dashed border-white/10 rounded-sm">
-            The organiser has not enabled sponsorship for this event yet.
-          </div>
-        )}
-        {accept && opps.length === 0 && (
-          <div className="text-neutral-500 text-center py-12 border border-dashed border-white/10 rounded-sm">
-            Sponsorships are accepted, but no opportunities listed yet — check back soon.
-          </div>
-        )}
-        {accept && opps.map((o) => <PublicOpportunityRow key={o.id} opp={o} />)}
-      </div>
-    );
+    return <SponsorBrowseView event={event} opps={opps} accept={accept} reload={reload} />;
   }
 
   // ---- OWNER editor ----
   return (
     <div className="space-y-6">
+      {/* Interest queue (organiser side) */}
+      <OrganiserInterestQueue eventId={event.id} reload={reload} />
+
       {/* Toggle + requirements */}
       <div className="border border-white/10 rounded-sm bg-[#141414] p-5 space-y-4">
         <div className="font-display tracking-wider text-2xl flex items-center gap-2"><Megaphone className="w-5 h-5 text-[#FACC15]" /> SPONSORSHIP MARKETPLACE</div>
@@ -177,12 +168,13 @@ export default function EventSponsorshipManager({ event, canManage, reload }) {
   );
 }
 
-function PublicOpportunityRow({ opp }) {
+function PublicOpportunityRow({ opp, onInterest, canSponsor, hasInterest }) {
   const remaining = opp.slots_remaining ?? Math.max(0, (opp.quantity_available || 0) - (opp.sold_count || 0));
   const allSold = remaining === 0;
+  const awardedNames = (opp.awarded_to || []).map((a) => a.name).filter(Boolean);
   return (
-    <div className="border border-white/10 rounded-sm bg-[#141414] p-4 flex items-center justify-between gap-3">
-      <div>
+    <div className="border border-white/10 rounded-sm bg-[#141414] p-4 flex items-center justify-between gap-3" data-testid={`public-opp-${opp.id}`}>
+      <div className="min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <div className="font-semibold">{opp.name}</div>
           <span className="text-[10px] font-mono uppercase text-neutral-500">{opp.type}</span>
@@ -193,14 +185,182 @@ function PublicOpportunityRow({ opp }) {
           )}
         </div>
         {opp.benefits && <div className="text-xs text-neutral-400 mt-1">{opp.benefits}</div>}
-        {(opp.awarded_to_name) && (
-          <div className="text-xs text-[#FACC15] font-mono mt-1">✦ Sponsored by {opp.awarded_to_name}</div>
+        {awardedNames.length > 0 && (
+          <div className="text-xs text-[#FACC15] font-mono mt-1">✦ Sponsored by {awardedNames.join(", ")}</div>
         )}
       </div>
-      <div className="text-right shrink-0">
+      <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
         <div className="font-display text-2xl">₹{(opp.price || 0).toLocaleString()}</div>
         <div className="text-[10px] font-mono uppercase text-neutral-500">qty {opp.quantity_available}</div>
+        {!allSold && canSponsor && !hasInterest && (
+          <Button size="sm" data-testid={`opp-interest-${opp.id}`} onClick={() => onInterest(opp)}
+            className="bg-[#FACC15] hover:bg-[#EAB308] text-black font-semibold rounded-sm text-xs">
+            I'm interested
+          </Button>
+        )}
+        {hasInterest && (
+          <span className="text-[10px] font-mono uppercase text-[#FACC15] border border-[#FACC15]/40 rounded-sm px-2 py-0.5">Interest sent · pending</span>
+        )}
       </div>
+    </div>
+  );
+}
+
+// ---- Sponsor-side browse view: shows opps with "I'm interested" CTAs + a proposal dialog ----
+function SponsorBrowseView({ event, opps, accept, reload }) {
+  const { canSponsor, user } = useAuth();
+  const [myInterests, setMyInterests] = useState([]);
+  const [draft, setDraft] = useState(null); // { opp, message }
+
+  const loadMine = () => {
+    if (!canSponsor) return;
+    api.get("/sponsorships/interests/mine").then((r) => setMyInterests(r.data)).catch(() => {});
+  };
+  useEffect(() => { loadMine(); }, [canSponsor, user?.id]);
+
+  const submit = async () => {
+    try {
+      await api.post("/sponsorships/interests", {
+        event_id: event.id,
+        opportunity_id: draft.opp.id,
+        proposal_message: draft.message || "",
+      });
+      toast.success("Interest sent — the organiser will review and respond shortly.");
+      setDraft(null);
+      loadMine();
+      reload();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Could not send interest");
+    }
+  };
+
+  const hasInterestFor = (oppId) =>
+    myInterests.some((i) => i.event_id === event.id && i.opportunity_id === oppId && i.status === "pending");
+
+  return (
+    <div className="space-y-3">
+      {!accept && (
+        <div className="text-neutral-500 text-center py-12 border border-dashed border-white/10 rounded-sm">
+          The organiser has not enabled sponsorship for this event yet.
+        </div>
+      )}
+      {accept && opps.length === 0 && (
+        <div className="text-neutral-500 text-center py-12 border border-dashed border-white/10 rounded-sm">
+          Sponsorships are accepted, but no opportunities listed yet — check back soon.
+        </div>
+      )}
+      {accept && !canSponsor && (
+        <div className="border border-amber-500/40 bg-amber-500/10 rounded-sm p-3 text-sm">
+          <Link to="/sponsor/signup" className="text-[#FACC15] underline">Sign up as a sponsor</Link> or sign in to express interest.
+        </div>
+      )}
+      {accept && opps.map((o) => (
+        <PublicOpportunityRow key={o.id} opp={o}
+          canSponsor={canSponsor}
+          hasInterest={hasInterestFor(o.id)}
+          onInterest={(opp) => setDraft({ opp, message: "" })} />
+      ))}
+
+      {/* Proposal dialog */}
+      {draft && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6" data-testid="interest-dialog">
+          <div className="bg-[#0c0c0c] border border-white/10 rounded-sm w-full max-w-lg p-6 text-white space-y-4">
+            <div className="font-display tracking-wider text-2xl">EXPRESS INTEREST</div>
+            <div className="text-sm text-neutral-400">
+              <strong>{draft.opp.name}</strong> · ₹{(draft.opp.price || 0).toLocaleString()} · {event.name}
+            </div>
+            <div>
+              <Label className="text-[10px] font-mono uppercase text-neutral-500">Proposal message (optional)</Label>
+              <Textarea data-testid="interest-message" rows={4} value={draft.message} placeholder="Why does this opportunity match your brand goals?"
+                onChange={(e) => setDraft({ ...draft, message: e.target.value })}
+                className="mt-1.5 bg-black/40 border-white/10 text-white" />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" data-testid="interest-cancel" onClick={() => setDraft(null)} className="text-neutral-400">Cancel</Button>
+              <Button data-testid="interest-submit" onClick={submit} className="bg-[#FACC15] hover:bg-[#EAB308] text-black font-semibold rounded-sm">Send interest</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- Organiser-side: queue of received interests with Accept / Reject actions ----
+function OrganiserInterestQueue({ eventId, reload }) {
+  const [interests, setInterests] = useState([]);
+  const [busyId, setBusyId] = useState(null);
+
+  const load = () => {
+    api.get(`/events/${eventId}/sponsorships/interests`).then((r) => setInterests(r.data)).catch(() => {});
+  };
+  useEffect(() => { load(); }, [eventId]);
+
+  const decide = async (id, status) => {
+    if (status === "rejected" && !window.confirm("Reject this sponsor's interest? They will be notified.")) return;
+    if (status === "accepted" && !window.confirm("Accept this sponsor? The opportunity slot will be marked sold.")) return;
+    setBusyId(id);
+    try {
+      await api.patch(`/sponsorships/interests/${id}`, { status });
+      toast.success(status === "accepted" ? "Sponsor accepted · opportunity awarded" : "Interest rejected");
+      load();
+      reload();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed");
+    } finally { setBusyId(null); }
+  };
+
+  const pending = interests.filter((i) => i.status === "pending");
+  const decided = interests.filter((i) => i.status !== "pending");
+
+  if (interests.length === 0) return null;
+
+  return (
+    <div className="border border-white/10 rounded-sm bg-[#141414] p-5 space-y-3">
+      <div className="font-display tracking-wider text-xl">INTEREST QUEUE ({pending.length} pending)</div>
+      {pending.length === 0 && <div className="text-xs text-neutral-500">No pending interests.</div>}
+      {pending.map((i) => (
+        <div key={i.id} data-testid={`interest-row-${i.id}`} className="border border-[#FACC15]/30 bg-[#FACC15]/5 rounded-sm p-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="font-semibold">{i.sponsor_company_name || "Anonymous sponsor"}</div>
+              <span className="text-[10px] font-mono uppercase text-neutral-500">{i.sponsor_industry || "—"}</span>
+              {i.sponsor_budget_range && <span className="text-[10px] font-mono uppercase text-[#FACC15]">{i.sponsor_budget_range}</span>}
+            </div>
+            <div className="text-xs font-mono text-neutral-400 mt-1">
+              wants <span className="text-white">{i.opportunity_name}</span> · ₹{Number(i.opportunity_price || 0).toLocaleString()}
+            </div>
+            {i.sponsor_website && (
+              <a href={i.sponsor_website} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono text-[#FACC15] hover:underline">{i.sponsor_website}</a>
+            )}
+            {i.proposal_message && <div className="text-xs text-neutral-300 mt-2 italic border-l-2 border-white/20 pl-2">"{i.proposal_message}"</div>}
+          </div>
+          <div className="flex flex-col gap-1.5 shrink-0">
+            <Button size="sm" disabled={busyId === i.id} data-testid={`interest-accept-${i.id}`} onClick={() => decide(i.id, "accepted")}
+              className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
+              <Check className="w-3.5 h-3.5 mr-1" /> Accept
+            </Button>
+            <Button size="sm" variant="outline" disabled={busyId === i.id} data-testid={`interest-reject-${i.id}`} onClick={() => decide(i.id, "rejected")}
+              className="border-[#FF3B30]/40 bg-transparent text-[#FF3B30] hover:bg-[#FF3B30]/10 rounded-sm">
+              <X className="w-3.5 h-3.5 mr-1" /> Reject
+            </Button>
+          </div>
+        </div>
+      ))}
+
+      {decided.length > 0 && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-neutral-500 font-mono uppercase tracking-widest">/ Decided ({decided.length})</summary>
+          <div className="space-y-1.5 mt-2">
+            {decided.map((i) => (
+              <div key={i.id} className="flex items-center justify-between text-xs font-mono border border-white/10 rounded-sm p-2 bg-black/30">
+                <span>{i.sponsor_company_name} → {i.opportunity_name}</span>
+                <span className={i.status === "accepted" ? "text-[#84CC16]" : "text-[#FF3B30]"}>{i.status.toUpperCase()}</span>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
     </div>
   );
 }

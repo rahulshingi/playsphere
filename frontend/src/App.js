@@ -34,6 +34,7 @@ import VendorDashboard from "@/pages/VendorDashboard";
 import VendorMarket from "@/pages/VendorMarket";
 import SignupSponsor from "@/pages/SignupSponsor";
 import SponsorProfile from "@/pages/SponsorProfile";
+import SponsorshipMarketplace from "@/pages/SponsorshipMarketplace";
 import About from "@/pages/About";
 import Contact from "@/pages/Contact";
 
@@ -86,6 +87,7 @@ function App() {
           {/* Sponsorship marketplace */}
           <Route path="/sponsor/signup" element={<SignupSponsor />} />
           <Route path="/sponsors/me" element={<SponsorProfile />} />
+          <Route path="/sponsorships" element={<SponsorshipMarketplace />} />
         </Routes>
       </BrowserRouter>
       <Toaster position="top-right" theme="dark" />

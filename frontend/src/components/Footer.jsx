@@ -55,6 +55,7 @@ export default function Footer() {
             <li><Link className="hover:text-[#06B6D4]" to="/signup-organiser">Become an organiser</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/players/signup">Player account</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/vendor/signup">Become a vendor</Link></li>
+            <li><Link className="hover:text-[#FACC15]" to="/sponsor/signup">Become a sponsor</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/login">Sign in</Link></li>
           </ul>
         </div>

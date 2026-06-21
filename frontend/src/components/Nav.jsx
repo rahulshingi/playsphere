@@ -35,7 +35,7 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
   }
   if (isSponsor) {
     out.push({ to: "/sponsors/me", label: "Sponsor profile", icon: Briefcase, accent: "#FACC15" });
-    out.push({ to: "/events", label: "Browse events" });
+    out.push({ to: "/sponsorships", label: "Sponsorships" });
   }
   if (isPlatformAdmin) {
     out.push({ to: "/platform-admin", label: "HQ", icon: Crown, accent: "#FF3B30" });

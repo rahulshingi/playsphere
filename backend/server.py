@@ -2322,6 +2322,202 @@ async def delete_event_sponsorship(event_id: str, opp_id: str, user: dict = Depe
     return {"ok": True}
 
 
+# ---------- Marketplace browse (sponsor-side) ----------
+@api.get("/sponsorships/marketplace")
+async def sponsorship_marketplace(
+    sport: Optional[str] = None,
+    location: Optional[str] = None,
+    event_type: Optional[str] = None,
+    price_max: Optional[float] = None,
+    min_reach: Optional[int] = None,
+    start_after: Optional[str] = None,
+):
+    """List events accepting sponsorships, with embedded opportunities for quick browse.
+    `price_max` filters to events that have AT LEAST ONE opportunity ≤ that price (sponsor-budget filter).
+    `min_reach` filters by expected_reach in requirements. `start_after` filters by start_date."""
+    query: Dict[str, Any] = {"accept_sponsorships": True, "data_share_agreement": True}
+    if sport:
+        query["sport"] = sport
+    if event_type:
+        query["event_type"] = event_type
+    if location:
+        query["$or"] = [
+            {"venue": {"$regex": location, "$options": "i"}},
+            {"sponsorship_requirements.venue_location": {"$regex": location, "$options": "i"}},
+        ]
+    if start_after:
+        query["start_date"] = {"$gte": start_after}
+    events = await db.events.find(query, {"_id": 0}).sort("created_at", -1).to_list(500)
+    out = []
+    for e in events:
+        opps = e.get("sponsorship_opportunities") or []
+        # Annotate slots_remaining + filter by price_max if asked.
+        for o in opps:
+            o["slots_remaining"] = max(0, int(o.get("quantity_available", 0)) - int(o.get("sold_count", 0)))
+        if price_max is not None:
+            matching = [o for o in opps if float(o.get("price") or 0) <= float(price_max) and o["slots_remaining"] > 0]
+            if not matching:
+                continue
+        reqs = e.get("sponsorship_requirements") or {}
+        if min_reach is not None and int(reqs.get("expected_reach") or 0) < int(min_reach):
+            continue
+        e["opportunities"] = opps
+        e["min_price"] = min((float(o.get("price") or 0) for o in opps if (o.get("price") or 0) > 0), default=0)
+        e["total_value"] = sum(float(o.get("price") or 0) * int(o.get("quantity_available") or 0) for o in opps)
+        e["available_slots"] = sum(o["slots_remaining"] for o in opps)
+        out.append(e)
+    return out
+
+
+# ---------- Interest creation / queue / approval ----------
+@api.post("/sponsorships/interests")
+async def create_sponsorship_interest(body: dict, user: dict = Depends(_require_sponsor_or_company)):
+    event_id = (body or {}).get("event_id")
+    opp_id = (body or {}).get("opportunity_id")
+    if not event_id or not opp_id:
+        raise HTTPException(400, "event_id and opportunity_id required")
+    sponsor_profile = await _resolve_sponsor_profile(user)
+    if not sponsor_profile:
+        raise HTTPException(400, "Complete your sponsor profile first")
+    event = await db.events.find_one({"id": event_id}, {"_id": 0})
+    if not event or not event.get("accept_sponsorships") or not event.get("data_share_agreement"):
+        raise HTTPException(400, "This event is not currently accepting sponsorships")
+    opp = next((o for o in (event.get("sponsorship_opportunities") or []) if o.get("id") == opp_id), None)
+    if not opp:
+        raise HTTPException(404, "Opportunity not found")
+    if max(0, int(opp.get("quantity_available", 0)) - int(opp.get("sold_count", 0))) <= 0:
+        raise HTTPException(400, "All slots for this opportunity have been sold")
+    # Block duplicate active interests from the same sponsor.
+    existing = await db.sponsorship_interests.find_one({
+        "event_id": event_id, "opportunity_id": opp_id, "sponsor_id": sponsor_profile["id"], "status": "pending",
+    })
+    if existing:
+        raise HTTPException(400, "You have already expressed interest in this opportunity")
+    interest = SponsorshipInterest(
+        event_id=event_id, event_name=event.get("name"),
+        opportunity_id=opp_id, opportunity_name=opp.get("name"), opportunity_price=float(opp.get("price") or 0),
+        sponsor_id=sponsor_profile["id"], sponsor_user_id=user["id"],
+        sponsor_company_name=sponsor_profile.get("company_name"),
+        sponsor_industry=sponsor_profile.get("industry"),
+        sponsor_budget_range=sponsor_profile.get("budget_range"),
+        sponsor_website=sponsor_profile.get("website"),
+        proposal_message=(body or {}).get("proposal_message", ""),
+    )
+    await db.sponsorship_interests.insert_one(interest.model_dump())
+    logger.info("SPONSORSHIP INTEREST | %s wants %s on event %s", sponsor_profile.get("company_name"), opp.get("name"), event_id)
+    return interest.model_dump()
+
+
+@api.get("/sponsorships/interests/mine")
+async def list_my_sponsorship_interests(user: dict = Depends(_require_sponsor_or_company)):
+    sponsor_profile = await _resolve_sponsor_profile(user)
+    if not sponsor_profile:
+        return []
+    return await db.sponsorship_interests.find({"sponsor_id": sponsor_profile["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.get("/events/{event_id}/sponsorships/interests")
+async def list_event_sponsorship_interests(event_id: str, user: dict = Depends(get_current_user)):
+    await _ensure_event_owner(event_id, user)
+    return await db.sponsorship_interests.find({"event_id": event_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.patch("/sponsorships/interests/{interest_id}")
+async def decide_sponsorship_interest(interest_id: str, body: dict, user: dict = Depends(get_current_user)):
+    """Organiser accepts or rejects an interest. Accept => opportunity sold_count++, opportunity
+    awarded_to_sponsor_id/name written; if all slots filled, opportunity.status='sold'."""
+    interest = await db.sponsorship_interests.find_one({"id": interest_id}, {"_id": 0})
+    if not interest:
+        raise HTTPException(404, "Interest not found")
+    event = await _ensure_event_owner(interest["event_id"], user)
+    decision = (body or {}).get("status")
+    if decision not in ("accepted", "rejected"):
+        raise HTTPException(400, "status must be 'accepted' or 'rejected'")
+    if interest.get("status") != "pending":
+        raise HTTPException(400, "This interest has already been decided")
+
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"status": decision, "decided_at": now}
+    await db.sponsorship_interests.update_one({"id": interest_id}, {"$set": update})
+
+    if decision == "accepted":
+        opps = event.get("sponsorship_opportunities") or []
+        idx = next((i for i, o in enumerate(opps) if o.get("id") == interest["opportunity_id"]), -1)
+        if idx >= 0:
+            opp = opps[idx]
+            opp["sold_count"] = int(opp.get("sold_count", 0)) + 1
+            # Track which sponsors have won which slots so the public view can show them.
+            awarded = list(opp.get("awarded_to") or [])
+            awarded.append({"sponsor_id": interest["sponsor_id"], "name": interest.get("sponsor_company_name"),
+                            "interest_id": interest_id, "awarded_at": now})
+            opp["awarded_to"] = awarded
+            if opp["sold_count"] >= int(opp.get("quantity_available", 0)):
+                opp["status"] = "sold"
+            opps[idx] = opp
+            await db.events.update_one({"id": event["id"]}, {"$set": {"sponsorship_opportunities": opps}})
+            # If this opportunity is now sold-out, auto-reject any other pending interests on it.
+            if opp["status"] == "sold":
+                await db.sponsorship_interests.update_many(
+                    {"event_id": event["id"], "opportunity_id": interest["opportunity_id"], "status": "pending"},
+                    {"$set": {"status": "rejected", "decided_at": now, "auto_rejected": True}},
+                )
+    logger.info("SPONSORSHIP %s | %s for opp %s on event %s", decision.upper(), interest.get("sponsor_company_name"), interest.get("opportunity_name"), event["id"])
+    return {"ok": True, "status": decision}
+
+
+# ---------- Admin metrics ----------
+@api.get("/admin/sponsorship-metrics")
+async def sponsorship_metrics(_: dict = Depends(require_platform_admin)):
+    """Aggregate metrics for the Platform Admin dashboard sponsorship card."""
+    total_opps = 0
+    total_value = 0.0
+    awarded_value = 0.0
+    awarded_count = 0
+    top_events_value = {}
+    async for ev in db.events.find({"accept_sponsorships": True}, {"_id": 0, "id": 1, "name": 1, "sponsorship_opportunities": 1}):
+        opps = ev.get("sponsorship_opportunities") or []
+        ev_value = 0
+        for o in opps:
+            qty = int(o.get("quantity_available") or 0)
+            sold = int(o.get("sold_count") or 0)
+            price = float(o.get("price") or 0)
+            total_opps += qty
+            total_value += price * qty
+            awarded_value += price * sold
+            awarded_count += sold
+            ev_value += price * qty
+        if ev_value > 0:
+            top_events_value[ev["id"]] = {"id": ev["id"], "name": ev.get("name"), "value": ev_value}
+
+    pending = await db.sponsorship_interests.count_documents({"status": "pending"})
+    accepted = await db.sponsorship_interests.count_documents({"status": "accepted"})
+    rejected = await db.sponsorship_interests.count_documents({"status": "rejected"})
+
+    # Top sponsors by awarded count
+    top_sponsors_pipeline = [
+        {"$match": {"status": "accepted"}},
+        {"$group": {"_id": "$sponsor_id", "name": {"$first": "$sponsor_company_name"}, "count": {"$sum": 1}, "value": {"$sum": "$opportunity_price"}}},
+        {"$sort": {"value": -1}},
+        {"$limit": 10},
+    ]
+    top_sponsors = [{"sponsor_id": d["_id"], "name": d.get("name"), "count": d["count"], "value": d.get("value", 0)}
+                    async for d in db.sponsorship_interests.aggregate(top_sponsors_pipeline)]
+
+    top_events = sorted(top_events_value.values(), key=lambda x: x["value"], reverse=True)[:10]
+
+    return {
+        "total_opportunities": total_opps,
+        "total_sponsorship_value": total_value,
+        "awarded_value": awarded_value,
+        "awarded_count": awarded_count,
+        "pending_applications": pending,
+        "accepted_applications": accepted,
+        "rejected_applications": rejected,
+        "top_sponsors": top_sponsors,
+        "top_events": top_events,
+    }
+
+
 # Uploads (define route + mount BEFORE including router)
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)

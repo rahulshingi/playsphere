@@ -132,7 +132,7 @@ export default function EventDetail() {
 
       <div className="max-w-7xl mx-auto px-6 pb-24">
         <Tabs defaultValue="fixtures">
-          <TabsList data-testid="event-tabs" className="bg-[#141414] border border-white/10 rounded-sm">
+          <TabsList data-testid="event-tabs" className="bg-[#141414] border border-white/10 rounded-sm flex flex-wrap h-auto p-1 justify-start">
             <TabsTrigger value="fixtures" data-testid="tab-fixtures" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Fixtures</TabsTrigger>
             <TabsTrigger value="standings" data-testid="tab-standings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Standings</TabsTrigger>
             {canSeeTeamsTab && <TabsTrigger value="teams" data-testid="tab-teams" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">{["chess", "quiz", "hackathon"].includes(event.sport) ? "Players" : "Teams"}</TabsTrigger>}

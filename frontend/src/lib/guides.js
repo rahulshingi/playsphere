@@ -31,6 +31,11 @@ export const ROLE_GUIDE = {
     href: "/manuals/kreeda-nation-player-manual.pdf",
     testid: "nav-guide-player",
   },
+  sponsor: {
+    label: "Sponsor guide",
+    href: "/manuals/kreeda-nation-sponsor-manual.pdf",
+    testid: "nav-guide-sponsor",
+  },
 };
 
 export const getRoleGuide = (role) => ROLE_GUIDE[role] || null;

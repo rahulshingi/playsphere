@@ -455,7 +455,28 @@ company_sections = [
         ("p", "Your <b>/dashboard</b> shows an <b>Upcoming bookings</b> widget pinned at the top — the next 5 confirmed / pending slots across all your venues, with date, vendor and total. Click any card to jump straight into the booking detail."),
         ("tip", "Look at the dashboard daily — vendor accept / decline actions surface here before email is wired up."),
     ]},
-    {"title": "11. Where to find your guide",
+    {"title": "11. Sponsorship marketplace — earn revenue from your events",
+     "intro": "Open any event you run to its <b>Sponsorship</b> tab to enable the marketplace. Brands can then discover, browse and request the slots you list — Kreeda Nation handles discovery, you handle approvals.",
+     "blocks": [
+        ("num", [
+            "Open <b>/events/{event}</b> → click <b>Sponsorship</b> tab.",
+            "Tick <b>Accept sponsorships</b>. Fill in expected reach, expected participants, target audience, demographics, social-media reach, livestream views, venue, event category and (optionally) a brochure URL — these power the sponsor browse filters.",
+            "Tick the <b>data-share agreement</b> checkbox at the bottom — required before your listing goes live.",
+            "Click <b>Save sponsorship settings</b>.",
+            "Add opportunities below — name, type, price, quantity, benefits. Common bundles: <i>Title</i> (qty 1, top price), <i>Associate</i> (qty 3-5), <i>Best Batsman / Bowler</i>, <i>Streaming</i>, <i>Boundary Branding</i> (qty 5+).",
+        ]),
+        ("tip", "Sponsors browse the marketplace at <b>/sponsorships</b> with filters by sport, location, budget, audience size, event type. The lower your minimum price, the wider your reach — Boundary slots are great entry points."),
+        ("h3", "Approving a sponsor"),
+        ("p", "When a sponsor clicks <b>I'm interested</b> on one of your slots, an entry appears in your <b>Interest queue</b> at the top of the Sponsorship tab with their company, industry, budget range, website &amp; proposal. Click <b>Accept</b> to award the slot (it auto-marks SOLD when all slots fill) or <b>Reject</b>."),
+        ("h3", "When a slot is sold"),
+        ("p", "The opportunity flips to <b>SOLD</b> and a <b>✦ Sponsored by [Brand]</b> badge is added to the public listing. Any other still-pending interests on that slot are auto-rejected. The badge surfaces wherever the event is shown — Events list, public event page, and the public sponsorships endpoint."),
+    ]},
+    {"title": "12. Sponsoring other companies' events",
+     "blocks": [
+        ("p", "Your company login can also <b>sponsor</b> other organisers' events — no separate account needed. Open the <b>Sponsor hub</b> link in your top nav. There you'll find your sponsor profile (industry, budget range, interests, target locations) and a link to browse all sponsorship-ready events at <b>/sponsorships</b>."),
+        ("tip", "Fill out your sponsor profile fully — organisers see your industry, budget range and website on every interest you submit, which dramatically improves your acceptance rate."),
+    ]},
+    {"title": "13. Where to find your guide",
      "blocks": [
         ("p", "Once signed in, this HR manual is always available from the <b>top navigation</b> — look for <b>HR guide</b> next to your menu items. The footer no longer carries role guides; we surface only the one relevant to your account so you never have to wonder which PDF to open."),
     ]},
@@ -600,7 +621,21 @@ admin_sections = [
         ("h3", "Custom sports CRUD"),
         ("p", "The <b>Sports</b> tab lets you add / edit / remove the sports list that powers every dropdown in the platform (events, vendor listings, player profiles). Add quirky internal favourites like “Esports — Valorant” or “Padel” without a code change."),
     ]},
-    {"title": "12. Where guides live now",
+    {"title": "12. Sponsorship marketplace oversight",
+     "intro": "The <b>SPONSORSHIP MARKETPLACE</b> card on your Dashboard tab gives you a live read on every sponsorship deal flowing through Kreeda Nation.",
+     "blocks": [
+        ("kv", [
+            ["Total opportunities", "Sum of every available slot across all events with the marketplace enabled."],
+            ["Total value", "Total slot count × asking price — the gross GMV at offer."],
+            ["Pending / Awarded / Rejected", "Interest workflow counters — pending is your call-to-action: chase the organiser if they're sitting on offers too long."],
+            ["Top sponsors", "Ranked by accepted GMV — these brands are your best repeat-revenue prospects."],
+            ["Top events", "Ranked by total slot value — these organisers carry the heaviest book; protect them."],
+        ]),
+        ("tip", "Click <b>Browse marketplace</b> at the top-right of the card to open <b>/sponsorships</b> exactly as a sponsor sees it — useful for QA and giving demo walkthroughs."),
+        ("h3", "Suspending a misbehaving sponsor"),
+        ("p", "Open the <b>Accounts</b> tab → pick the <b>Vendors</b> chip → filter by 'sponsor' (or use search). Disabled sponsors get the same canned message at login as any other suspended account."),
+    ]},
+    {"title": "13. Where guides live now",
      "blocks": [
         ("p", "The footer no longer lists all four manuals — it cluttered the experience for logged-out visitors. Instead each signed-in user sees only <b>their</b> guide as a link in the top nav (HR sees HR guide, vendors see vendor guide, etc.). This admin manual appears as <b>Admin guide</b> when you sign in."),
     ]},
@@ -649,5 +684,95 @@ build("kreeda-nation-platform-admin-manual.pdf", "PLATFORM HQ", RED,
       "Platform admin manual",
       "Curate the marketplace, approve vendors, and oversee every company.",
       admin_sections)
+
+# ---------- SPONSOR MANUAL ----------
+GOLD = HexColor("#FACC15")
+sponsor_sections = [
+    {"title": "1. Welcome, sponsor",
+     "intro": "Kreeda Nation gives your brand direct access to engaged corporate-sports audiences — across cricket, football, badminton, hackathons and family-day events run by India's top employers and independent organisers.",
+     "blocks": [
+        ("kv", [
+            ["You discover events", "Filter by sport, location, budget, audience size — surface only events that match your brand goals."],
+            ["You express interest", "One-click 'I'm interested' on any sponsorship slot. Organisers review your profile + proposal."],
+            ["You sponsor", "When the organiser accepts, your brand is locked in. Your name appears as the official sponsor on every public surface of the event."],
+            ["No fees, no bidding", "Kreeda Nation runs the marketplace for free. Payment terms are between you and the organiser — we capture the relationship, not the cash."],
+        ]),
+    ]},
+    {"title": "2. Create your sponsor account",
+     "blocks": [
+        ("num", [
+            "Open <b>/sponsor/signup</b> (the <b>“Become a sponsor”</b> link in the footer goes here directly).",
+            "Fill in company name, contact person, work email and a password (min 6 chars).",
+            "Click <b>Create sponsor account</b> — you're signed in and dropped straight on <b>/sponsors/me</b>.",
+        ]),
+        ("tip", "Already running a company on Kreeda Nation? You don't need a second account — open the <b>Sponsor hub</b> link in your top nav and we auto-create a sponsor profile mirrored to your company. You can sponsor events from the same login."),
+    ]},
+    {"title": "3. Complete your sponsor profile",
+     "intro": "Filling this out is the single best thing you can do for acceptance rates — organisers see every field on every interest you submit.",
+     "blocks": [
+        ("kv", [
+            ["Company name + contact person", "Used on the interest queue and the public 'Sponsored by ABC Realty' badge."],
+            ["Industry", "Pre-filters opportunities the organiser thinks fit your brand."],
+            ["Location + Target locations", "Helps organisers gauge geographic alignment with their venue / audience."],
+            ["Budget range", "Free-text like '₹10,000 – ₹5,00,000'. Organisers use this to triage applications."],
+            ["Sponsor interests", "Multi-select chips — Cricket, Football, Corporate Sports, Family Day, Sports Day, etc."],
+            ["Target event types", "Single-company, inter-company, family-day, sports-day — broadens or narrows browse results."],
+            ["Website + Logo", "Logo appears next to your name once an opportunity is awarded; website is one click away from the organiser's queue."],
+        ]),
+        ("warn", "Without a logo or website, your interest still works — but acceptance rates drop sharply. Spend 5 minutes filling these in."),
+    ]},
+    {"title": "4. Browse the marketplace",
+     "blocks": [
+        ("p", "Open <b>/sponsorships</b> from the top nav. Anonymous users can browse but cannot apply — sign in or sign up to express interest."),
+        ("h3", "Filters available"),
+        ("kv", [
+            ["Sport", "Cricket, Football, Badminton, etc. — same list as the events page."],
+            ["Location", "Case-insensitive match against event venue + sponsorship venue_location."],
+            ["Event type", "single_company / inter_company / playsphere_organized."],
+            ["Budget", "Five buckets from ≤ ₹10,000 to ≤ ₹5,00,000. Shows events that have AT LEAST one open slot at-or-below your cap."],
+            ["Min reach", "Filter by the expected_reach the organiser entered."],
+        ]),
+        ("tip", "Each event card shows the min price across its slots, how many slots are open vs taken, expected reach &amp; livestream views. Use this to shortlist before clicking through."),
+    ]},
+    {"title": "5. Express interest",
+     "blocks": [
+        ("num", [
+            "Click into any event card → <b>Sponsorship</b> tab.",
+            "Each slot card shows the current status: <b>AVAILABLE · N slots</b> or <b>SOLD</b> with the winning sponsor name.",
+            "Click <b>I'm interested</b> on the slot you want. A short dialog opens.",
+            "Optionally write a <b>proposal message</b> — explain why this slot matches your brand goals. Organisers tell us this dramatically improves acceptance.",
+            "Click <b>Send interest</b>. The button on that slot flips to <b>Interest sent · pending</b>.",
+        ]),
+        ("warn", "You can only submit ONE pending interest per slot per sponsor account — duplicate clicks are blocked with a clear error message. If you change your mind, contact the organiser directly."),
+    ]},
+    {"title": "6. What happens next",
+     "blocks": [
+        ("kv", [
+            ["Organiser sees your interest", "It lands at the top of their Sponsorship tab as a card showing your company, industry, budget range, website &amp; proposal."],
+            ["Organiser accepts", "The opportunity is awarded to you — its status flips to SOLD if it was the last slot, and a public <b>✦ Sponsored by [Your brand]</b> badge appears on the event listing, the public sponsorships endpoint, the Events list, and inside the event page itself."],
+            ["Organiser rejects", "Your interest moves to the 'Decided' section of their queue. You can apply for other slots on the same event."],
+            ["Slot fills via someone else", "If all slots for that opportunity sell out before your interest is decided, your application is auto-rejected with a note."],
+        ]),
+        ("tip", "Right now we surface decisions in-app. Email notifications are on the roadmap — check <b>/sponsors/me</b> (your hub) for updates until they ship."),
+    ]},
+    {"title": "7. Best practices",
+     "blocks": [
+        ("bul", [
+            "<b>Lead with the smallest slot first.</b> Boundary branding (qty 5+, lowest price) lets you test the audience before committing to Title-level spend.",
+            "<b>Specific proposal beats generic one.</b> Mention the venue, the expected audience, and ONE concrete thing your brand will activate on-ground.",
+            "<b>Refresh your interests list</b> via the <b>Sponsor hub</b> page weekly to see decisions.",
+            "<b>Keep your sponsor interests up-to-date</b> — organisers can soon filter their reach-out list by your chip selection.",
+        ]),
+    ]},
+    {"title": "8. Where to find this guide",
+     "blocks": [
+        ("p", "Once signed in as a sponsor, this manual is one click away from your <b>top navigation</b> as <b>Sponsor guide</b>. The footer always carries the <b>Become a sponsor</b> link for new users."),
+    ]},
+]
+
+build("kreeda-nation-sponsor-manual.pdf", "SPONSOR", GOLD,
+      "Sponsor manual",
+      "Discover sponsorship-ready tournaments, apply to slots in one click, get your brand on every public surface.",
+      sponsor_sections)
 
 print("ALL DONE")

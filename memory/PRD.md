@@ -349,6 +349,23 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 
 Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm interested" CTA, organiser interest queue (accept/reject), public "Sponsored by …" badge wiring, admin sponsorship metrics dashboard.
 
+## Implemented — Feb 22, 2026 — Sponsorship Marketplace (Phase 2) + Events list badge + Sponsor guide
+- `/sponsorships` page — public-browsable marketplace with 5 filters (sport / location / event type / budget / min reach). Anonymous banner directs to /sponsor/signup.
+- Sponsor-side "I'm interested" CTA on every Sponsorship tab opportunity → opens proposal dialog → creates interest record (duplicates blocked). Once submitted, button flips to "Interest sent · pending".
+- Organiser-side "INTEREST QUEUE" panel on the Sponsorship tab showing each pending interest with sponsor company / industry / budget / website / proposal. Accept/Reject buttons with confirmation. Accept auto-flips opportunity to SOLD when all slots fill, and auto-rejects any other pending interests on that slot. Decided interests collapse into a folded section.
+- Public opportunity row now shows `✦ Sponsored by [Brand]` from the `awarded_to` array, plus "AVAILABLE · N slots" / "SOLD" status.
+- Admin Dashboard tab now has a `SPONSORSHIP MARKETPLACE` card: Total opportunities, Total value, Pending/Awarded/Rejected counts, Top sponsors (by accepted value), Top events (by total slot value).
+- **Events list (`/events`)**: every event accepting sponsorships shows a yellow `SPONSORSHIP-READY` badge + "N sponsorships · from ₹X" footer strip. New "Accepting sponsors" filter chip narrows to those events.
+- **Event detail tabs (Fixtures / Standings / Sponsors / Sponsorship) no longer clip** — TabsList now wraps (`flex-wrap h-auto`) so all 4 tabs are always visible on standard laptop screens (1280px+).
+- **Footer**: added "Become a sponsor" link in yellow accent.
+
+## Implemented — Feb 22, 2026 — Sponsor PDF guide + role-guide updates
+- New `/manuals/kreeda-nation-sponsor-manual.pdf` (164 KB, 8 sections): welcome, account creation, profile checklist, marketplace browse, expressing interest, lifecycle of an interest, best practices, where the guide lives.
+- `Company HR manual` got 2 new sections — "Sponsorship marketplace — earn revenue from your events" (full enable + opportunities setup walkthrough + approval flow) and "Sponsoring other companies' events" (dual-use as sponsor from the company login).
+- `Platform admin manual` got a new "Sponsorship marketplace oversight" section explaining the new admin dashboard card + how to suspend a misbehaving sponsor.
+- `Organiser manual` inherits the new company sponsorship sections (organiser is built on top of company sections).
+- Nav now surfaces the sponsor guide as `Sponsor guide` for `role=sponsor` (mapping added to `/app/frontend/src/lib/guides.js`).
+
 ## Backlog
 ### P0
 - (none open)

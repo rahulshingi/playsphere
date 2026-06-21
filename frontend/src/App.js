@@ -36,12 +36,14 @@ import SignupSponsor from "@/pages/SignupSponsor";
 import SponsorProfile from "@/pages/SponsorProfile";
 import SponsorshipMarketplace from "@/pages/SponsorshipMarketplace";
 import About from "@/pages/About";
+import WelcomeModal from "@/components/WelcomeModal";
 import Contact from "@/pages/Contact";
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <WelcomeModal />
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/events" element={<Events />} />

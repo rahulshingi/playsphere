@@ -366,6 +366,19 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - `Organiser manual` inherits the new company sponsorship sections (organiser is built on top of company sections).
 - Nav now surfaces the sponsor guide as `Sponsor guide` for `role=sponsor` (mapping added to `/app/frontend/src/lib/guides.js`).
 
+## Implemented — Feb 22, 2026 — First-login Welcome modal
+- New `/app/frontend/src/components/WelcomeModal.jsx` — mounted once globally in `App.js` inside `<BrowserRouter>`. Detects first visit per `(user_id, role)` via localStorage key `kn_welcome_v1_{uid}_{role}`.
+- Role-tailored copy + accent + CTA:
+  - **platform_admin / admin** (red): "Welcome to Kreeda Nation HQ" + Admin guide PDF.
+  - **company_admin** (lime): "Welcome, HR captain" + HR guide + → Open your dashboard secondary CTA.
+  - **organiser** (cyan): "Welcome, tournament organiser" + Organiser guide.
+  - **vendor** (pink): "Welcome to the Kreeda Nation marketplace" + Vendor guide.
+  - **player** (lime): "Welcome, athlete" + Player guide.
+  - **sponsor** (yellow): "Welcome to the marketplace" + Sponsor guide + → Browse the sponsorship marketplace now secondary CTA.
+- One-paragraph elevator pitch per role surfaces the highest-leverage activation behaviour.
+- Dismissal sticks across reloads. Clicking "Open my … guide" auto-dismisses too (opens the PDF in a new tab).
+- **Verified by testing agent iteration_19 (10/10 scenarios PASS)** including admin + sponsor first-login flows, marketplace browse & filters, interest creation, awarded badges, admin metrics, and the event tabs no-clip fix at both 1280×800 AND 768×1024.
+
 ## Backlog
 ### P0
 - (none open)

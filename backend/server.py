@@ -513,6 +513,9 @@ class PlayerProfile(BaseModel):
     bowling_style: Optional[str] = "none"
     jersey_number: Optional[int] = None
     cricheroes_url: Optional[str] = ""
+    # Per-sport career stats. Auto-computed where data is available (cricket from fixtures);
+    # manual entry for other sports. Shape: { "cricket": {"matches": 12, "runs": 250, ...}, ... }
+    lifetime_stats: Dict[str, Any] = Field(default_factory=dict)
     # ---- Common physical attributes ----
     height_cm: Optional[int] = None
     weight_kg: Optional[int] = None
@@ -1256,6 +1259,80 @@ async def list_player_profiles(
             d["mobile_masked"] = "•••• " + m[-4:] if len(m) >= 4 else m
             d.pop("mobile", None)
     return docs
+
+
+@api.get("/players/profiles/{profile_id}/stats")
+async def player_lifetime_stats(profile_id: str, _: dict = Depends(get_current_user)):
+    """Career stats per sport. Cricket is auto-aggregated from completed fixtures where the
+    player appeared in the playing XI; other sports return the player's manually-entered
+    lifetime_stats dict. Manual entries always merge over auto values for fields the player
+    chose to override (useful for stats from games played outside the platform)."""
+    profile = await db.player_profiles.find_one({"id": profile_id}, {"_id": 0})
+    if not profile:
+        raise HTTPException(404, "Profile not found")
+    manual = profile.get("lifetime_stats") or {}
+    result: Dict[str, Any] = {}
+
+    # ---- Cricket auto-aggregation ----
+    cricket_auto = {
+        "matches": 0, "runs": 0, "balls_faced": 0, "fours": 0, "sixes": 0,
+        "innings_batted": 0, "dismissals": 0, "highest_score": 0,
+        "balls_bowled": 0, "runs_conceded": 0, "wickets": 0, "overs_bowled": 0.0,
+        "innings_bowled": 0,
+    }
+    seen_fixtures = set()
+    # Find every cricket fixture where this player_id appears in playing_xi or innings.
+    cursor = db.fixtures.find({
+        "score.sport": "cricket",
+        "$or": [
+            {"score.playing_xi.team_a.player_id": profile_id},
+            {"score.playing_xi.team_b.player_id": profile_id},
+        ],
+    }, {"_id": 0, "id": 1, "score": 1, "status": 1})
+    async for fx in cursor:
+        if fx["id"] in seen_fixtures:
+            continue
+        seen_fixtures.add(fx["id"])
+        score = fx.get("score") or {}
+        if score.get("match_state") != "completed":
+            # Only count completed matches for "matches played" — in-progress games skew averages.
+            continue
+        cricket_auto["matches"] += 1
+        for inn in score.get("innings", []):
+            for b in inn.get("batsmen", []):
+                if b.get("player_id") == profile_id:
+                    cricket_auto["innings_batted"] += 1
+                    cricket_auto["runs"] += int(b.get("runs", 0) or 0)
+                    cricket_auto["balls_faced"] += int(b.get("balls", 0) or 0)
+                    cricket_auto["fours"] += int(b.get("fours", 0) or 0)
+                    cricket_auto["sixes"] += int(b.get("sixes", 0) or 0)
+                    cricket_auto["highest_score"] = max(cricket_auto["highest_score"], int(b.get("runs", 0) or 0))
+                    if b.get("out"):
+                        cricket_auto["dismissals"] += 1
+            for bw in inn.get("bowlers", []):
+                if bw.get("player_id") == profile_id:
+                    cricket_auto["innings_bowled"] += 1
+                    cricket_auto["balls_bowled"] += int(bw.get("balls", 0) or 0)
+                    cricket_auto["runs_conceded"] += int(bw.get("runs", 0) or 0)
+                    cricket_auto["wickets"] += int(bw.get("wickets", 0) or 0)
+    cricket_auto["overs_bowled"] = float(f"{cricket_auto['balls_bowled'] // 6}.{cricket_auto['balls_bowled'] % 6}")
+    # Derived: average + strike rate + economy
+    cricket_auto["batting_average"] = round(cricket_auto["runs"] / cricket_auto["dismissals"], 2) if cricket_auto["dismissals"] else None
+    cricket_auto["strike_rate"] = round((cricket_auto["runs"] / cricket_auto["balls_faced"]) * 100, 2) if cricket_auto["balls_faced"] else None
+    cricket_auto["bowling_economy"] = round((cricket_auto["runs_conceded"] / cricket_auto["balls_bowled"]) * 6, 2) if cricket_auto["balls_bowled"] else None
+    cricket_auto["bowling_average"] = round(cricket_auto["runs_conceded"] / cricket_auto["wickets"], 2) if cricket_auto["wickets"] else None
+
+    # Merge: manual overrides auto for fields the player explicitly entered.
+    cricket_manual = manual.get("cricket") or {}
+    result["cricket"] = {"auto": cricket_auto, "manual": cricket_manual}
+
+    # ---- Other sports: pass-through manual data ----
+    for sport, entries in manual.items():
+        if sport == "cricket":
+            continue
+        result[sport] = {"auto": {}, "manual": entries or {}}
+
+    return result
 
 
 @api.get("/players/profiles/{profile_id}")

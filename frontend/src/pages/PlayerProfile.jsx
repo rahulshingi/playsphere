@@ -14,6 +14,8 @@ import { Eye, Save, Search } from "lucide-react";
 import ImageUpload from "@/components/ImageUpload";
 import SportsMultiSelect from "@/components/player/SportsMultiSelect";
 import SportProfileSection from "@/components/player/SportProfileSection";
+import SportStatsEditor from "@/components/player/SportStatsEditor";
+import SportStatsDashboard from "@/components/player/SportStatsDashboard";
 
 const LEGACY_CRICKET_KEYS = ["role", "batting_hand", "bowling_style", "jersey_number", "cricheroes_url"];
 
@@ -61,6 +63,10 @@ export default function PlayerProfile() {
   const updSport = (sport, sportProfile) => setProfile({
     ...profile,
     sport_profiles: { ...(profile.sport_profiles || {}), [sport]: sportProfile },
+  });
+  const updStats = (sport, stats) => setProfile({
+    ...profile,
+    lifetime_stats: { ...(profile.lifetime_stats || {}), [sport]: stats },
   });
 
   const toggleInterestedSports = (next) => {
@@ -153,15 +159,29 @@ export default function PlayerProfile() {
 
             <div className="space-y-3">
               {interested.map((s) => (
-                <SportProfileSection
-                  key={s}
-                  sport={s}
-                  sportProfile={profile.sport_profiles?.[s] || {}}
-                  onChange={(sp) => updSport(s, sp)}
-                  onRemove={() => toggleInterestedSports(interested.filter((x) => x !== s))}
-                />
+                <div key={s}>
+                  <SportProfileSection
+                    sport={s}
+                    sportProfile={profile.sport_profiles?.[s] || {}}
+                    onChange={(sp) => updSport(s, sp)}
+                    onRemove={() => toggleInterestedSports(interested.filter((x) => x !== s))}
+                  />
+                  <div className="border border-white/10 border-t-0 rounded-b-sm bg-black/20 px-4 -mt-px">
+                    <SportStatsEditor
+                      sport={s}
+                      manualStats={profile.lifetime_stats?.[s] || {}}
+                      onChange={(stats) => updStats(s, stats)}
+                    />
+                  </div>
+                </div>
               ))}
             </div>
+
+            {interested.length > 0 && profile.id && (
+              <div className="mt-2">
+                <SportStatsDashboard profileId={profile.id} interestedSports={interested} />
+              </div>
+            )}
 
             <Button data-testid="pp-save" disabled={busy} onClick={save} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
               <Save className="w-4 h-4 mr-1" /> {busy ? "Saving…" : "Save profile"}

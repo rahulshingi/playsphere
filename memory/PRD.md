@@ -312,6 +312,17 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - New `/app/frontend/src/components/player/PlayerFilters.jsx` — 5-up filter bar (name+mobile, city, sport, role, hand/style). Role + hand selects auto-populate from the chosen sport's schema (so picking Football shows Position dropdown with goalkeeper/defender/midfielder/forward/winger, Chess shows Title with CM/FM/IM/GM, etc.). Disabled until a sport is chosen.
 - `PlayerDirectory.jsx` `PlayerSearch` rewritten: filter URL params, result count header, redesigned `PlayerCard` with sport-color role accent + sport tag chips at the bottom of each card. Verified across 8 filter combinations via curl + 3-screenshot smoke test (Cricket+bowler returns 1, Football+midfielder returns 2, no-filter returns all).
 
+## Implemented — Feb 21, 2026 — Career Stats Dashboard
+- New `GET /api/players/profiles/{id}/stats` — returns `{ sport: { auto: {...}, manual: {...} } }` per interested sport.
+- **Cricket auto-aggregation**: scans all completed fixtures where the player's `id` appears in `score.playing_xi.team_a|team_b` and aggregates matches / runs / balls_faced / fours / sixes / dismissals / highest_score / balls_bowled / runs_conceded / wickets / overs_bowled + derived batting_average, strike_rate, bowling_economy, bowling_average.
+- **Manual entries** stored under `PlayerProfile.lifetime_stats[sport]` — editable for ALL sports, used as the data source for non-cricket sports (football goals/assists/cards, basketball points/rebounds, chess wins/draws/rating, badminton tournament titles, hackathon prizes, etc.).
+- New components:
+  - `/app/frontend/src/lib/sportStatsSchema.js` — STATS_SCHEMAS for all 10 sports, declaring auto vs manual field sets.
+  - `/app/frontend/src/components/player/SportStatsDashboard.jsx` — read-only career dashboard, one card per interested sport, "auto-tracked" badge on cricket when fixture data exists, achievement banner highlights text fields like `notable_achievement` / `biggest_win`.
+  - `/app/frontend/src/components/player/SportStatsEditor.jsx` — editor section inside each sport block of `/players/me` with sport-specific number/text inputs for manual stats.
+- Both editor (`/players/me`) and public profile (`/players/profiles/{id}`) now show the career-stats dashboard.
+- Verified end-to-end via curl + screenshot: a seeded cricket fixture with 78(50) batting & 3/28(4ov) bowling produced the exact auto-aggregated values (batting avg 78.0, SR 156.0, economy 7.0, bowling avg 9.33).
+
 ## Backlog
 ### P0
 - (none open)

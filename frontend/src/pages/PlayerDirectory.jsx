@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Eye, MapPin, ExternalLink } from "lucide-react";
+import { SPORT_SCHEMAS } from "@/lib/sportProfileSchema";
 
 export function PlayerSearch() {
   const { user, ready } = useAuth();
@@ -105,12 +106,10 @@ export function PlayerProfileView() {
 
             <div className="grid grid-cols-2 gap-px bg-white/10 mt-8 border border-white/10 rounded-sm overflow-hidden">
               {[
-                ["ROLE", p.role || "any"],
-                ["BATTING", (p.batting_hand || "right") + " handed"],
-                ["BOWLING", (p.bowling_style || "none").replace(/-/g, " ")],
                 ["JERSEY", p.jersey_number ?? "—"],
                 ["CITY", p.city || "—"],
                 ["MOBILE", p.mobile_masked || p.mobile || "—"],
+                ["DOB", p.dob || "—"],
               ].map(([l, v]) => (
                 <div key={l} className="bg-[#0a0a0a] p-4">
                   <div className="font-mono text-sm">{v}</div>
@@ -118,6 +117,9 @@ export function PlayerProfileView() {
                 </div>
               ))}
             </div>
+
+            {/* Sport-specific cards — one per interested sport */}
+            <SportCards p={p} />
 
             {p.bio && <p className="mt-6 text-neutral-300 leading-relaxed">{p.bio}</p>}
 
@@ -134,3 +136,53 @@ export function PlayerProfileView() {
     </div>
   );
 }
+
+/** Renders one card per sport the player is interested in. Falls back to legacy
+ * cricket fields for players who haven't migrated to multi-sport yet. */
+function SportCards({ p }) {
+  const interested = p.interested_sports?.length ? p.interested_sports : ["cricket"];
+  const sportProfiles = p.sport_profiles || {};
+
+  // Legacy fallback so old cricket-only profiles still render meaningfully.
+  const legacyCricket = {
+    role: p.role || "any",
+    batting_hand: p.batting_hand || "right",
+    bowling_style: p.bowling_style || "none",
+    jersey_number: p.jersey_number,
+    cricheroes_url: p.cricheroes_url,
+  };
+
+  return (
+    <div className="mt-6 space-y-3" data-testid="player-sport-cards">
+      {interested.map((sport) => {
+        const schema = SPORT_SCHEMAS[sport];
+        if (!schema) return null;
+        const sp = (sport === "cricket" && !sportProfiles.cricket) ? legacyCricket : (sportProfiles[sport] || {});
+        const rows = schema.fields
+          .filter((f) => sp[f.key] !== undefined && sp[f.key] !== null && sp[f.key] !== "")
+          .map((f) => [f.label.toUpperCase(), String(sp[f.key]).replace(/-/g, " ")]);
+        return (
+          <div key={sport} data-testid={`player-card-${sport}`} className="border border-white/10 rounded-sm bg-black/30 p-4">
+            <div className="flex items-center gap-2">
+              <span className="inline-block w-2 h-2 rounded-full" style={{ backgroundColor: schema.color }} />
+              <div className="font-display tracking-wider text-lg">{schema.label.toUpperCase()}</div>
+            </div>
+            {rows.length === 0 ? (
+              <div className="text-xs font-mono text-neutral-500 mt-2">No details yet.</div>
+            ) : (
+              <div className="grid grid-cols-2 gap-px bg-white/5 mt-3 border border-white/10 rounded-sm overflow-hidden">
+                {rows.map(([l, v]) => (
+                  <div key={l} className="bg-[#0a0a0a] p-3">
+                    <div className="font-mono text-sm">{v}</div>
+                    <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mt-1">{l}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+

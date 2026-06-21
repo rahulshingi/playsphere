@@ -9,7 +9,7 @@ import logging
 import uuid
 import random
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict, Any
 
 import bcrypt
 import jwt
@@ -501,14 +501,22 @@ class PlayerProfile(BaseModel):
     photo_url: Optional[str] = ""
     dob: Optional[str] = None
     city: Optional[str] = ""
+    # Multi-sport: list of sport slugs the player is interested in (e.g. ["cricket", "football"]).
+    # When empty, legacy cricket fields below are used.
+    interested_sports: List[str] = Field(default_factory=list)
+    # Per-sport details keyed by sport slug. Each value is a free-form dict matching the
+    # frontend SPORT_SCHEMAS (e.g. {"cricket": {"role": "batsman", "batting_hand": "right"}}).
+    sport_profiles: Dict[str, Any] = Field(default_factory=dict)
+    # ---- Legacy cricket-specific fields (kept for backwards compat with existing data) ----
     role: Optional[str] = "any"
     batting_hand: Optional[str] = "right"
     bowling_style: Optional[str] = "none"
     jersey_number: Optional[int] = None
+    cricheroes_url: Optional[str] = ""
+    # ---- Common physical attributes ----
     height_cm: Optional[int] = None
     weight_kg: Optional[int] = None
     bio: Optional[str] = ""
-    cricheroes_url: Optional[str] = ""
     view_count: int = 0
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 

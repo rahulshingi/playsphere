@@ -286,6 +286,27 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 - `AdminTeam.jsx`: **265 → 98 lines** (-63%). Extracted: InviteAdminForm, InviteCredentialsBanner, AdminRow + shared `adminTeamShared.js`.
 - `CricketScorer.jsx` `LivePanel`: **226 → ~70 lines**. Extracted to `/app/frontend/src/components/cricket/`: CricketScoreboard, BallEntryPanel, InningsPrompts (WicketPrompt + OverBreakPrompt). Removed dead `wicketType` state.
 
+## Implemented — Feb 21, 2026 — Multi-Sport Player Profile
+- Player profile is no longer cricket-only. New `interested_sports: List[str]` + `sport_profiles: Dict[str, Any]` fields on the `PlayerProfile` model in `server.py`. Backwards-compat: legacy `role/batting_hand/bowling_style/jersey_number/cricheroes_url` fields preserved & mirrored from `sport_profiles.cricket` on save.
+- New schema-driven UI (`/app/frontend/src/lib/sportProfileSchema.js`) declares fields per sport — adding a new sport is one schema entry, end-to-end.
+- Supported sports & per-sport fields:
+  - **Cricket**: role / batting_hand / bowling_style / jersey_number / cricheroes_url
+  - **Football**: position / preferred_foot / jersey_number
+  - **Basketball**: position / shooting_hand / jersey_number
+  - **Badminton**: hand / grip / format (singles/doubles/mixed)
+  - **Table Tennis**: hand / grip / style
+  - **Volleyball**: position / hand / jersey_number
+  - **Chess**: rating / title / preferred_color / chesscom_url
+  - **Quiz**: specialty / format
+  - **Hackathon**: domain / languages / github_url
+  - **Other**: free-text sport name + role
+- New components:
+  - `/app/frontend/src/components/player/SportsMultiSelect.jsx` — chip-style multi-select (color per sport).
+  - `/app/frontend/src/components/player/SportProfileSection.jsx` — dynamic per-sport form.
+  - `withLegacyMigration()` helper in `PlayerProfile.jsx` auto-promotes cricket-only legacy data to `sport_profiles.cricket` on first load.
+- `PlayerDirectory.jsx` public view now renders one `SportCards` card per interested sport (with legacy cricket fallback).
+- **Verified end-to-end by testing agent iteration_17 (13/13 steps passed)** including: chip selection, dynamic form rendering, save+reload persistence, remove-sport flow, public profile cards, and the legacy-player auto-migration path.
+
 ## Backlog
 ### P0
 - (none open)

@@ -2521,24 +2521,82 @@ async def sponsorship_metrics(_: dict = Depends(require_platform_admin)):
 # Uploads (define route + mount BEFORE including router)
 UPLOAD_DIR = ROOT_DIR / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
+# Note: UPLOAD_DIR is preserved ONLY for legacy URLs that still point at disk-stored images.
+# New uploads go into MongoDB so they survive container restarts / redeploys on production.
+
+
+def _recompress_image_bytes(raw: bytes, content_type: str, *, max_dim: int = 1280, max_bytes: int = 350_000) -> tuple[bytes, str]:
+    """Server-side safety-net compression. Resize down if >max_dim AND re-encode JPEG with
+    quality stepping until under max_bytes (or floor q=55). GIF/SVG pass through unchanged.
+    Returns (bytes, mime). Idempotent — files already small / already JPEG-q≤55 are returned as-is."""
+    if content_type in ("image/gif", "image/svg+xml"):
+        return raw, content_type
+    try:
+        from io import BytesIO
+        from PIL import Image, ImageOps
+        img = Image.open(BytesIO(raw))
+        img = ImageOps.exif_transpose(img)
+        # Convert palette / alpha to RGB so JPEG encode never fails.
+        if img.mode not in ("RGB",):
+            img = img.convert("RGB")
+        w, h = img.size
+        if max(w, h) > max_dim:
+            ratio = max_dim / max(w, h)
+            img = img.resize((int(w * ratio), int(h * ratio)), Image.LANCZOS)
+        # Quality step-down until under cap or floor.
+        for q in (82, 75, 65, 55):
+            buf = BytesIO()
+            img.save(buf, format="JPEG", quality=q, optimize=True, progressive=True)
+            data = buf.getvalue()
+            if len(data) <= max_bytes:
+                return data, "image/jpeg"
+        return data, "image/jpeg"  # last attempt at q=55
+    except Exception:
+        return raw, content_type  # fall back to original on any decode error
 
 
 @api.post("/upload")
 async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
-    """Upload an image; returns a public URL on /api/uploads/<filename>."""
+    """Upload an image. The bytes are recompressed server-side and stored in MongoDB so
+    they survive container restarts and redeploys on production. Returns the canonical
+    relative URL `/api/uploads/<id>` — the frontend resolves to absolute at render time
+    using REACT_APP_BACKEND_URL so the same URL works in preview AND production."""
     allowed = {"image/jpeg", "image/png", "image/webp", "image/gif"}
     if file.content_type not in allowed:
         raise HTTPException(400, "Only JPEG, PNG, WEBP or GIF images allowed")
-    ext = (file.filename.rsplit(".", 1)[-1] if "." in (file.filename or "") else "jpg").lower()
-    if ext not in ("jpg", "jpeg", "png", "webp", "gif"):
-        ext = "jpg"
-    name = f"{uuid.uuid4().hex}.{ext}"
-    dest = UPLOAD_DIR / name
-    contents = await file.read()
-    if len(contents) > 1 * 1024 * 1024:
+    raw = await file.read()
+    if len(raw) > 1 * 1024 * 1024:
         raise HTTPException(400, "File too large (max 1 MB after client-side compression)")
-    dest.write_bytes(contents)
-    return {"url": f"/api/uploads/{name}", "filename": name, "size": len(contents)}
+    data, mime = _recompress_image_bytes(raw, file.content_type or "image/jpeg")
+    image_id = uuid.uuid4().hex
+    await db.uploaded_images.insert_one({
+        "id": image_id,
+        "data": data,
+        "mime": mime,
+        "size": len(data),
+        "uploaded_by": user.get("id"),
+        "original_filename": file.filename,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"url": f"/api/uploads/{image_id}", "filename": image_id, "size": len(data), "mime": mime}
+
+
+@api.get("/uploads/{image_id}")
+async def serve_uploaded_image(image_id: str):
+    """Serve an image stored in MongoDB. Falls back to the legacy on-disk uploads directory
+    so any pre-existing URLs from before this change still work in preview."""
+    # Strip extension if a client appended one (we store id without extension).
+    bare_id = image_id.rsplit(".", 1)[0]
+    doc = await db.uploaded_images.find_one({"id": bare_id}, {"_id": 0, "data": 1, "mime": 1})
+    if doc:
+        return Response(content=doc["data"], media_type=doc.get("mime") or "image/jpeg",
+                        headers={"Cache-Control": "public, max-age=31536000, immutable"})
+    # Legacy fallback: file on disk (works in preview where the disk hasn't been wiped).
+    legacy_path = UPLOAD_DIR / image_id
+    if legacy_path.exists():
+        from fastapi.responses import FileResponse
+        return FileResponse(str(legacy_path), media_type="image/jpeg")
+    raise HTTPException(404, "Image not found")
 
 
 app.add_middleware(
@@ -3515,7 +3573,8 @@ bookings_routes.register(api, db, SimpleNamespace(
 
 # Register router + static mount AFTER all @api.x definitions above
 app.include_router(api)
-app.mount("/api/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
+api_router = api  # alias kept for any callers
+# /api/uploads/<id> is now handled by the dynamic route above (Mongo-backed with disk fallback).
 
 
 @app.on_event("startup")

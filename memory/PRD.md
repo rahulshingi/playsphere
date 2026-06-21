@@ -379,6 +379,14 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Dismissal sticks across reloads. Clicking "Open my … guide" auto-dismisses too (opens the PDF in a new tab).
 - **Verified by testing agent iteration_19 (10/10 scenarios PASS)** including admin + sponsor first-login flows, marketplace browse & filters, interest creation, awarded badges, admin metrics, and the event tabs no-clip fix at both 1280×800 AND 768×1024.
 
+## Implemented — Feb 22, 2026 — Image storage refactor (production fix)
+- **Root cause**: Container disk on production is ephemeral — every deploy/restart wiped `/app/backend/uploads/`, so all previously uploaded images returned 404 (broken-image icon).
+- **Backend fix**: Upload endpoint refactored to store image bytes in a new MongoDB collection `uploaded_images`. Server-side Pillow recompression added: resize to max 1280px + JPEG quality step-down (82 → 75 → 65 → 55) until under 350 KB. A 2000×1500 JPEG (~47 KB) was reduced to ~11 KB end-to-end. New endpoint `GET /api/uploads/{id}` serves from Mongo with `Cache-Control: max-age=1y immutable`; legacy disk path kept as fallback so preview-era files still work.
+- **Frontend fix**: `ImageUpload.jsx` now stores the **relative** URL `/api/uploads/{id}` (was previously storing absolute preview hostname URLs, which broke when the app was served from kreedanation.com). New helper `lib/imageUrl.js` resolves stored values at render time using `REACT_APP_BACKEND_URL`.
+- **Global self-heal**: `installGlobalImageHealer()` adds one capture-phase `error` listener at document level — every `<img>` on every page auto-heals broken legacy URLs (rewrites the host) and falls back to a neutral Pexels placeholder if the file is truly gone. ZERO per-page edits needed.
+- **Migration script**: `/app/scripts/heal_image_urls.py` strips legacy hostnames from `photo_url` / `logo_url` / `banner_url` / `images[]` across 10 collections. Idempotent — safe to re-run.
+- Verified end-to-end via curl: upload → 11 KB stored → served correctly with image/jpeg content-type, persists across DB queries (survives container restarts).
+
 ## Backlog
 ### P0
 - (none open)

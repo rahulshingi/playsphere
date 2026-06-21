@@ -5,12 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Upload, Link as LinkIcon } from "lucide-react";
 import { toast } from "sonner";
 import { compressImage } from "@/lib/compressImage";
+import { resolveImageUrl, imageOnError } from "@/lib/imageUrl";
 
 /**
  * Combined image input: paste a URL OR upload a file.
- * Files are compressed client-side (≤1280×1280, JPEG q≥0.5, ≤500KB) before upload
- * so we keep storage costs low and uploads fast on slow networks.
- * Calls `onChange(url)` whenever the resolved image URL changes.
+ * Files are compressed client-side (≤1280×1280, JPEG q≥0.5, ≤500KB) and the server
+ * further re-compresses + stores the bytes in MongoDB — so uploaded images survive
+ * container restarts and redeploys. We store the RELATIVE URL returned by the API
+ * so the same DB value works in preview AND production.
  */
 export default function ImageUpload({ value, onChange, placeholder = "https://… or upload", testid = "image-upload" }) {
   const ref = useRef(null);
@@ -24,9 +26,9 @@ export default function ImageUpload({ value, onChange, placeholder = "https://�
       const fd = new FormData();
       fd.append("file", compressed);
       const { data } = await api.post("/upload", fd, { headers: { "Content-Type": "multipart/form-data" } });
-      const abs = `${process.env.REACT_APP_BACKEND_URL}${data.url}`;
-      onChange(abs);
-      const kb = Math.round(compressed.size / 1024);
+      // Store the RELATIVE path returned by the API — resolveImageUrl makes it absolute at render time.
+      onChange(data.url);
+      const kb = Math.round((data.size || compressed.size) / 1024);
       toast.success(`Image uploaded · ${kb} KB`);
     } catch (e) {
       toast.error(e.response?.data?.detail || e.message || "Upload failed");
@@ -47,7 +49,7 @@ export default function ImageUpload({ value, onChange, placeholder = "https://�
               className="border-white/10 bg-transparent text-white rounded-sm h-9 px-3 shrink-0">
         <Upload className="w-3.5 h-3.5 mr-1" /> {busy ? "Uploading…" : "Upload"}
       </Button>
-      {value && <img src={value} alt="" className="w-9 h-9 object-cover rounded-sm border border-white/10" />}
+      {value && <img src={resolveImageUrl(value)} onError={imageOnError} alt="" className="w-9 h-9 object-cover rounded-sm border border-white/10" />}
     </div>
   );
 }

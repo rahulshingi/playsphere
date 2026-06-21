@@ -37,7 +37,13 @@ import SponsorProfile from "@/pages/SponsorProfile";
 import SponsorshipMarketplace from "@/pages/SponsorshipMarketplace";
 import About from "@/pages/About";
 import WelcomeModal from "@/components/WelcomeModal";
+import { installGlobalImageHealer } from "@/lib/imageUrl";
 import Contact from "@/pages/Contact";
+
+// One-shot install: every <img> on every page now self-heals broken URLs (legacy
+// preview-hostname absolute URLs are rewritten to the current backend; 404s fall back
+// to a neutral placeholder so the broken-image icon never appears).
+installGlobalImageHealer();
 
 function App() {
   return (

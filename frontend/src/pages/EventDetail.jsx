@@ -30,16 +30,18 @@ export default function EventDetail() {
   const [myPlayerId, setMyPlayerId] = useState(null);
 
   const loadAll = async () => {
-    const [e, t, f, s] = await Promise.all([
+    const [e, t, f, s, sp] = await Promise.all([
       api.get(`/events/${id}`),
       api.get(`/teams?event_id=${id}`),
       api.get(`/events/${id}/fixtures`),
       api.get(`/events/${id}/standings`),
+      api.get(`/sponsors?event_id=${id}`),
     ]);
     setEvent(e.data);
     setTeams(t.data);
     setFixtures(f.data);
     setStandings(s.data);
+    setSponsors(sp.data || []);
     setStreamDraft(e.data.stream_url || "");
   };
 
@@ -60,6 +62,20 @@ export default function EventDetail() {
   );
 
   const teamMap = useMemo(() => Object.fromEntries(teams.map((t) => [t.id, t])), [teams]);
+
+  // Total sponsors shown in the tab badge = legacy sponsors + marketplace-awarded sponsors
+  // (deduped by lowercase name). Mirror the dedupe logic from <EventSponsors/> so the badge
+  // count always matches what's actually rendered inside the tab.
+  const totalSponsorCount = useMemo(() => {
+    const legacyNames = new Set((sponsors || []).map((s) => (s.name || "").toLowerCase()));
+    let awarded = 0;
+    for (const opp of (event?.sponsorship_opportunities || [])) {
+      for (const aw of (opp.awarded_to || [])) {
+        if (!legacyNames.has((aw.name || "").toLowerCase())) awarded += 1;
+      }
+    }
+    return (sponsors?.length || 0) + awarded;
+  }, [sponsors, event]);
 
   const myCaptainTeamIds = useMemo(
     () => (myPlayerId ? teams.filter((t) => t.captain_player_id === myPlayerId).map((t) => t.id) : []),
@@ -137,7 +153,7 @@ export default function EventDetail() {
             <TabsTrigger value="standings" data-testid="tab-standings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Standings</TabsTrigger>
             {canSeeTeamsTab && <TabsTrigger value="teams" data-testid="tab-teams" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">{["chess", "quiz", "hackathon"].includes(event.sport) ? "Players" : "Teams"}</TabsTrigger>}
             {event.format === "knockout" && <TabsTrigger value="bracket" data-testid="tab-bracket" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bracket</TabsTrigger>}
-            <TabsTrigger value="sponsors" data-testid="tab-sponsors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sponsors ({sponsors.length})</TabsTrigger>
+            <TabsTrigger value="sponsors" data-testid="tab-sponsors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sponsors ({totalSponsorCount})</TabsTrigger>
             <TabsTrigger value="sponsorship" data-testid="tab-sponsorship" className="data-[state=active]:bg-[#FACC15] data-[state=active]:text-black rounded-sm">Sponsorship</TabsTrigger>
           </TabsList>
 
@@ -156,7 +172,7 @@ export default function EventDetail() {
             </TabsContent>
           )}
           <TabsContent value="sponsors" className="mt-6">
-            <EventSponsors eventId={event.id} sponsors={sponsors} isAdmin={isAdmin} reload={loadAll} />
+            <EventSponsors event={event} sponsors={sponsors} isAdmin={isAdmin} reload={loadAll} />
           </TabsContent>
           <TabsContent value="sponsorship" className="mt-6">
             <EventSponsorshipManager
@@ -362,7 +378,8 @@ function BracketRow({ team, score, winner }) {
   );
 }
 
-function EventSponsors({ eventId, sponsors, isAdmin, reload }) {
+function EventSponsors({ event, sponsors, isAdmin, reload }) {
+  const eventId = event.id;
   const [form, setForm] = useState({ name: "", tier: "bronze", logo_url: "", website: "", description: "" });
   const tiers = ["title", "gold", "silver", "bronze"];
   const tierColor = { title: "#84CC16", gold: "#F59E0B", silver: "#A3A3A3", bronze: "#A16207" };
@@ -380,10 +397,35 @@ function EventSponsors({ eventId, sponsors, isAdmin, reload }) {
     await api.delete(`/sponsors/${id}`); reload();
   };
 
+  // Merge marketplace-awarded sponsors into the legacy sponsors list.
+  // Tier mapping: opportunity type → display tier on this page. Title slots stay title;
+  // associates render as gold; everything else as silver (visually de-emphasised but still credited).
+  const TYPE_TO_TIER = { title: "title", associate: "gold", "powered-by": "gold", "category-partner": "gold" };
+  const awardedVirtual = [];
+  for (const opp of (event.sponsorship_opportunities || [])) {
+    for (const aw of (opp.awarded_to || [])) {
+      awardedVirtual.push({
+        id: `mkt-${aw.interest_id || aw.sponsor_id}`,
+        name: aw.name,
+        tier: TYPE_TO_TIER[opp.type] || "silver",
+        logo_url: aw.logo_url || "",
+        website: aw.website || "",
+        description: `${opp.name}${aw.industry ? ` · ${aw.industry}` : ""}`,
+        _marketplace: true,
+      });
+    }
+  }
+  // Dedupe by lowercase name (avoids showing the same brand twice if also added legacy).
+  const existingNames = new Set((sponsors || []).map((s) => (s.name || "").toLowerCase()));
+  const mergedSponsors = [
+    ...(sponsors || []),
+    ...awardedVirtual.filter((v) => !existingNames.has((v.name || "").toLowerCase())),
+  ];
+
   return (
     <div className="space-y-6">
       {tiers.map((t) => {
-        const list = sponsors.filter((s) => s.tier === t);
+        const list = mergedSponsors.filter((s) => s.tier === t);
         if (list.length === 0) return null;
         return (
           <div key={t}>
@@ -395,14 +437,28 @@ function EventSponsors({ eventId, sponsors, isAdmin, reload }) {
               {list.map((s) => (
                 <div key={s.id} data-testid={`event-sponsor-${s.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-4">
                   <div className="flex items-center gap-3">
-                    <img src={s.logo_url} alt={s.name} className="w-12 h-12 object-cover rounded-sm" />
+                    {s.logo_url ? (
+                      <img src={s.logo_url} alt={s.name} className="w-12 h-12 object-contain rounded-sm bg-black/40 p-1" />
+                    ) : (
+                      <div className="w-12 h-12 rounded-sm bg-black/40 flex items-center justify-center text-[10px] font-mono text-neutral-500 border border-white/10">
+                        {(s.name || "?").slice(0, 2).toUpperCase()}
+                      </div>
+                    )}
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{s.name}</div>
+                      <div className="font-semibold truncate flex items-center gap-1.5">
+                        {s.name}
+                        {s._marketplace && <span className="text-[8px] font-mono uppercase text-[#FACC15] border border-[#FACC15]/40 rounded-sm px-1 py-0.5">via marketplace</span>}
+                      </div>
                       <div className="text-[10px] font-mono uppercase text-neutral-500">{s.tier}</div>
                     </div>
                   </div>
                   {s.description && <p className="text-xs text-neutral-400 mt-2 line-clamp-2">{s.description}</p>}
-                  {isAdmin && (
+                  {s.website && (
+                    <a href={s.website} target="_blank" rel="noopener noreferrer" className="text-[10px] font-mono text-[#FACC15] hover:underline mt-1 inline-block">
+                      {s.website.replace(/^https?:\/\//, "").replace(/\/.*/, "")}
+                    </a>
+                  )}
+                  {isAdmin && !s._marketplace && (
                     <Button size="sm" variant="ghost" data-testid={`event-sponsor-del-${s.id}`} onClick={() => remove(s.id)} className="text-[#FF3B30] mt-2">Remove</Button>
                   )}
                 </div>
@@ -411,7 +467,7 @@ function EventSponsors({ eventId, sponsors, isAdmin, reload }) {
           </div>
         );
       })}
-      {sponsors.length === 0 && <div className="text-neutral-500 text-center py-12 border border-dashed border-white/10 rounded-sm">No sponsors for this tournament yet.</div>}
+      {mergedSponsors.length === 0 && <div className="text-neutral-500 text-center py-12 border border-dashed border-white/10 rounded-sm">No sponsors for this tournament yet.</div>}
 
       {isAdmin && (
         <form onSubmit={add} className="border border-white/10 rounded-sm bg-[#141414] p-5 mt-8 grid md:grid-cols-2 gap-3">

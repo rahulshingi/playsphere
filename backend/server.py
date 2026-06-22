@@ -2441,15 +2441,25 @@ async def decide_sponsorship_interest(interest_id: str, body: dict, user: dict =
     await db.sponsorship_interests.update_one({"id": interest_id}, {"$set": update})
 
     if decision == "accepted":
+        # Look up the sponsor profile so we can stamp logo + website onto awarded_to —
+        # downstream surfaces (Sponsors tab, public event page) render the brand cards from there.
+        sponsor_profile = await db.sponsor_profiles.find_one({"id": interest["sponsor_id"]}, {"_id": 0, "logo_url": 1, "website": 1, "industry": 1})
+        sp = sponsor_profile or {}
         opps = event.get("sponsorship_opportunities") or []
         idx = next((i for i, o in enumerate(opps) if o.get("id") == interest["opportunity_id"]), -1)
         if idx >= 0:
             opp = opps[idx]
             opp["sold_count"] = int(opp.get("sold_count", 0)) + 1
-            # Track which sponsors have won which slots so the public view can show them.
             awarded = list(opp.get("awarded_to") or [])
-            awarded.append({"sponsor_id": interest["sponsor_id"], "name": interest.get("sponsor_company_name"),
-                            "interest_id": interest_id, "awarded_at": now})
+            awarded.append({
+                "sponsor_id": interest["sponsor_id"],
+                "name": interest.get("sponsor_company_name"),
+                "logo_url": sp.get("logo_url") or "",
+                "website": sp.get("website") or "",
+                "industry": sp.get("industry") or "",
+                "interest_id": interest_id,
+                "awarded_at": now,
+            })
             opp["awarded_to"] = awarded
             if opp["sold_count"] >= int(opp.get("quantity_available", 0)):
                 opp["status"] = "sold"

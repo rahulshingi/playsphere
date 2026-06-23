@@ -6,7 +6,78 @@ get_current_user_optional, require_admin, require_company_admin.
 """
 from typing import List, Optional
 from datetime import datetime, timezone
+import os
+import logging
 from fastapi import Depends, HTTPException
+
+logger = logging.getLogger("kreeda.routes.events")
+
+
+def _public_app_url() -> str:
+    return os.environ.get("PUBLIC_APP_URL", "https://kreedanation.com").rstrip("/")
+
+
+def _approval_email_html(event_name: str, status: str, reason: str = "") -> str:
+    """Render the approval / rejection email body. Kept inline to keep the route file
+    self-contained — Kreeda's brand pulse is consistent across the few templates we
+    send, no Jinja required."""
+    base_url = _public_app_url()
+    if status == "approved":
+        headline = "EVENT APPROVED"
+        accent = "#84CC16"
+        body_html = (
+            f"<p>Your event <b style='color:#84CC16;'>{event_name}</b> has been approved by the Kreeda Nation team and is now live on the public events page.</p>"
+            "<p>You can start adding teams, generating fixtures, inviting scorers and going live.</p>"
+        )
+        cta_label = "OPEN EVENT"
+    else:  # rejected
+        headline = "EVENT REJECTED"
+        accent = "#FF3B30"
+        safe_reason = reason or "No specific reason provided."
+        body_html = (
+            f"<p>Your event <b style='color:#FF3B30;'>{event_name}</b> was not approved by the Kreeda Nation team.</p>"
+            "<p style='font-size:13px;color:#a3a3a3;'>Reason from the platform admin:</p>"
+            f"<div style='background:#0a0a0a;border:1px solid #ffffff14;border-radius:4px;padding:14px;margin:8px 0 18px;font-family:ui-monospace,monospace;font-size:13px;color:#e5e5e5;'>{safe_reason}</div>"
+            "<p>Edit the event details based on the feedback and resubmit when ready.</p>"
+        )
+        cta_label = "REVIEW & RESUBMIT"
+    return f"""
+    <div style='font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0a0a0a;color:#e5e5e5;padding:32px 20px;'>
+      <div style='max-width:560px;margin:auto;background:#141414;border:1px solid #ffffff14;border-radius:6px;padding:32px;'>
+        <div style='font-size:11px;letter-spacing:.3em;color:{accent};text-transform:uppercase;font-family:ui-monospace,monospace;'>/ Approval update</div>
+        <h1 style='font-size:28px;letter-spacing:.05em;margin:12px 0 24px;color:#fff;'>{headline}</h1>
+        {body_html}
+        <p style='text-align:center;margin:28px 0;'>
+          <a href='{base_url}/events' style='display:inline-block;background:{accent};color:#000;font-weight:700;padding:12px 28px;border-radius:4px;text-decoration:none;letter-spacing:.05em;'>{cta_label}</a>
+        </p>
+        <hr style='border:none;border-top:1px solid #ffffff14;margin:28px 0;'/>
+        <p style='font-size:11px;color:#737373;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.2em;'>Kreeda Nation · Where teams compete, connect &amp; grow</p>
+      </div>
+    </div>
+    """
+
+
+async def _notify_organiser_decision(db, event: dict, status: str, reason: str = ""):
+    """Best-effort email the event's creator. Failures are swallowed (logged)."""
+    if not event.get("created_by"):
+        return
+    user = await db.users.find_one({"id": event["created_by"]}, {"_id": 0, "email": 1, "name": 1})
+    if not user or not user.get("email"):
+        return
+    try:
+        from email_service import send_email  # type: ignore
+        subject = (
+            f"[Kreeda Nation] Your event '{event.get('name')}' has been approved"
+            if status == "approved"
+            else f"[Kreeda Nation] Your event '{event.get('name')}' was not approved"
+        )
+        send_email(
+            to=user["email"],
+            subject=subject,
+            html=_approval_email_html(event.get("name", ""), status, reason),
+        )
+    except Exception:
+        logger.exception("Failed to dispatch organiser approval email")
 
 
 def register(api, db, deps):
@@ -155,6 +226,7 @@ def register(api, db, deps):
             "rejection_reason": "",
         }})
         doc = await db.events.find_one({"id": event_id}, {"_id": 0})
+        await _notify_organiser_decision(db, doc, "approved")
         return Event(**doc)
 
     @api.post("/events/{event_id}/reject", response_model=Event)
@@ -173,6 +245,7 @@ def register(api, db, deps):
             "approved_by": user.get("id"),
         }})
         doc = await db.events.find_one({"id": event_id}, {"_id": 0})
+        await _notify_organiser_decision(db, doc, "rejected", reason)
         return Event(**doc)
 
     @api.patch("/events/{event_id}", response_model=Event)

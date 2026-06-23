@@ -2,12 +2,94 @@
 
 Wired via `register(api, db, deps)` from server.py.
 """
+import os
 import uuid
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 from fastapi import Depends, HTTPException, Response
 
 from routes.auth import _consume_signup_otp_sync
+
+logger = logging.getLogger("kreeda.routes.vendors")
+
+
+def _public_app_url() -> str:
+    return os.environ.get("PUBLIC_APP_URL", "https://kreedanation.com").rstrip("/")
+
+
+def _vendor_decision_email_html(*, business_name: str, kind: str, status: str, reason: str = "") -> str:
+    """Branded approval / rejection email body.
+    kind: 'vendor' (the vendor business) or 'listing' (a specific listing).
+    status: 'approved' or 'rejected'.
+    """
+    base_url = _public_app_url()
+    if status == "approved":
+        headline = "VENDOR APPROVED" if kind == "vendor" else "LISTING APPROVED"
+        accent = "#EC4899" if kind == "vendor" else "#84CC16"
+        body_html = (
+            f"<p>Your {'vendor account' if kind == 'vendor' else 'listing'} <b style='color:{accent};'>{business_name}</b> "
+            "has been approved by the Kreeda Nation team.</p>"
+            + ("<p>You can now publish listings and start accepting bookings.</p>"
+               if kind == "vendor" else
+               "<p>It's now live on the public marketplace — players and HRs can discover and book it.</p>")
+        )
+        cta_label = "OPEN DASHBOARD"
+        cta_path = "/vendor/dashboard"
+    else:
+        headline = "VENDOR NOT APPROVED" if kind == "vendor" else "LISTING NOT APPROVED"
+        accent = "#FF3B30"
+        safe_reason = reason or "No specific reason provided."
+        body_html = (
+            f"<p>Your {'vendor account' if kind == 'vendor' else 'listing'} <b style='color:#FF3B30;'>{business_name}</b> "
+            "was not approved.</p>"
+            "<p style='font-size:13px;color:#a3a3a3;'>Reason from the platform admin:</p>"
+            f"<div style='background:#0a0a0a;border:1px solid #ffffff14;border-radius:4px;padding:14px;margin:8px 0 18px;font-family:ui-monospace,monospace;font-size:13px;color:#e5e5e5;'>{safe_reason}</div>"
+            "<p>Update the details based on the feedback and resubmit when ready.</p>"
+        )
+        cta_label = "REVIEW DETAILS"
+        cta_path = "/vendor/dashboard"
+    return f"""
+    <div style='font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#0a0a0a;color:#e5e5e5;padding:32px 20px;'>
+      <div style='max-width:560px;margin:auto;background:#141414;border:1px solid #ffffff14;border-radius:6px;padding:32px;'>
+        <div style='font-size:11px;letter-spacing:.3em;color:{accent};text-transform:uppercase;font-family:ui-monospace,monospace;'>/ Approval update</div>
+        <h1 style='font-size:28px;letter-spacing:.05em;margin:12px 0 24px;color:#fff;'>{headline}</h1>
+        {body_html}
+        <p style='text-align:center;margin:28px 0;'>
+          <a href='{base_url}{cta_path}' style='display:inline-block;background:{accent};color:#000;font-weight:700;padding:12px 28px;border-radius:4px;text-decoration:none;letter-spacing:.05em;'>{cta_label}</a>
+        </p>
+        <hr style='border:none;border-top:1px solid #ffffff14;margin:28px 0;'/>
+        <p style='font-size:11px;color:#737373;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.2em;'>Kreeda Nation · Where teams compete, connect &amp; grow</p>
+      </div>
+    </div>
+    """
+
+
+async def _notify_vendor_decision(db, *, vendor_doc: dict, kind: str, status: str, reason: str = "", subject_object_name: Optional[str] = None):
+    """Best-effort send. `vendor_doc` is a `vendors` record; uses its `email` field (or the
+    user account email as fallback). Failures are swallowed."""
+    email = (vendor_doc or {}).get("email")
+    if not email and vendor_doc and vendor_doc.get("user_id"):
+        u = await db.users.find_one({"id": vendor_doc["user_id"]}, {"_id": 0, "email": 1})
+        email = (u or {}).get("email")
+    if not email:
+        return
+    business_name = subject_object_name or vendor_doc.get("business_name", "your vendor account")
+    object_label = "vendor account" if kind == "vendor" else f"listing '{business_name}'"
+    subject = (
+        f"[Kreeda Nation] Your {object_label} has been approved"
+        if status == "approved"
+        else f"[Kreeda Nation] Your {object_label} was not approved"
+    )
+    try:
+        from email_service import send_email  # type: ignore
+        send_email(
+            to=email,
+            subject=subject,
+            html=_vendor_decision_email_html(business_name=business_name, kind=kind, status=status, reason=reason),
+        )
+    except Exception:
+        logger.exception("Failed to dispatch vendor decision email")
 
 
 def register(api, db, deps):
@@ -78,7 +160,17 @@ def register(api, db, deps):
     @api.patch("/vendors/{vendor_id}/approve")
     async def approve_vendor(vendor_id: str, body: dict, _: dict = Depends(require_permission("manage_vendors"))):
         approved = bool(body.get("approved", True))
+        reason = (body.get("reason") or "").strip()
+        ev = await db.vendors.find_one({"id": vendor_id}, {"_id": 0})
+        if not ev:
+            raise HTTPException(404, "Vendor not found")
         await db.vendors.update_one({"id": vendor_id}, {"$set": {"approved": approved}})
+        # Approved → always notify. Rejected → notify only if a reason is provided
+        # (avoids spamming on internal toggles).
+        if approved:
+            await _notify_vendor_decision(db, vendor_doc=ev, kind="vendor", status="approved")
+        elif reason:
+            await _notify_vendor_decision(db, vendor_doc=ev, kind="vendor", status="rejected", reason=reason)
         return {"ok": True, "approved": approved}
 
     # ---------- Public vendor listings ----------
@@ -190,5 +282,22 @@ def register(api, db, deps):
     @api.patch("/admin/listings/{listing_id}/approve")
     async def approve_listing(listing_id: str, body: dict, _: dict = Depends(require_permission("manage_listings"))):
         approved = bool(body.get("approved", True))
+        reason = (body.get("reason") or "").strip()
+        listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0})
+        if not listing:
+            raise HTTPException(404, "Listing not found")
         await db.vendor_listings.update_one({"id": listing_id}, {"$set": {"approved": approved}})
+        # Lookup the owning vendor so we can route the email to the right address.
+        vendor_doc = await db.vendors.find_one({"id": listing.get("vendor_id")}, {"_id": 0}) or {}
+        listing_title = listing.get("title") or listing.get("name") or "your listing"
+        if approved:
+            await _notify_vendor_decision(
+                db, vendor_doc=vendor_doc, kind="listing", status="approved",
+                subject_object_name=listing_title,
+            )
+        elif reason:
+            await _notify_vendor_decision(
+                db, vendor_doc=vendor_doc, kind="listing", status="rejected", reason=reason,
+                subject_object_name=listing_title,
+            )
         return {"ok": True, "approved": approved}

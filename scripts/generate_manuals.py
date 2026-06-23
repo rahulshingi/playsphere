@@ -261,6 +261,15 @@ vendor_sections = [
         ]),
         ("tip", "Your aggregate rating (average ★ + count) is shown on every marketplace listing once you have ≥1 published review — the same number that powers the Verified badge eligibility."),
     ]},
+    {"title": "11. What's new — approval emails &amp; rejection reasons",
+     "intro": "Kreeda Nation HQ approval decisions now arrive in your inbox automatically. No need to log in to check status.",
+     "blocks": [
+        ("h3", "Vendor account approval"),
+        ("p", "When HQ approves your vendor business, you get an email titled <b>“Your vendor account has been approved”</b> with a one-click button to your dashboard. If HQ rejects with a reason, the email includes that reason verbatim so you know exactly what to fix before resubmitting."),
+        ("h3", "Listing approval"),
+        ("p", "Each listing is reviewed independently. You'll receive a separate email per listing — <b>“Your listing ‘&lt;title&gt;’ has been approved”</b> or rejected with the admin's note. Edit the listing in your dashboard and it goes back into the queue."),
+        ("tip", "If a rejection email never arrives, check spam and add <b>admin@kreedanation.com</b> to your safe-senders list."),
+    ]},
 ]
 
 # ---------- PLAYER MANUAL ----------
@@ -480,6 +489,23 @@ company_sections = [
      "blocks": [
         ("p", "Once signed in, this HR manual is always available from the <b>top navigation</b> — look for <b>HR guide</b> next to your menu items. The footer no longer carries role guides; we surface only the one relevant to your account so you never have to wonder which PDF to open."),
     ]},
+    {"title": "14. What's new — scorers, fixture lock &amp; marketplace clarity",
+     "intro": "Recent product updates that change day-to-day operations for HR teams running tournaments.",
+     "blocks": [
+        ("h3", "Invite a match scorer"),
+        ("p", "On any event you own → open the <b>Scorers</b> tab. Enter a scorer's email, pick scope (<b>All fixtures</b> or <b>Specific fixtures</b>) and send. If they aren't on Kreeda Nation yet, we auto-create a lightweight <i>scorer</i> account and email them login credentials. The temp password is also surfaced inline once for manual sharing."),
+        ("bul", [
+            "Scorers can update live scores ONLY for the events / matches you assign — they cannot edit your event, generate fixtures, or access scoring of other tournaments.",
+            "They land at <b>/scorer/dashboard</b> after login showing every assigned event and fixture.",
+            "Remove a scorer anytime with the trash icon on their row.",
+        ]),
+        ("h3", "Fixture lock"),
+        ("p", "Once any fixture moves out of <b>Scheduled</b> (i.e. the tournament has started), the <b>Generate fixtures</b> button is automatically disabled and reads <b>Fixtures locked</b>. This protects live and completed match scores from being wiped by an accidental regenerate."),
+        ("h3", "Cross-company permission scoping"),
+        ("p", "HRs of other companies can no longer touch your event. The <b>Generate fixtures</b> button, the score-update controls, and the scorer-invite UI are all hidden for anyone outside your company. The backend also enforces this (returns 403)."),
+        ("h3", "Sponsors tab — direct vs marketplace"),
+        ("p", "If your event uses the Sponsorship marketplace, awarded sponsors are merged into the same <b>Sponsors</b> tab as manually-added ones. A filter row above the cards lets visitors flip between <b>All</b>, <b>Direct</b> and <b>Via marketplace</b> — useful when you want to highlight organic marketplace pull versus pre-negotiated partners."),
+    ]},
 ]
 
 # ---------- PLATFORM ADMIN MANUAL ----------
@@ -639,6 +665,33 @@ admin_sections = [
      "blocks": [
         ("p", "The footer no longer lists all four manuals — it cluttered the experience for logged-out visitors. Instead each signed-in user sees only <b>their</b> guide as a link in the top nav (HR sees HR guide, vendors see vendor guide, etc.). This admin manual appears as <b>Admin guide</b> when you sign in."),
     ]},
+    {"title": "14. What's new — approvals, scorers &amp; inbox cleanup",
+     "intro": "Major workflow updates the platform admin needs to know.",
+     "blocks": [
+        ("h3", "Organiser event approvals queue"),
+        ("p", "A new <b>Approvals (n)</b> tab appears between Events and Sports on your platform-admin tabs. It shows every event that an independent <i>organiser</i> created and acknowledged the platform instructions for. From here you can:"),
+        ("bul", [
+            "<b>Approve &amp; publish</b> — the event becomes public, the organiser is emailed a confirmation with a one-click link to open the event.",
+            "<b>Reject…</b> — write a reason in the inline textarea, click <b>Confirm rejection + email</b>. The organiser receives an email with your reason verbatim and can edit + resubmit.",
+            "<b>Open</b> — jumps to the public event page so you can review teams, dates, sponsorships before deciding.",
+        ]),
+        ("warn", "HR / company events skip this workflow and are public immediately. Only independent <i>organiser</i> accounts hit the approval queue."),
+        ("h3", "Customise the instructions organisers must acknowledge"),
+        ("p", "Open <b>Settings</b> tab → scroll to <b>ORGANISER EVENT INSTRUCTIONS</b>. Edit the rich-text block with your latest fair-play, sponsorship and policy rules. Organisers see this verbatim inside the acknowledgement modal on every new event they create."),
+        ("h3", "Vendor / listing approvals now send emails"),
+        ("p", "Approvals tab actions on the <b>Vendors</b> and <b>Listings</b> tabs now auto-email the vendor:"),
+        ("kv", [
+            ["Approve", "Sends a green confirmation email with a dashboard link. Always fires."],
+            ["Reject", "New red button beside Approve. Opens an inline reason textarea — vendor receives the reason via email."],
+            ["Revoke / Unpublish", "Silent toggle for an already-approved item — no email, used for temporary pauses."],
+        ]),
+        ("h3", "Scorer invitations"),
+        ("p", "Organisers / HRs can now invite match scorers from any event's <b>Scorers</b> tab. Invitees get an email with login credentials and can only update scores for the events / fixtures they're assigned to. As platform admin, you can see every scorer in the database under <b>Accounts</b> tab → role <i>scorer</i> filter."),
+        ("h3", "Contact inbox — archive &amp; delete"),
+        ("p", "The Settings page contact inbox now supports an Inbox / Archive toggle. Once a message is marked as <b>read</b>, you can <b>Archive</b> it to clear it from the active inbox (Restore brings it back) or <b>Delete</b> it permanently. The delete button is disabled while a message is still unread, to prevent accidental loss of unanswered enquiries."),
+        ("h3", "Sponsors per event — direct vs marketplace"),
+        ("p", "Awarded marketplace sponsors and manually-added sponsors are now merged into a single Sponsors tab on every event, deduplicated by name. The tab badge counts both. A filter row lets visitors see <b>All / Direct / Via marketplace</b>."),
+    ]},
 ]
 
 
@@ -671,6 +724,22 @@ organiser_intro_sections = [
             ["Brand name", "Shown publicly on event pages, fixtures and scorecards."],
         ]),
         ("tip", "Once signed in you'll land on <b>/dashboard</b> — same powerful layout HR teams use. Your <b>Organiser guide</b> link is always one click away in the top nav."),
+    ]},
+    {"title": "1a. The event approval workflow (organiser-only)",
+     "intro": "Every event you create on Kreeda Nation goes through a lightweight admin review before becoming public. This protects audience quality across the platform — and it's quick.",
+     "blocks": [
+        ("h3", "The lifecycle"),
+        ("num", [
+            "<b>You create the event</b> at <b>/dashboard → + New tournament</b>. It is saved as a private draft with the status <b>“Pending your acknowledgement”</b>. It does NOT appear on the public events page yet.",
+            "<b>Open the event</b> to read the platform's tournament instructions (set by Kreeda Nation HQ). They cover fair-play, eligibility, sponsorship and content policies you must follow.",
+            "<b>Click the yellow <i>I agree &amp; submit for approval</i></b> button on the banner. The event moves to <b>“Awaiting platform admin approval”</b>.",
+            "<b>Wait briefly</b> — Kreeda Nation HQ typically reviews within a few business hours. You'll receive an <b>approval email</b> when they're done.",
+            "<b>If approved</b>: the event goes public, all tabs unlock, and the normal flow continues — add teams, generate fixtures, invite scorers, list sponsorships, etc.",
+            "<b>If rejected</b>: the email includes the admin's reason. Open the event, edit the details based on the feedback (dates, venue, sponsorship terms, etc.), and click <b>Resubmit for approval</b> — back to step 4.",
+        ]),
+        ("h3", "What about HR / corporate events?"),
+        ("p", "Events created under a corporate <b>HR account</b> do NOT need approval — they go live immediately. Approval is only required for events created by independent organisers."),
+        ("warn", "Editing an event while it's pending is fine and recommended — fix issues before submitting. Once approved, the event is public; major changes (sport, venue, dates) should be communicated to participants via the description or your own channels."),
     ]},
 ] + company_sections[1:]
 
@@ -768,11 +837,82 @@ sponsor_sections = [
      "blocks": [
         ("p", "Once signed in as a sponsor, this manual is one click away from your <b>top navigation</b> as <b>Sponsor guide</b>. The footer always carries the <b>Become a sponsor</b> link for new users."),
     ]},
+    {"title": "9. What's new — chip-input locations &amp; brand visibility",
+     "blocks": [
+        ("h3", "Target locations are now chip-based"),
+        ("p", "Open <b>/sponsors/me</b> → <b>Target locations</b>. Type a city and press <b>Enter</b> or <b>,</b> to add it as a chip. Click <b>×</b> on any chip to remove. Backspace on an empty input removes the last chip. Duplicates are auto-blocked. Replaces the comma-string field which silently dropped trailing characters."),
+        ("h3", "Awarded sponsors visible in the event's Sponsors tab"),
+        ("p", "When an organiser accepts your interest, your brand now also appears in the event's main <b>Sponsors</b> tab — not just under Sponsorship. Visitors can flip a filter to view <b>All / Direct / Via marketplace</b>, so brands like yours that came in through the marketplace get explicit credit on the public surface."),
+        ("tip", "Make sure your logo is uploaded and your website is set on your sponsor profile. The Sponsors tab pulls both onto the public card the moment your interest is accepted."),
+    ]},
 ]
 
 build("kreeda-nation-sponsor-manual.pdf", "SPONSOR", GOLD,
       "Sponsor manual",
       "Discover sponsorship-ready tournaments, apply to slots in one click, get your brand on every public surface.",
       sponsor_sections)
+
+# ---------- SCORER MANUAL ----------
+scorer_sections = [
+    {"title": "1. What you do on Kreeda Nation",
+     "intro": "You are a match scorer — invited by a tournament organiser to keep the live score for one or more matches.",
+     "blocks": [
+        ("bul", [
+            "You see only the events and fixtures the organiser explicitly assigned you to.",
+            "You cannot create events, generate fixtures, manage teams, or score matches you weren't invited to — by design.",
+            "Your live updates broadcast instantly to anyone watching the public scorecard (no refresh needed).",
+        ]),
+    ]},
+    {"title": "2. Your invitation &amp; first login",
+     "blocks": [
+        ("num", [
+            "An organiser invites you by email from inside their event's <b>Scorers</b> tab. You receive a branded email with your login credentials (email + temporary password).",
+            "Click the <b>SIGN IN TO SCORE</b> button in the email — it lands you on the Kreeda Nation login page.",
+            "Sign in with your email + the temp password.",
+            "You are taken directly to <b>/scorer/dashboard</b>.",
+        ]),
+        ("tip", "Didn't get the email? Check spam, then ask the organiser to share the temp password they see inline on the Scorers tab when they invited you."),
+        ("h3", "Change your password"),
+        ("p", "Open your profile menu in the top-right and pick <b>Reset password</b> — or use <b>/forgot-password</b> any time."),
+    ]},
+    {"title": "3. The scorer console (/scorer/dashboard)",
+     "intro": "Your home screen. Every event you've been assigned to is listed here, with the specific fixtures you can score.",
+     "blocks": [
+        ("kv", [
+            ["Event card", "Sport, venue, start date and your scope (All fixtures or N specific fixtures)."],
+            ["Open event →", "Jumps to the public event page. The Fixtures tab shows the same matches you can score with the <b>Update score</b> button visible only on yours."],
+            ["Fixture chips", "Each fixture shows match number, round, status (Scheduled / Live / Completed) and a pencil icon to jump to the scoring panel."],
+        ]),
+    ]},
+    {"title": "4. Score a match",
+     "blocks": [
+        ("num", [
+            "From /scorer/dashboard click any event card → <b>Open event →</b>.",
+            "Switch to the <b>Fixtures</b> tab. The matches you're allowed to score have a <b>Update score</b> button.",
+            "Click <b>Update score</b> to launch the sport-specific scorer (cricket: toss + playing XI + ball-by-ball; football: goals; badminton: sets; etc.).",
+            "Updates push instantly to all live spectators via WebSocket.",
+        ]),
+        ("tip", "For cricket — set the toss, pick the playing XI, then pick striker / non-striker / bowler before the first ball. The system rotates strike automatically on odd-run balls and end-of-over events. Use the <b>Undo</b> button if you mis-tap a ball."),
+        ("warn", "You cannot score a fixture that isn't on your assignment list — the Update score button won't show and the backend rejects unauthorised attempts."),
+    ]},
+    {"title": "5. Frequently asked",
+     "blocks": [
+        ("h3", "Can I be assigned to multiple events at once?"),
+        ("p", "Yes — every event with at least one assigned fixture for you appears on your dashboard."),
+        ("h3", "What if I no longer want to score?"),
+        ("p", "Ask the organiser to remove you from their event's Scorers tab — they have a trash icon next to your row. Your account stays; only the assignment is revoked."),
+        ("h3", "Can the organiser change my scope after inviting?"),
+        ("p", "Today they need to remove and re-invite. Scope-edit-in-place is on the roadmap."),
+    ]},
+    {"title": "6. Where to find this guide",
+     "blocks": [
+        ("p", "Once signed in as a scorer, this manual is one click away from your top nav as <b>Scorer guide</b>."),
+    ]},
+]
+
+build("kreeda-nation-scorer-manual.pdf", "SCORER", CYAN,
+      "Scorer manual",
+      "Keep live scores for the matches you've been invited to — nothing more, nothing less.",
+      scorer_sections)
 
 print("ALL DONE")

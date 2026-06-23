@@ -14,6 +14,7 @@ import CricketScorer from "@/components/CricketScorer";
 import EventTeamsManager from "@/components/EventTeamsManager";
 import EventSponsorshipManager from "@/components/sponsorship/EventSponsorshipManager";
 import EventScorersManager from "@/components/event/EventScorersManager";
+import EventApprovalBanner from "@/components/event/EventApprovalBanner";
 import useFixtureSocket from "@/lib/useFixtureSocket";
 import { toast } from "sonner";
 
@@ -74,6 +75,13 @@ export default function EventDetail() {
     if (myScorerAssignment.scope === "all") return true;
     return (myScorerAssignment.fixtures || []).some((f) => f.id === fixture.id);
   };
+
+  // Approval-workflow helpers.
+  const approvalStatus = event?.approval_status || "approved";
+  const isPendingAck = approvalStatus === "pending_organiser_ack";
+  const isPendingAdmin = approvalStatus === "pending_admin_approval";
+  const isRejected = approvalStatus === "rejected";
+  const isOwnerOrganiser = !!event && user && event.created_by === user.id;
 
   // Real-time updates: merge incoming fixture changes; refresh standings on completion.
   // The polling fallback re-fetches event fixtures every ~6s when the WebSocket is down.
@@ -140,6 +148,19 @@ export default function EventDetail() {
           </div>
           <h1 data-testid="event-title" className="font-display text-6xl tracking-wide mt-4">{event.name}</h1>
           <p className="text-neutral-400 mt-3 max-w-2xl">{event.description}</p>
+
+          {/* Approval-workflow banner — visible to the event creator + platform admin */}
+          {(isOwnerOrganiser || isPlatformAdmin) && approvalStatus !== "approved" && (
+            <EventApprovalBanner
+              event={event}
+              isPendingAck={isPendingAck}
+              isPendingAdmin={isPendingAdmin}
+              isRejected={isRejected}
+              isOwnerOrganiser={isOwnerOrganiser}
+              isPlatformAdmin={isPlatformAdmin}
+              onChange={loadAll}
+            />
+          )}
           <div className="flex flex-wrap gap-4 mt-4 text-xs font-mono text-neutral-500">
             {event.venue && <span className="flex items-center gap-1.5"><MapPin className="w-3 h-3" /> {event.venue}</span>}
             {event.start_date && <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3" /> {event.start_date}</span>}

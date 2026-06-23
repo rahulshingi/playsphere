@@ -318,6 +318,16 @@ class Event(BaseModel):
     # opportunities: [{id, name, type, price, currency, quantity_available, benefits, status, awarded_to_sponsor_id, awarded_to_name}]
     sponsorship_opportunities: List[Dict[str, Any]] = Field(default_factory=list)
     data_share_agreement: bool = False
+    # ---- Organiser approval workflow ----
+    # Lifecycle for events created by `organiser` role users:
+    #   created -> pending_organiser_ack -> pending_admin_approval -> approved | rejected
+    # HR/admin/platform_admin events skip the workflow and are created as "approved".
+    approval_status: str = "approved"
+    rejection_reason: Optional[str] = ""
+    submitted_at: Optional[str] = None
+    approved_at: Optional[str] = None
+    approved_by: Optional[str] = None
+    created_by: Optional[str] = None  # user_id who created the event
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -743,6 +753,19 @@ class SiteSettings(BaseModel):
     contact_address: Optional[str] = ""
     contact_hours: Optional[str] = "Mon–Sat · 09:00 – 19:00 IST"
     contact_map_url: Optional[str] = ""
+    # ---- Organiser approval workflow ----
+    # Free-form instructions shown to organisers in the acknowledgement modal
+    # before their event is submitted to the platform admin for approval.
+    # Supports plain text or basic HTML; rendered via dangerouslySetInnerHTML
+    # so the admin can include bullet lists, bold, etc.
+    organiser_event_instructions: Optional[str] = (
+        "Please read these guidelines carefully before submitting your event:\n\n"
+        "1. Tournament name, dates, and venue must be accurate.\n"
+        "2. Sponsorship terms, prize money and entry fees must comply with Kreeda Nation policies.\n"
+        "3. All participants must be over 18 unless an explicit junior tournament is declared.\n"
+        "4. Fair-play rules apply — match results, scoring and conduct are subject to platform audit.\n"
+        "5. By submitting, you authorise Kreeda Nation to list your event publicly once approved."
+    )
 
 
 async def _user_with_company(user: dict) -> dict:

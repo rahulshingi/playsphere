@@ -73,12 +73,32 @@ def register(api, db, SiteSettings, require_platform_admin):
         return {"ok": True}
 
     @api.get("/contact-messages")
-    async def list_contact_messages(_: dict = Depends(require_platform_admin)):
-        docs = await db.contact_messages.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    async def list_contact_messages(
+        archived: bool = False,
+        _: dict = Depends(require_platform_admin),
+    ):
+        # Inbox shows only non-archived by default; pass ?archived=true to see archive.
+        q = {"archived": True} if archived else {"$or": [{"archived": {"$exists": False}}, {"archived": False}]}
+        docs = await db.contact_messages.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
         return docs
 
     @api.patch("/contact-messages/{msg_id}")
     async def update_contact_message(msg_id: str, body: dict, _: dict = Depends(require_platform_admin)):
-        allowed = {k: body[k] for k in ("read",) if k in body}
+        # Allow toggling `read` and `archived` flags.
+        allowed = {k: body[k] for k in ("read", "archived") if k in body}
+        if "archived" in allowed and allowed["archived"]:
+            allowed["archived_at"] = datetime.now(timezone.utc).isoformat()
         await db.contact_messages.update_one({"id": msg_id}, {"$set": allowed})
+        return {"ok": True}
+
+    @api.delete("/contact-messages/{msg_id}")
+    async def delete_contact_message(msg_id: str, _: dict = Depends(require_platform_admin)):
+        """Permanent delete. Admin can only delete after the message is marked read
+        (lightweight safety against accidental loss of unread enquiries)."""
+        doc = await db.contact_messages.find_one({"id": msg_id}, {"_id": 0})
+        if not doc:
+            return {"ok": True}
+        if not doc.get("read"):
+            raise HTTPException(400, "Mark the message as read before deleting")
+        await db.contact_messages.delete_one({"id": msg_id})
         return {"ok": True}

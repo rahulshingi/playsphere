@@ -17,6 +17,7 @@ import AdminTeam from "@/components/AdminTeam";
 import ServiceEditor from "@/components/admin/ServiceEditor";
 import AccountsManager from "@/components/admin/AccountsManager";
 import EventsTab from "@/components/admin/EventsTab";
+import PendingApprovalsTab from "@/components/admin/PendingApprovalsTab";
 import VendorsTab from "@/components/admin/VendorsTab";
 import ListingsTab from "@/components/admin/ListingsTab";
 import SettingsTab from "@/components/admin/SettingsTab";
@@ -51,6 +52,7 @@ export default function PlatformAdmin() {
   const [settings, setSettings] = useState({});
   const [about, setAbout] = useState(ABOUT_DEFAULTS);
   const [editing, setEditing] = useState(null);
+  const [pendingApprovals, setPendingApprovals] = useState([]);
 
   const load = () => Promise.all([
     api.get("/services?include_inactive=true"),
@@ -61,10 +63,12 @@ export default function PlatformAdmin() {
     api.get("/admin/listings"),
     api.get("/settings"),
     api.get("/about"),
-  ]).then(([s, c, ev, b, v, l, st, ab]) => {
+    api.get("/events/pending-approval"),
+  ]).then(([s, c, ev, b, v, l, st, ab, pa]) => {
     setServices(s.data); setCompanies(c.data); setEvents(ev.data); setBookings(b.data);
     setVendors(v.data); setListings(l.data); setSettings(st.data);
     setAbout({ ...ABOUT_DEFAULTS, ...ab.data });
+    setPendingApprovals(pa.data || []);
   });
 
   useEffect(() => {
@@ -114,6 +118,7 @@ export default function PlatformAdmin() {
             <TabsTrigger value="dashboard" data-testid="pa-tab-dashboard" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Dashboard</TabsTrigger>
             <TabsTrigger value="services" data-testid="pa-tab-services" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Services ({services.length})</TabsTrigger>
             <TabsTrigger value="events" data-testid="pa-tab-events" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Events ({events.length})</TabsTrigger>
+            <TabsTrigger value="approvals" data-testid="pa-tab-approvals" className={`data-[state=active]:bg-[#FACC15] data-[state=active]:text-black rounded-sm ${pendingApprovals.length > 0 ? "text-[#FACC15]" : ""}`}>Approvals ({pendingApprovals.length})</TabsTrigger>
             <TabsTrigger value="sports" data-testid="pa-tab-sports" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sports</TabsTrigger>
             <TabsTrigger value="companies" data-testid="pa-tab-companies" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Companies ({corporateCompanies.length})</TabsTrigger>
             <TabsTrigger value="organisers" data-testid="pa-tab-organisers" className="data-[state=active]:bg-[#06B6D4] data-[state=active]:text-black rounded-sm">Organisers ({organiserCompanies.length})</TabsTrigger>
@@ -152,6 +157,10 @@ export default function PlatformAdmin() {
 
           <TabsContent value="events" className="mt-6">
             <EventsTab events={events} companies={companies} reload={load} canManage={hasPermission("manage_events")} />
+          </TabsContent>
+
+          <TabsContent value="approvals" className="mt-6">
+            <PendingApprovalsTab pending={pendingApprovals} companies={companies} reload={load} />
           </TabsContent>
 
           <TabsContent value="companies" className="mt-6 space-y-2">

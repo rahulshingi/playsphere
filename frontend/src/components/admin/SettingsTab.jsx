@@ -47,6 +47,26 @@ export default function SettingsTab({ settings, setSettings, reload }) {
         <Button data-testid="contact-save" onClick={save} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Save contact details</Button>
       </div>
 
+      <div className="border border-white/10 rounded-sm bg-[#141414] p-6 max-w-2xl space-y-3 mt-6">
+        <div className="font-display tracking-wider text-2xl">ORGANISER EVENT INSTRUCTIONS</div>
+        <p className="text-xs text-neutral-500 font-mono">
+          Shown to organisers when they create a new event. They must acknowledge before the event
+          is queued for your approval. Plain text or basic HTML (e.g. &lt;b&gt;, &lt;ul&gt;&lt;li&gt;).
+        </p>
+        <Textarea
+          data-testid="setting-organiser_event_instructions"
+          rows={10}
+          value={settings.organiser_event_instructions || ""}
+          onChange={(e) => setSettings({ ...settings, organiser_event_instructions: e.target.value })}
+          placeholder="Outline your tournament policies, fair-play rules, sponsorship terms…"
+          className="mt-2 bg-black/40 border-white/10 text-white font-mono text-xs leading-relaxed"
+        />
+        <Button data-testid="organiser-instructions-save" onClick={save}
+          className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
+          Save instructions
+        </Button>
+      </div>
+
       <ContactInbox />
     </>
   );

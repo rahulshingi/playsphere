@@ -5,6 +5,7 @@ deps must provide: Event, EventCreate, Team, TeamCreate, Player, PlayerCreate,
 get_current_user_optional, require_admin, require_company_admin.
 """
 from typing import List, Optional
+from datetime import datetime, timezone
 from fastapi import Depends, HTTPException
 
 
@@ -33,6 +34,32 @@ def register(api, db, deps):
             cid = user.get("company_id")
             if cid:
                 q = {"$or": [{"company_id": cid}, {"companies": cid}]}
+
+        # ---- Approval-status visibility filter ----
+        # Public + non-organiser-non-admin viewers only see approved events.
+        # Organisers/HRs see their own pending/rejected events alongside approved ones.
+        # Platform admins see everything (including the approvals inbox).
+        role = (user or {}).get("role")
+        if role not in ("platform_admin", "admin"):
+            allowed_filter: dict
+            uid = (user or {}).get("id")
+            cid = (user or {}).get("company_id")
+            if role in ("organiser", "company_admin") and (uid or cid):
+                # Approved events for everyone, plus my own pending/rejected events.
+                allowed_filter = {
+                    "$or": [
+                        {"approval_status": {"$in": ["approved", None]}},
+                        {"created_by": uid} if uid else {"company_id": cid},
+                    ]
+                }
+            else:
+                allowed_filter = {"approval_status": {"$in": ["approved", None]}}
+            # Merge with existing q.
+            if q:
+                q = {"$and": [q, allowed_filter]}
+            else:
+                q = allowed_filter
+
         docs = await db.events.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
         return [Event(**d) for d in docs]
 
@@ -57,6 +84,17 @@ def register(api, db, deps):
         ).limit(40).to_list(40)
         return docs
 
+    @api.get("/events/pending-approval", response_model=List[Event])
+    async def list_pending_approval(user: dict = Depends(require_admin)):
+        """Platform-admin inbox: events submitted by organisers awaiting approval.
+        Defined BEFORE /events/{event_id} so the literal path wins over the path-param."""
+        if user.get("role") not in ("platform_admin", "admin"):
+            raise HTTPException(403, "Only the platform admin can view the approval queue")
+        docs = await db.events.find(
+            {"approval_status": "pending_admin_approval"}, {"_id": 0}
+        ).sort("submitted_at", -1).to_list(500)
+        return [Event(**d) for d in docs]
+
     @api.get("/events/{event_id}", response_model=Event)
     async def get_event(event_id: str):
         doc = await db.events.find_one({"id": event_id}, {"_id": 0})
@@ -69,9 +107,73 @@ def register(api, db, deps):
         payload = body.model_dump()
         if user.get("role") in ("company_admin", "organiser"):
             payload["company_id"] = user.get("company_id")
+        payload["created_by"] = user.get("id")
+        # Organiser-created events must go through the acknowledgement +
+        # platform-admin approval workflow. HRs/admins skip it.
+        if user.get("role") == "organiser":
+            payload["approval_status"] = "pending_organiser_ack"
+        else:
+            payload["approval_status"] = "approved"
+            payload["approved_at"] = datetime.now(timezone.utc).isoformat()
         ev = Event(**payload)
         await db.events.insert_one(ev.model_dump())
         return ev
+
+    # ---------- Approval workflow ----------
+    @api.post("/events/{event_id}/acknowledge-instructions", response_model=Event)
+    async def acknowledge_instructions(event_id: str, user: dict = Depends(require_admin)):
+        """Organiser acknowledges the platform's instructions and submits the event
+        for admin approval. Allowed when the event is `pending_organiser_ack`
+        (initial flow) OR `rejected` (resubmit after editing)."""
+        ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+        if not ev:
+            raise HTTPException(404, "Event not found")
+        if ev.get("approval_status") not in ("pending_organiser_ack", "rejected"):
+            raise HTTPException(400, "Event is not pending acknowledgement")
+        if ev.get("created_by") and ev.get("created_by") != user.get("id"):
+            if user.get("role") not in ("platform_admin", "admin"):
+                raise HTTPException(403, "Only the event creator can acknowledge")
+        await db.events.update_one({"id": event_id}, {"$set": {
+            "approval_status": "pending_admin_approval",
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
+            "rejection_reason": "",
+        }})
+        doc = await db.events.find_one({"id": event_id}, {"_id": 0})
+        return Event(**doc)
+
+    @api.post("/events/{event_id}/approve", response_model=Event)
+    async def approve_event(event_id: str, user: dict = Depends(require_admin)):
+        if user.get("role") not in ("platform_admin", "admin"):
+            raise HTTPException(403, "Only the platform admin can approve events")
+        ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+        if not ev:
+            raise HTTPException(404, "Event not found")
+        await db.events.update_one({"id": event_id}, {"$set": {
+            "approval_status": "approved",
+            "approved_at": datetime.now(timezone.utc).isoformat(),
+            "approved_by": user.get("id"),
+            "rejection_reason": "",
+        }})
+        doc = await db.events.find_one({"id": event_id}, {"_id": 0})
+        return Event(**doc)
+
+    @api.post("/events/{event_id}/reject", response_model=Event)
+    async def reject_event(event_id: str, body: dict, user: dict = Depends(require_admin)):
+        if user.get("role") not in ("platform_admin", "admin"):
+            raise HTTPException(403, "Only the platform admin can reject events")
+        reason = (body or {}).get("reason", "").strip()
+        if not reason:
+            raise HTTPException(400, "Rejection reason is required")
+        ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+        if not ev:
+            raise HTTPException(404, "Event not found")
+        await db.events.update_one({"id": event_id}, {"$set": {
+            "approval_status": "rejected",
+            "rejection_reason": reason,
+            "approved_by": user.get("id"),
+        }})
+        doc = await db.events.find_one({"id": event_id}, {"_id": 0})
+        return Event(**doc)
 
     @api.patch("/events/{event_id}", response_model=Event)
     async def update_event(event_id: str, body: dict, user: dict = Depends(require_admin)):

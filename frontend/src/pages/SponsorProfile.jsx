@@ -43,6 +43,57 @@ function MultiChip({ options, value, onChange, testid }) {
   );
 }
 
+// Free-form token input: type a value and press Enter/Comma (or blur) to add it as a chip.
+// Backspace on an empty input removes the last chip. Used for things like target locations
+// where the options are open-ended (any city, country, etc).
+function TokenInput({ value, onChange, placeholder, testid }) {
+  const [draft, setDraft] = useState("");
+  const list = value || [];
+
+  const commit = (raw) => {
+    const next = (raw || "").trim().replace(/,$/, "").trim();
+    if (!next) { setDraft(""); return; }
+    if (list.some((x) => x.toLowerCase() === next.toLowerCase())) { setDraft(""); return; }
+    onChange([...list, next]);
+    setDraft("");
+  };
+
+  const remove = (idx) => onChange(list.filter((_, i) => i !== idx));
+
+  const onKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      commit(draft);
+    } else if (e.key === "Backspace" && !draft && list.length) {
+      e.preventDefault();
+      remove(list.length - 1);
+    }
+  };
+
+  return (
+    <div data-testid={testid}
+      className="mt-1.5 bg-black/40 border border-white/10 rounded-sm px-2 py-1.5 flex flex-wrap gap-1.5 items-center focus-within:border-white/30">
+      {list.map((tok, i) => (
+        <span key={`${tok}-${i}`} data-testid={`${testid}-chip-${i}`}
+          className="inline-flex items-center gap-1 text-[11px] font-mono uppercase px-2 py-0.5 rounded-sm bg-[#FACC15] text-black">
+          {tok}
+          <button type="button" onClick={() => remove(i)} data-testid={`${testid}-remove-${i}`}
+            className="hover:text-[#0a0a0a]/70 leading-none">×</button>
+        </span>
+      ))}
+      <input
+        data-testid={`${testid}-input`}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={onKeyDown}
+        onBlur={() => commit(draft)}
+        placeholder={list.length === 0 ? placeholder : ""}
+        className="flex-1 min-w-[120px] bg-transparent outline-none text-white text-sm py-0.5"
+      />
+    </div>
+  );
+}
+
 export default function SponsorProfile() {
   const { user, ready, canSponsor } = useAuth();
   const nav = useNavigate();
@@ -114,10 +165,14 @@ export default function SponsorProfile() {
             </div>
 
             <div>
-              <Label className="text-[10px] font-mono uppercase text-neutral-500">Target locations (one per chip)</Label>
-              <Input data-testid="sponsor-target-locations" placeholder="Bangalore, Mumbai, Hyderabad — press comma to add" value={(profile.target_locations || []).join(", ")}
-                onChange={(e) => upd({ target_locations: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })}
-                className="mt-1.5 bg-black/40 border-white/10 text-white" />
+              <Label className="text-[10px] font-mono uppercase text-neutral-500">Target locations</Label>
+              <p className="text-[10px] text-neutral-500 mt-1">Type a city and press <span className="font-mono">Enter</span> or <span className="font-mono">,</span> to add. Click × to remove.</p>
+              <TokenInput
+                testid="sponsor-target-locations"
+                value={profile.target_locations}
+                onChange={(v) => upd({ target_locations: v })}
+                placeholder="Bangalore, Mumbai, Hyderabad…"
+              />
             </div>
 
             <div>

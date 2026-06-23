@@ -381,6 +381,7 @@ function BracketRow({ team, score, winner }) {
 function EventSponsors({ event, sponsors, isAdmin, reload }) {
   const eventId = event.id;
   const [form, setForm] = useState({ name: "", tier: "bronze", logo_url: "", website: "", description: "" });
+  const [filter, setFilter] = useState("all"); // all | manual | marketplace
   const tiers = ["title", "gold", "silver", "bronze"];
   const tierColor = { title: "#84CC16", gold: "#F59E0B", silver: "#A3A3A3", bronze: "#A16207" };
 
@@ -421,11 +422,41 @@ function EventSponsors({ event, sponsors, isAdmin, reload }) {
     ...(sponsors || []),
     ...awardedVirtual.filter((v) => !existingNames.has((v.name || "").toLowerCase())),
   ];
+  const visibleSponsors = mergedSponsors.filter((s) => {
+    if (filter === "manual") return !s._marketplace;
+    if (filter === "marketplace") return !!s._marketplace;
+    return true;
+  });
+  const marketplaceCount = mergedSponsors.filter((s) => s._marketplace).length;
+  const manualCount = mergedSponsors.length - marketplaceCount;
 
   return (
     <div className="space-y-6">
+      {mergedSponsors.length > 0 && (marketplaceCount > 0) && (
+        <div className="flex flex-wrap gap-1.5" data-testid="sponsors-filter">
+          {[
+            { k: "all", label: `All (${mergedSponsors.length})` },
+            { k: "manual", label: `Direct (${manualCount})` },
+            { k: "marketplace", label: `Via marketplace (${marketplaceCount})` },
+          ].map((opt) => (
+            <button
+              key={opt.k}
+              type="button"
+              data-testid={`sponsors-filter-${opt.k}`}
+              onClick={() => setFilter(opt.k)}
+              className={`text-[11px] font-mono uppercase px-2.5 py-1 rounded-sm border transition-colors ${
+                filter === opt.k
+                  ? "bg-[#FACC15] text-black border-transparent"
+                  : "bg-black/40 text-neutral-300 border-white/10 hover:border-white/30"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
       {tiers.map((t) => {
-        const list = mergedSponsors.filter((s) => s.tier === t);
+        const list = visibleSponsors.filter((s) => s.tier === t);
         if (list.length === 0) return null;
         return (
           <div key={t}>
@@ -467,7 +498,7 @@ function EventSponsors({ event, sponsors, isAdmin, reload }) {
           </div>
         );
       })}
-      {mergedSponsors.length === 0 && <div className="text-neutral-500 text-center py-12 border border-dashed border-white/10 rounded-sm">No sponsors for this tournament yet.</div>}
+      {visibleSponsors.length === 0 && <div className="text-neutral-500 text-center py-12 border border-dashed border-white/10 rounded-sm">{mergedSponsors.length === 0 ? "No sponsors for this tournament yet." : "No sponsors match this filter."}</div>}
 
       {isAdmin && (
         <form onSubmit={add} className="border border-white/10 rounded-sm bg-[#141414] p-5 mt-8 grid md:grid-cols-2 gap-3">

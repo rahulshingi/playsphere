@@ -18,9 +18,12 @@ const onSportChange = (current, value) => ({
   format: INDIVIDUAL_SPORTS.has(value) ? "knockout" : current.format,
 });
 
-export default function EventsTab({ events, reload, canManage }) {
+export default function EventsTab({ events, companies = [], reload, canManage }) {
   const nav = useNavigate();
   const [newEvent, setNewEvent] = useState(BLANK_EVENT);
+  // Build a quick lookup so each event row can show the organising company / organiser name
+  // without an extra round-trip. PlatformAdmin already loads companies in the same fetch.
+  const companyMap = Object.fromEntries((companies || []).map((c) => [c.id, c]));
 
   const createEvent = async (e) => {
     e.preventDefault();
@@ -85,10 +88,18 @@ export default function EventsTab({ events, reload, canManage }) {
 
       <div className="space-y-2">
         {events.length === 0 && <div className="text-neutral-500 text-sm text-center py-12 border border-dashed border-white/10 rounded-sm">No events yet.</div>}
-        {events.map((e) => (
+        {events.map((e) => {
+          const org = companyMap[e.company_id];
+          const orgLabel = org?.name || (e.company_id ? "Unknown organiser" : "Kreeda Nation");
+          return (
           <div key={e.id} data-testid={`pa-event-row-${e.id}`} className="border border-white/10 rounded-sm p-4 bg-[#141414] flex items-center justify-between gap-3">
             <div className="min-w-0">
               <div className="font-semibold truncate">{e.name}</div>
+              <div className="text-[11px] text-neutral-300 mt-1 flex items-center gap-1.5 truncate" data-testid={`pa-event-org-${e.id}`}>
+                <span className="font-mono text-[9px] uppercase tracking-widest text-[#84CC16]">Org</span>
+                <span className="truncate">{orgLabel}</span>
+                {org?.type && <span className="text-[9px] font-mono uppercase text-neutral-500">· {org.type}</span>}
+              </div>
               <div className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest mt-0.5">
                 {e.sport} · {e.format.replace("_", " ")} · {(e.event_type || "single_company").replace("_", " ")}
                 {e.stream_url && <span className="ml-2 text-[#FF3B30]">● LIVE LINK</span>}
@@ -99,7 +110,8 @@ export default function EventsTab({ events, reload, canManage }) {
               {canManage && <Button size="sm" variant="ghost" data-testid={`pa-event-del-${e.id}`} onClick={() => deleteEvent(e.id, e.name)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>}
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

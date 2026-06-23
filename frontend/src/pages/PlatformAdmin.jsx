@@ -151,7 +151,7 @@ export default function PlatformAdmin() {
           </TabsContent>
 
           <TabsContent value="events" className="mt-6">
-            <EventsTab events={events} reload={load} canManage={hasPermission("manage_events")} />
+            <EventsTab events={events} companies={companies} reload={load} canManage={hasPermission("manage_events")} />
           </TabsContent>
 
           <TabsContent value="companies" className="mt-6 space-y-2">

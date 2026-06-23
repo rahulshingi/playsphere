@@ -826,12 +826,12 @@ async def _fixtures_locked(event_id: str) -> bool:
 
 async def _can_score_fixture(user: dict, fixture: dict, event: dict) -> bool:
     """Allowed if (a) the user can manage the event, or
-    (b) the user is an invited scorer for the event with either no fixture restriction
-    or this specific fixture in their scope."""
+    (b) the user has an event_scorers assignment for this event with either
+    no fixture restriction or this specific fixture in their scope.
+    The role check is intentionally lenient — invites are explicit per-event grants,
+    so any user (scorer/player/etc.) explicitly assigned should be able to score."""
     if await _can_manage_event(user, event):
         return True
-    if user.get("role") != "scorer":
-        return False
     scorer = await db.event_scorers.find_one(
         {"event_id": event["id"], "user_id": user["id"]}, {"_id": 0}
     )

@@ -16,7 +16,7 @@ const publicLinks = [
   { to: "/contact", label: "Contact" },
 ];
 
-function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin }) {
+function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer }) {
   const out = [];
   if (isCompanyAdmin) {
     out.push({ to: "/dashboard", label: "Dashboard", icon: Briefcase, accent: "#84CC16" });
@@ -36,6 +36,9 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
   if (isSponsor) {
     out.push({ to: "/sponsors/me", label: "Sponsor profile", icon: Briefcase, accent: "#FACC15" });
     out.push({ to: "/sponsorships", label: "Sponsorships" });
+  }
+  if (isScorer) {
+    out.push({ to: "/scorer/dashboard", label: "Scorer", icon: Shield, accent: "#06B6D4" });
   }
   if (isPlatformAdmin) {
     out.push({ to: "/platform-admin", label: "HQ", icon: Crown, accent: "#FF3B30" });
@@ -71,11 +74,11 @@ function DesktopLink({ link }) {
 }
 
 export default function Nav() {
-  const { user, isCompanyAdmin, isPlatformAdmin, isPlayer, isVendor, isSponsor, companyName, logout } = useAuth();
+  const { user, isCompanyAdmin, isPlatformAdmin, isPlayer, isVendor, isSponsor, isScorer, companyName, logout } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isAuthed = user && user !== false;
-  const roles = { isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin };
+  const roles = { isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer };
   const extras = roleLinks(roles);
   const guide = isAuthed ? getRoleGuide(user.role) : null;
 

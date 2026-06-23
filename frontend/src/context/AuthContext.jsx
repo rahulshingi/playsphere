@@ -99,6 +99,7 @@ export const AuthProvider = ({ children }) => {
       isPlayer: !!user && user.role === "player",
       isVendor: !!user && user.role === "vendor",
       isSponsor: !!user && user.role === "sponsor",
+      isScorer: !!user && user.role === "scorer",
       canSponsor: !!user && (user.role === "sponsor" || user.role === "company_admin"),
       companyId: user && user.company_id,
       companyName: user && user.company_name,

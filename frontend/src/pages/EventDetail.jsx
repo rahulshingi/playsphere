@@ -13,12 +13,13 @@ import LiveScorer from "@/components/LiveScorer";
 import CricketScorer from "@/components/CricketScorer";
 import EventTeamsManager from "@/components/EventTeamsManager";
 import EventSponsorshipManager from "@/components/sponsorship/EventSponsorshipManager";
+import EventScorersManager from "@/components/event/EventScorersManager";
 import useFixtureSocket from "@/lib/useFixtureSocket";
 import { toast } from "sonner";
 
 export default function EventDetail() {
   const { id } = useParams();
-  const { isAdmin, isPlatformAdmin, isCompanyAdmin, isPlayer, companyId } = useAuth();
+  const { isAdmin, isPlatformAdmin, isCompanyAdmin, isPlayer, isScorer, companyId, user } = useAuth();
   const [event, setEvent] = useState(null);
   const [teams, setTeams] = useState([]);
   const [fixtures, setFixtures] = useState([]);
@@ -28,6 +29,7 @@ export default function EventDetail() {
   const [editingStream, setEditingStream] = useState(false);
   const [streamDraft, setStreamDraft] = useState("");
   const [myPlayerId, setMyPlayerId] = useState(null);
+  const [myScorerAssignment, setMyScorerAssignment] = useState(null);
 
   const loadAll = async () => {
     const [e, t, f, s, sp] = await Promise.all([
@@ -47,6 +49,31 @@ export default function EventDetail() {
 
   useEffect(() => { loadAll(); }, [id]);
   useEffect(() => { if (isPlayer) api.get("/players/me").then((r) => setMyPlayerId(r.data.id)).catch(() => {}); }, [isPlayer]);
+  // Scorer: pull their assignments so we can show "Update score" only on the
+  // fixtures they've been invited to.
+  useEffect(() => {
+    if (!isScorer) { setMyScorerAssignment(null); return; }
+    api.get("/scorers/me/events").then((r) => {
+      const match = (r.data?.events || []).find((x) => x.event?.id === id);
+      setMyScorerAssignment(match || null);
+    }).catch(() => setMyScorerAssignment(null));
+  }, [isScorer, id]);
+
+  // True only for the event's own organiser/HR (or any platform admin).
+  // Stops a different company's HR from generating fixtures or scoring this event.
+  const canManage = !!event && (
+    isPlatformAdmin ||
+    (isCompanyAdmin && companyId && (event.company_id === companyId || (event.companies || []).includes(companyId)))
+  );
+  // Lock fixture regeneration as soon as any match has started or completed —
+  // otherwise live scores would be wiped out by a regenerate.
+  const fixturesLocked = fixtures.some((f) => f.status !== "scheduled");
+  const canScoreFixture = (fixture) => {
+    if (canManage) return true;
+    if (!isScorer || !myScorerAssignment) return false;
+    if (myScorerAssignment.scope === "all") return true;
+    return (myScorerAssignment.fixtures || []).some((f) => f.id === fixture.id);
+  };
 
   // Real-time updates: merge incoming fixture changes; refresh standings on completion.
   // The polling fallback re-fetches event fixtures every ~6s when the WebSocket is down.
@@ -84,8 +111,13 @@ export default function EventDetail() {
   const canSeeTeamsTab = isAdmin || myCaptainTeamIds.length > 0;
 
   const generate = async () => {
-    await api.post(`/events/${id}/generate-fixtures`);
-    await loadAll();
+    try {
+      await api.post(`/events/${id}/generate-fixtures`);
+      toast.success("Fixtures generated");
+      await loadAll();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to generate fixtures");
+    }
   };
 
   if (!event) return <div className="bg-[#0a0a0a] min-h-screen text-white"><Nav /><div className="p-20 text-center">Loading…</div></div>;
@@ -122,10 +154,16 @@ export default function EventDetail() {
               </span>
             )}
           </div>
-          {isAdmin && (
+          {canManage && (
             <div className="mt-6 flex flex-wrap gap-2 items-center">
-              <Button data-testid="generate-fixtures-btn" onClick={generate} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
-                Generate fixtures
+              <Button
+                data-testid="generate-fixtures-btn"
+                onClick={generate}
+                disabled={fixturesLocked}
+                title={fixturesLocked ? "Tournament has already started — fixtures are locked" : undefined}
+                className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm disabled:bg-neutral-700 disabled:text-neutral-400 disabled:cursor-not-allowed"
+              >
+                {fixturesLocked ? "Fixtures locked" : "Generate fixtures"}
               </Button>
               {editingStream ? (
                 <div className="flex gap-2 items-center">
@@ -155,10 +193,11 @@ export default function EventDetail() {
             {event.format === "knockout" && <TabsTrigger value="bracket" data-testid="tab-bracket" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bracket</TabsTrigger>}
             <TabsTrigger value="sponsors" data-testid="tab-sponsors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sponsors ({totalSponsorCount})</TabsTrigger>
             <TabsTrigger value="sponsorship" data-testid="tab-sponsorship" className="data-[state=active]:bg-[#FACC15] data-[state=active]:text-black rounded-sm">Sponsorship</TabsTrigger>
+            {canManage && <TabsTrigger value="scorers" data-testid="tab-scorers" className="data-[state=active]:bg-[#06B6D4] data-[state=active]:text-black rounded-sm">Scorers</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="fixtures" className="mt-6">
-            <FixturesList fixtures={fixtures} event={event} teamMap={teamMap} isAdmin={isAdmin} onScore={(f) => setScoringFixture(f)} />
+            <FixturesList fixtures={fixtures} event={event} teamMap={teamMap} canManage={canManage} canScoreFixture={canScoreFixture} onScore={(f) => setScoringFixture(f)} />
           </TabsContent>
           <TabsContent value="standings" className="mt-6">
             <StandingsTable standings={standings} />
@@ -181,6 +220,11 @@ export default function EventDetail() {
               reload={loadAll}
             />
           </TabsContent>
+          {canManage && (
+            <TabsContent value="scorers" className="mt-6">
+              <EventScorersManager eventId={event.id} fixtures={fixtures} teamMap={teamMap} />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
 
@@ -209,12 +253,12 @@ export default function EventDetail() {
   );
 }
 
-function FixturesList({ fixtures, event, teamMap, isAdmin, onScore }) {
+function FixturesList({ fixtures, event, teamMap, canManage, canScoreFixture, onScore }) {
   const grouped = fixtures.reduce((acc, f) => {
     (acc[f.round] = acc[f.round] || []).push(f);
     return acc;
   }, {});
-  if (!fixtures.length) return <div className="text-neutral-500 text-center py-20">No fixtures yet. {isAdmin && "Generate them from above."}</div>;
+  if (!fixtures.length) return <div className="text-neutral-500 text-center py-20">No fixtures yet. {canManage && "Generate them from above."}</div>;
   return (
     <div className="space-y-8">
       {Object.entries(grouped).map(([rnd, list]) => (
@@ -222,7 +266,7 @@ function FixturesList({ fixtures, event, teamMap, isAdmin, onScore }) {
           <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Round {rnd}</div>
           <div className="grid md:grid-cols-2 gap-3">
             {list.map((f) => (
-              <FixtureCard key={f.id} fixture={f} event={event} teamMap={teamMap} isAdmin={isAdmin} onScore={onScore} />
+              <FixtureCard key={f.id} fixture={f} event={event} teamMap={teamMap} canScore={canScoreFixture(f)} onScore={onScore} />
             ))}
           </div>
         </div>
@@ -231,7 +275,7 @@ function FixturesList({ fixtures, event, teamMap, isAdmin, onScore }) {
   );
 }
 
-function FixtureCard({ fixture, event, teamMap, isAdmin, onScore }) {
+function FixtureCard({ fixture, event, teamMap, canScore, onScore }) {
   const a = teamMap[fixture.team_a_id];
   const b = teamMap[fixture.team_b_id];
   const isLive = fixture.status === "live";
@@ -244,7 +288,7 @@ function FixtureCard({ fixture, event, teamMap, isAdmin, onScore }) {
       <TeamRow team={a} score={renderScore(event.sport, fixture.score?.team_a)} winner={fixture.winner_id === a?.id} />
       <div className="text-[10px] font-mono text-neutral-600 my-1.5 text-center">VS</div>
       <TeamRow team={b} score={renderScore(event.sport, fixture.score?.team_b)} winner={fixture.winner_id === b?.id} />
-      {isAdmin && a && b && (
+      {canScore && a && b && (
         <Button data-testid={`score-fixture-${fixture.id}`} size="sm" onClick={() => onScore(fixture)} className="mt-3 w-full bg-white/5 hover:bg-[#84CC16] text-white rounded-sm border border-white/10">
           Update score
         </Button>

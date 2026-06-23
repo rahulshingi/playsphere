@@ -1,0 +1,58 @@
+{
+  "summary": "Tested the new scorer role + cross-company permission scoping batch. 24/24 backend tests passed and a frontend smoke confirmed gating, invite UI, and Scorers tab. No bugs found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_scorer_and_permissions.py",
+    "/app/test_reports/pytest/iter20_scorer.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is 3,818 lines — exceeds the 700-line guideline. Recommend continuing the routes/* extraction (scorer endpoints are still inline at server.py:1180-1342; would fit naturally in routes/scorers.py).",
+    "POST /api/events/{event_id}/scorers returns the temp_password in plaintext in the JSON response. This is by design (SendGrid fallback) but the response is also visible in browser devtools / proxy logs — consider showing it only inline in the UI modal and clearing it from API responses once an out-of-band delivery channel (SMS/email) is proven reliable.",
+    "scorer_my_events (server.py:1316) returns {'events': []} for non-scorer roles silently. An HR hitting this endpoint will get an empty list with no error — fine functionally but a 403 may be clearer.",
+    "_can_score_fixture allows any user.role == 'scorer' who is in event_scorers. Existing non-scorer roles invited via POST /scorers (e.g., players) get an event_scorers row but their role stays e.g. 'player' — the function then returns False for them, so they silently cannot score. Either reject invites for non-scorer existing roles or expand the role check."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_scorer_and_permissions.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (24/24)",
+    "frontend": "100% smoke (HR view + Admin view + invite flow)"
+  },
+  "test_credentials": "Platform admin admin@kreedanation.com / admin123 used. Other accounts (Company A HR, Company B HR, scorers) seeded directly in MongoDB inside the test fixtures and cleaned up at teardown.",
+  "seed_data_creation": "Each backend test run creates two TEST_CO_* companies, two HR users, one event with 4 teams. Cleaned up automatically. Frontend smoke seeded a single UI_TEST_CO + event and cleaned up after.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 14 review-request scenarios verified end-to-end. Backend permission tests live at /app/backend/tests/test_scorer_and_permissions.py (24 tests, ~7s). Run with REACT_APP_BACKEND_URL+MONGO_URL+DB_NAME env vars. The scorer email invite triggers a real SendGrid email; the temp_password also returns inline. The Scorers tab and Generate-fixtures button are correctly gated by canManage. Cross-company HR cannot generate fixtures (403) and cannot score (403). Fixture-lock correctly returns 400 once a fixture is 'live'. Per-fixture scope (scope='specific' with fixture_ids) correctly blocks scoring outside the assigned list including cricket/* endpoints.",
+  "tested_scenarios": [
+    "Admin can generate fixtures (regression)",
+    "Cross-company HR (Co B) cannot generate fixtures for Co A's event (403, 'Only the event organiser')",
+    "Owner HR (Co A) can generate fixtures",
+    "Fixture-lock: PATCHing status=live then re-calling generate-fixtures returns 400 'locked'",
+    "Cross-company HR cannot PATCH /fixtures/{id} (403)",
+    "Owner HR can POST /fixtures/{id}/init-score",
+    "Cross-company HR cannot init-score (403)",
+    "/cricket/setup: 403 for unrelated HR, 200 for owner HR",
+    "POST /events/{id}/scorers — 403 for non-organiser",
+    "POST /events/{id}/scorers — creates scorer user (role=scorer), returns temp_password, assignment_id, user_created=true",
+    "POST /events/{id}/scorers — rejects invalid fixture_ids with 400",
+    "POST /events/{id}/scorers — scope=specific assignment",
+    "GET /events/{id}/scorers — 403 for non-organiser, 200 list for organiser",
+    "Scorer login → /api/auth/me returns role='scorer'",
+    "GET /scorers/me/events lists event + fixtures with scope='all' or 'specific'",
+    "Scorer (scope=all) can PATCH /fixtures/{any-in-event}",
+    "Scorer (scope=specific) — PATCH target OK, PATCH other 403, cricket/setup other 403",
+    "Scorer cannot generate fixtures (403)",
+    "Scorer cannot list/invite scorers (403)",
+    "UI: HR sees Generate-fixtures button (enabled) + Scorers tab; Admin sees same",
+    "UI: Scorers tab invite form (scorer-invite-email/name/submit) creates row and shows scorer-invite-result inline with temp password"
+  ]
+}

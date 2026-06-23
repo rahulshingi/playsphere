@@ -103,18 +103,30 @@ def generate_knockout(team_ids: List[str], event_id: str) -> List[dict]:
 
 
 def register(api, app, db, ws_manager, deps):
-    """deps must expose: Fixture, ScoreUpdate, require_admin, default_score, propagate_knockout_winner."""
+    """deps must expose: Fixture, ScoreUpdate, require_admin, get_current_user,
+    can_manage_event, can_score_fixture, fixtures_locked, get_event_or_404,
+    default_score, propagate_knockout_winner."""
     Fixture = deps.Fixture
     ScoreUpdate = deps.ScoreUpdate
-    require_admin = deps.require_admin
+    get_current_user = deps.get_current_user
+    can_manage_event = deps.can_manage_event
+    can_score_fixture = deps.can_score_fixture
+    fixtures_locked = deps.fixtures_locked
+    get_event_or_404 = deps.get_event_or_404
     default_score = deps.default_score
     propagate_knockout_winner = deps.propagate_knockout_winner
 
     @api.post("/events/{event_id}/generate-fixtures")
-    async def generate_fixtures_endpoint(event_id: str, _: dict = Depends(require_admin)):
-        ev = await db.events.find_one({"id": event_id}, {"_id": 0})
-        if not ev:
-            raise HTTPException(404, "Event not found")
+    async def generate_fixtures_endpoint(event_id: str, user: dict = Depends(get_current_user)):
+        ev = await get_event_or_404(event_id)
+        if not await can_manage_event(user, ev):
+            raise HTTPException(403, "Only the event organiser can generate fixtures")
+        if await fixtures_locked(event_id):
+            raise HTTPException(
+                400,
+                "Fixtures are locked: the tournament has already started. "
+                "Regenerating would invalidate live or completed match scores.",
+            )
         teams = await db.teams.find({"event_id": event_id}, {"_id": 0, "id": 1}).to_list(500)
         team_ids = [t["id"] for t in teams]
         if len(team_ids) < 2:
@@ -169,7 +181,13 @@ def register(api, app, db, ws_manager, deps):
         return {"fixture": fx, "event": pub_event, "teams": teams}
 
     @api.patch("/fixtures/{fixture_id}", response_model=Fixture)
-    async def update_fixture_score(fixture_id: str, body: ScoreUpdate, _: dict = Depends(require_admin)):
+    async def update_fixture_score(fixture_id: str, body: ScoreUpdate, user: dict = Depends(get_current_user)):
+        existing = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+        if not existing:
+            raise HTTPException(404, "Fixture not found")
+        ev = await get_event_or_404(existing["event_id"])
+        if not await can_score_fixture(user, existing, ev):
+            raise HTTPException(403, "You are not allowed to score this match")
         upd = {"score": body.score}
         if body.status:
             upd["status"] = body.status
@@ -186,11 +204,13 @@ def register(api, app, db, ws_manager, deps):
         return Fixture(**doc)
 
     @api.post("/fixtures/{fixture_id}/init-score")
-    async def init_score(fixture_id: str, _: dict = Depends(require_admin)):
+    async def init_score(fixture_id: str, user: dict = Depends(get_current_user)):
         doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Fixture not found")
-        ev = await db.events.find_one({"id": doc["event_id"]}, {"_id": 0})
+        ev = await get_event_or_404(doc["event_id"])
+        if not await can_score_fixture(user, doc, ev):
+            raise HTTPException(403, "You are not allowed to score this match")
         score = default_score(ev["sport"])
         await db.fixtures.update_one({"id": fixture_id}, {"$set": {"score": score, "status": "live"}})
         updated = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})

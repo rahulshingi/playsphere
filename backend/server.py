@@ -803,7 +803,7 @@ async def _can_manage_event(user: dict, event: dict) -> bool:
     role = user.get("role")
     if role in ("platform_admin", "admin"):
         return True
-    if role == "company_admin":
+    if role in ("company_admin", "organiser"):
         cid = user.get("company_id")
         if not cid:
             return False
@@ -812,6 +812,33 @@ async def _can_manage_event(user: dict, event: dict) -> bool:
         if cid in (event.get("companies") or []):
             return True
     return False
+
+
+async def _fixtures_locked(event_id: str) -> bool:
+    """True if any fixture for this event has moved past 'scheduled' (live or completed).
+    Once the first match is underway, regenerating fixtures would invalidate scores."""
+    doc = await db.fixtures.find_one(
+        {"event_id": event_id, "status": {"$in": ["live", "completed"]}},
+        {"_id": 0, "id": 1},
+    )
+    return doc is not None
+
+
+async def _can_score_fixture(user: dict, fixture: dict, event: dict) -> bool:
+    """Allowed if (a) the user can manage the event, or
+    (b) the user is an invited scorer for the event with either no fixture restriction
+    or this specific fixture in their scope."""
+    if await _can_manage_event(user, event):
+        return True
+    if user.get("role") != "scorer":
+        return False
+    scorer = await db.event_scorers.find_one(
+        {"event_id": event["id"], "user_id": user["id"]}, {"_id": 0}
+    )
+    if not scorer:
+        return False
+    fids = scorer.get("fixture_ids") or []
+    return (not fids) or (fixture["id"] in fids)
 
 
 async def _can_manage_team(user: dict, event: dict, team: dict) -> bool:
@@ -1147,6 +1174,173 @@ async def update_sponsor(sponsor_id: str, body: dict, _: dict = Depends(require_
 async def delete_sponsor(sponsor_id: str, _: dict = Depends(require_admin)):
     await db.sponsors.delete_one({"id": sponsor_id})
     return {"ok": True}
+
+
+
+# ---------- Event Scorers (invited match scorers) ----------
+class ScorerInviteBody(BaseModel):
+    email: EmailStr
+    name: Optional[str] = ""
+    fixture_ids: List[str] = Field(default_factory=list)  # empty = all fixtures of the event
+
+
+@api.get("/events/{event_id}/scorers")
+async def list_event_scorers(event_id: str, user: dict = Depends(get_current_user)):
+    ev = await _get_event_or_404(event_id)
+    if not await _can_manage_event(user, ev):
+        raise HTTPException(403, "Only the event organiser can view scorers")
+    docs = await db.event_scorers.find({"event_id": event_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return docs
+
+
+@api.post("/events/{event_id}/scorers")
+async def invite_event_scorer(event_id: str, body: ScorerInviteBody, user: dict = Depends(get_current_user)):
+    """Invite a scorer for this event. If the email is not yet registered, a `scorer`
+    user is auto-created with a temp password and an invitation email is dispatched.
+    The temp password is also returned in the response so the organiser can share it
+    manually if SendGrid delivery fails."""
+    ev = await _get_event_or_404(event_id)
+    if not await _can_manage_event(user, ev):
+        raise HTTPException(403, "Only the event organiser can invite scorers")
+
+    email = body.email.lower().strip()
+    # Validate the fixture_ids actually belong to this event.
+    if body.fixture_ids:
+        valid = await db.fixtures.find(
+            {"id": {"$in": body.fixture_ids}, "event_id": event_id}, {"_id": 0, "id": 1}
+        ).to_list(500)
+        if len(valid) != len(set(body.fixture_ids)):
+            raise HTTPException(400, "One or more fixture ids do not belong to this event")
+
+    existing_user = await db.users.find_one({"email": email})
+    temp_password: Optional[str] = None
+    if not existing_user:
+        temp_password = _gen_temp_password()
+        scorer_user = {
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "name": body.name or email.split("@")[0],
+            "role": "scorer",
+            "company_id": None,
+            "password_hash": hash_password(temp_password),
+            "must_reset": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.users.insert_one(scorer_user)
+        scorer_user_id = scorer_user["id"]
+    else:
+        if existing_user.get("role") not in ("scorer", "platform_admin", "admin", "company_admin", "organiser"):
+            # Existing player/vendor/sponsor accounts can still be invited — we don't
+            # change their role; the scoring permission piggybacks on the event_scorers
+            # collection regardless.
+            pass
+        scorer_user_id = existing_user["id"]
+
+    # Upsert the scorer assignment. fixture_ids = [] means "all fixtures of this event".
+    existing_assign = await db.event_scorers.find_one(
+        {"event_id": event_id, "user_id": scorer_user_id}, {"_id": 0}
+    )
+    if existing_assign:
+        await db.event_scorers.update_one(
+            {"id": existing_assign["id"]},
+            {"$set": {"fixture_ids": body.fixture_ids, "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        assignment_id = existing_assign["id"]
+    else:
+        assignment_id = str(uuid.uuid4())
+        await db.event_scorers.insert_one({
+            "id": assignment_id,
+            "event_id": event_id,
+            "user_id": scorer_user_id,
+            "email": email,
+            "name": body.name or email.split("@")[0],
+            "fixture_ids": body.fixture_ids,
+            "invited_by": user.get("id"),
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+
+    # Build the email body. Always include event name + login link.
+    login_url = f"{os.environ.get('PUBLIC_APP_URL', 'https://kreedanation.com').rstrip('/')}/login"
+    scope_label = "all matches" if not body.fixture_ids else f"{len(body.fixture_ids)} match(es)"
+    invite_html = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#e5e5e5;padding:32px 20px;">
+      <div style="max-width:560px;margin:auto;background:#141414;border:1px solid #ffffff14;border-radius:6px;padding:32px;">
+        <div style="font-size:11px;letter-spacing:.3em;color:#84CC16;text-transform:uppercase;font-family:ui-monospace,monospace;">/ You're invited to score</div>
+        <h1 style="font-size:28px;letter-spacing:.05em;margin:12px 0 24px;color:#fff;">KREEDA NATION</h1>
+        <p>Hi,</p>
+        <p><b>{(user.get('name') or user.get('email'))}</b> has invited you to be a match scorer for
+          <b style="color:#84CC16;">{ev.get('name')}</b> ({scope_label}).</p>
+        {"<p>Use these credentials to sign in:</p>"
+         f"<div style='background:#0a0a0a;border:1px solid #ffffff14;border-radius:4px;padding:16px;margin:16px 0;font-family:ui-monospace,monospace;font-size:13px;'>"
+         f"<div>Email: <span style='color:#84CC16;'>{email}</span></div>"
+         f"<div>Temporary password: <span style='color:#FACC15;'>{temp_password}</span></div></div>"
+         "<p style='font-size:12px;color:#a3a3a3;'>You'll be asked to reset your password on first sign-in.</p>"
+         if temp_password else "<p>Sign in with your existing Kreeda Nation credentials.</p>"}
+        <p style="text-align:center;margin:28px 0;">
+          <a href="{login_url}" style="display:inline-block;background:#84CC16;color:#000;font-weight:700;padding:12px 28px;border-radius:4px;text-decoration:none;letter-spacing:.05em;">SIGN IN TO SCORE</a>
+        </p>
+        <hr style="border:none;border-top:1px solid #ffffff14;margin:28px 0;"/>
+        <p style="font-size:11px;color:#737373;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.2em;">Kreeda Nation · Where teams compete, connect &amp; grow</p>
+      </div>
+    </div>
+    """
+    try:
+        from email_service import send_email as _send_real_email  # type: ignore
+        email_sent = _send_real_email(
+            to=email,
+            subject=f"You're invited to score {ev.get('name')} on Kreeda Nation",
+            html=invite_html,
+        )
+    except Exception:
+        logger.exception("Failed to dispatch scorer invitation email")
+        email_sent = False
+
+    return {
+        "ok": True,
+        "assignment_id": assignment_id,
+        "user_created": temp_password is not None,
+        "temp_password": temp_password,  # surfaced once, in case SendGrid is down
+        "email_sent": bool(email_sent),
+    }
+
+
+@api.delete("/events/{event_id}/scorers/{assignment_id}")
+async def remove_event_scorer(event_id: str, assignment_id: str, user: dict = Depends(get_current_user)):
+    ev = await _get_event_or_404(event_id)
+    if not await _can_manage_event(user, ev):
+        raise HTTPException(403, "Only the event organiser can remove scorers")
+    await db.event_scorers.delete_one({"id": assignment_id, "event_id": event_id})
+    return {"ok": True}
+
+
+@api.get("/scorers/me/events")
+async def scorer_my_events(user: dict = Depends(get_current_user)):
+    """List event+fixture assignments for the current scorer (used by their dashboard)."""
+    if user.get("role") != "scorer":
+        # Allow event managers to also see their own assignments via this endpoint, but
+        # the main use-case is the lightweight scorer dashboard.
+        return {"events": []}
+    assigns = await db.event_scorers.find({"user_id": user["id"]}, {"_id": 0}).to_list(500)
+    event_ids = list({a["event_id"] for a in assigns})
+    events = {e["id"]: e async for e in db.events.find({"id": {"$in": event_ids}}, {"_id": 0})}
+    out = []
+    for a in assigns:
+        ev = events.get(a["event_id"])
+        if not ev:
+            continue
+        fixture_ids = a.get("fixture_ids") or []
+        if fixture_ids:
+            fxs = await db.fixtures.find({"id": {"$in": fixture_ids}}, {"_id": 0}).to_list(500)
+        else:
+            fxs = await db.fixtures.find({"event_id": ev["id"]}, {"_id": 0}).to_list(500)
+        out.append({
+            "assignment_id": a["id"],
+            "event": {k: ev.get(k) for k in ("id", "name", "sport", "format", "status", "start_date", "venue", "banner_url")},
+            "fixtures": fxs,
+            "scope": "all" if not fixture_ids else "specific",
+        })
+    return {"events": out}
+
 
 
 # ---------- Services catalog + classic Bookings are wired via routes/bookings.py at bottom ----------
@@ -3498,7 +3692,10 @@ async def listing_availability(listing_id: str, date: str, sub_unit_id: Optional
 
 # Cricket — CricHeroes-style match flow (extracted into routes/cricket.py)
 from routes import cricket as cricket_routes  # noqa: E402
-cricket_routes.register(api, db, ws_manager, require_admin, propagate_knockout_winner)
+cricket_routes.register(
+    api, db, ws_manager, require_admin, propagate_knockout_winner,
+    get_current_user=get_current_user, can_score_fixture=_can_score_fixture,
+)
 
 # Site settings / About / Contact (extracted into routes/settings.py)
 from routes import settings as settings_routes  # noqa: E402
@@ -3546,6 +3743,11 @@ fixtures_routes.register(api, app, db, ws_manager, SimpleNamespace(
     Fixture=Fixture,
     ScoreUpdate=ScoreUpdate,
     require_admin=require_admin,
+    get_current_user=get_current_user,
+    can_manage_event=_can_manage_event,
+    can_score_fixture=_can_score_fixture,
+    fixtures_locked=_fixtures_locked,
+    get_event_or_404=_get_event_or_404,
     default_score=default_score,
     propagate_knockout_winner=propagate_knockout_winner,
 ))

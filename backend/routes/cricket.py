@@ -290,8 +290,30 @@ def _replay_ball(inn: dict, ball: dict):
             bowler["wickets"] += 1
 
 
-def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
-    """Attach all cricket endpoints to the provided router."""
+def register(api, db, ws_manager, require_admin, propagate_knockout_winner, get_current_user=None, can_score_fixture=None):
+    """Attach all cricket endpoints to the provided router.
+
+    `get_current_user` + `can_score_fixture` are used to scope writes to the event's
+    organiser/HR or an invited scorer assigned to the fixture. If not provided,
+    falls back to the legacy `require_admin` gate.
+    """
+
+    async def require_scorer_for_fixture(fixture_id: str, user: dict = Depends(get_current_user)) -> dict:
+        """Allow the event's organiser/HR/platform-admin OR an invited scorer to score this fixture.
+        Replaces the broad `require_admin` so HRs of other companies can't score events
+        they don't own."""
+        fx = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+        if not fx:
+            raise HTTPException(404, "Fixture not found")
+        ev = await db.events.find_one({"id": fx["event_id"]}, {"_id": 0})
+        if not ev:
+            raise HTTPException(404, "Event not found")
+        if not await can_score_fixture(user, fx, ev):
+            raise HTTPException(403, "You are not allowed to score this match")
+        return user
+
+    # Choose the active gate: prefer per-fixture scope if wiring is provided.
+    scorer_gate = require_scorer_for_fixture if (get_current_user and can_score_fixture) else require_admin
 
     async def _get_fixture_or_404(fixture_id: str) -> dict:
         doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
@@ -306,7 +328,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         return doc
 
     @api.post("/fixtures/{fixture_id}/cricket/setup")
-    async def cricket_setup(fixture_id: str, body: dict, _: dict = Depends(require_admin)):
+    async def cricket_setup(fixture_id: str, body: dict, _: dict = Depends(scorer_gate)):
         raw = body.get("overs_limit")
         if raw is None:
             raw = 20
@@ -333,7 +355,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         return {"ok": True, "score": doc["score"]}
 
     @api.post("/fixtures/{fixture_id}/cricket/toss")
-    async def cricket_toss(fixture_id: str, body: dict, _: dict = Depends(require_admin)):
+    async def cricket_toss(fixture_id: str, body: dict, _: dict = Depends(scorer_gate)):
         winner_team_id = body.get("winner_team_id")
         decision = body.get("decision")
         if decision not in ("bat", "bowl"):
@@ -352,7 +374,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         return {"ok": True, "score": doc["score"]}
 
     @api.post("/fixtures/{fixture_id}/cricket/playing-xi")
-    async def cricket_playing_xi(fixture_id: str, body: dict, _: dict = Depends(require_admin)):
+    async def cricket_playing_xi(fixture_id: str, body: dict, _: dict = Depends(scorer_gate)):
         fixture = await _get_fixture_or_404(fixture_id)
         score = fixture.get("score") or {}
         if not score or score.get("sport") != "cricket":
@@ -374,7 +396,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         return {"ok": True, "score": doc["score"]}
 
     @api.post("/fixtures/{fixture_id}/cricket/start-innings")
-    async def cricket_start_innings(fixture_id: str, body: dict, _: dict = Depends(require_admin)):
+    async def cricket_start_innings(fixture_id: str, body: dict, _: dict = Depends(scorer_gate)):
         fixture = await _get_fixture_or_404(fixture_id)
         score = fixture.get("score") or {}
         if score.get("sport") != "cricket":
@@ -424,7 +446,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         return {"ok": True, "score": doc["score"]}
 
     @api.post("/fixtures/{fixture_id}/cricket/ball")
-    async def cricket_ball(fixture_id: str, body: dict, _: dict = Depends(require_admin)):
+    async def cricket_ball(fixture_id: str, body: dict, _: dict = Depends(scorer_gate)):
         fixture = await _get_fixture_or_404(fixture_id)
         score = fixture.get("score") or {}
         if score.get("sport") != "cricket":
@@ -515,7 +537,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         return {"ok": True, "score": doc["score"], "match_state": score["match_state"]}
 
     @api.post("/fixtures/{fixture_id}/cricket/new-batsman")
-    async def cricket_new_batsman(fixture_id: str, body: dict, _: dict = Depends(require_admin)):
+    async def cricket_new_batsman(fixture_id: str, body: dict, _: dict = Depends(scorer_gate)):
         player_id = body.get("player_id")
         if not player_id:
             raise HTTPException(400, "player_id required")
@@ -547,7 +569,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         return {"ok": True, "score": doc["score"]}
 
     @api.post("/fixtures/{fixture_id}/cricket/new-bowler")
-    async def cricket_new_bowler(fixture_id: str, body: dict, _: dict = Depends(require_admin)):
+    async def cricket_new_bowler(fixture_id: str, body: dict, _: dict = Depends(scorer_gate)):
         player_id = body.get("player_id")
         if not player_id:
             raise HTTPException(400, "player_id required")
@@ -570,7 +592,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         return {"ok": True, "score": doc["score"]}
 
     @api.post("/fixtures/{fixture_id}/cricket/end-innings")
-    async def cricket_end_innings(fixture_id: str, _: dict = Depends(require_admin)):
+    async def cricket_end_innings(fixture_id: str, _: dict = Depends(scorer_gate)):
         fixture = await _get_fixture_or_404(fixture_id)
         score = fixture.get("score") or {}
         if score.get("sport") != "cricket":
@@ -585,7 +607,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         return {"ok": True, "score": doc["score"]}
 
     @api.post("/fixtures/{fixture_id}/cricket/end-match")
-    async def cricket_end_match(fixture_id: str, body: dict, _: dict = Depends(require_admin)):
+    async def cricket_end_match(fixture_id: str, body: dict, _: dict = Depends(scorer_gate)):
         fixture = await _get_fixture_or_404(fixture_id)
         score = fixture.get("score") or {}
         if score.get("sport") != "cricket":
@@ -606,7 +628,7 @@ def register(api, db, ws_manager, require_admin, propagate_knockout_winner):
         return {"ok": True, "fixture": doc}
 
     @api.post("/fixtures/{fixture_id}/cricket/undo")
-    async def cricket_undo(fixture_id: str, _: dict = Depends(require_admin)):
+    async def cricket_undo(fixture_id: str, _: dict = Depends(scorer_gate)):
         fixture = await _get_fixture_or_404(fixture_id)
         score = fixture.get("score") or {}
         if score.get("sport") != "cricket":

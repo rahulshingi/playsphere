@@ -81,6 +81,15 @@ export default function Nav() {
 
   const closeMobile = () => setMobileOpen(false);
 
+  // Once a user (other than a Player) is logged in, the workspace links eat horizontal space.
+  // Trim discoverability links (About, Services) for those roles to prevent the desktop nav
+  // from overflowing into a horizontal scroll. Players keep the full marketing nav since
+  // their workspace links are minimal.
+  const trimmedRoles = isAuthed && !isPlayer;
+  const visiblePublicLinks = trimmedRoles
+    ? publicLinks.filter((l) => l.to !== "/about" && l.to !== "/services")
+    : publicLinks;
+
   return (
     <header
       data-testid="site-nav"
@@ -111,7 +120,7 @@ export default function Nav() {
 
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-0.5 flex-1 justify-center">
-          {publicLinks.map((n) => <DesktopLink key={n.to} link={n} />)}
+          {visiblePublicLinks.map((n) => <DesktopLink key={n.to} link={n} />)}
           {extras.map((n) => <DesktopLink key={n.to} link={n} />)}
           {guide && (
             <a
@@ -222,7 +231,7 @@ export default function Nav() {
 
               <div className="px-3 py-3 flex flex-col gap-0.5">
                 <div className="text-[10px] font-mono uppercase text-neutral-500 px-2 mt-1 mb-1 tracking-widest">/ Browse</div>
-                {publicLinks.map((n) => (
+                {visiblePublicLinks.map((n) => (
                   <NavLink
                     key={n.to}
                     to={n.to}

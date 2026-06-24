@@ -4,7 +4,9 @@ import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { useAuth } from "@/context/AuthContext";
-import { ArrowLeft, Mail, MapPin, Phone, Calendar, ShoppingBag, Users, Trophy, Star } from "lucide-react";
+import { ArrowLeft, Mail, MapPin, Phone, Calendar, ShoppingBag, Users, Trophy, Star, Eye } from "lucide-react";
+import { SPORT_SCHEMAS } from "@/lib/sportProfileSchema";
+import { STATS_SCHEMAS } from "@/lib/sportStatsSchema";
 
 const TYPES = {
   vendor: { path: "vendors", label: "Vendor" },
@@ -181,22 +183,94 @@ function CompanyDetail({ data, tab, setTab }) {
 
 function PlayerDetailView({ data, tab, setTab }) {
   const { player, user, company, teams, events, reviews } = data;
+  const interested = player.interested_sports || [];
   return (
     <>
       <div className="mt-4 border border-white/10 rounded-sm bg-[#141414] p-6">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <div className="font-mono text-[10px] uppercase text-[#06B6D4]">/ Player</div>
-            <h1 className="font-display text-3xl mt-1">{player.name}</h1>
-            <div className="font-mono text-xs text-neutral-500 mt-1">{player.city || ""} · {player.role || ""}</div>
+        <div className="grid md:grid-cols-[180px_1fr] gap-6 items-start">
+          {/* Profile photo */}
+          <div className="aspect-square rounded-sm overflow-hidden bg-black/40 border border-white/10">
+            <img
+              src={player.photo_url || "https://images.pexels.com/photos/2216610/pexels-photo-2216610.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"}
+              alt={player.name} className="w-full h-full object-cover"
+              data-testid="admin-player-photo"
+            />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-start justify-between flex-wrap gap-3">
+              <div>
+                <div className="font-mono text-[10px] uppercase text-[#06B6D4]">/ Player</div>
+                <h1 className="font-display text-3xl mt-1" data-testid="admin-player-name">{player.name}</h1>
+                <div className="font-mono text-xs text-neutral-500 mt-1">
+                  {player.city || ""}{player.city ? " · " : ""}{interested.map((s) => SPORT_SCHEMAS[s]?.label || s).join(", ") || "—"}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="font-display text-2xl text-[#84CC16] flex items-center gap-1.5 justify-end">
+                  <Eye className="w-4 h-4" /> {player.view_count || 0}
+                </div>
+                <div className="text-[10px] font-mono uppercase text-neutral-500 tracking-widest">Profile views</div>
+              </div>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2 mt-4">
+              <KV label="Email" value={user?.email} icon={Mail} />
+              <KV label="Mobile" value={player.mobile} icon={Phone} />
+              <KV label="Company" value={company?.name || "Independent"} icon={Users} />
+              <KV label="Date of birth" value={player.dob} icon={Calendar} />
+              <KV label="Height" value={player.height_cm ? `${player.height_cm} cm` : null} icon={Trophy} />
+              <KV label="Weight" value={player.weight_kg ? `${player.weight_kg} kg` : null} icon={Trophy} />
+            </div>
+            {player.bio && (
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-1.5">/ Bio</div>
+                <p className="text-sm text-neutral-300 whitespace-pre-wrap" data-testid="admin-player-bio">{player.bio}</p>
+              </div>
+            )}
           </div>
         </div>
-        <div className="grid sm:grid-cols-2 gap-2 mt-4">
-          <KV label="Email" value={user?.email} icon={Mail} />
-          <KV label="Mobile" value={player.mobile} icon={Phone} />
-          <KV label="Company" value={company?.name} icon={Users} />
-          <KV label="Sports" value={(player.sports || []).join(", ")} icon={Trophy} />
-        </div>
+
+        {/* Per-sport profile cards */}
+        {interested.length > 0 && (
+          <div className="mt-6 space-y-3">
+            {interested.map((s) => {
+              const sp = player.sport_profiles?.[s] || {};
+              const profileSchema = SPORT_SCHEMAS[s]?.fields || [];
+              const statsSchema = STATS_SCHEMAS?.[s]?.manual || [];
+              const stats = player.lifetime_stats?.[s] || {};
+              const profileEntries = profileSchema.filter((f) => sp[f.key] !== undefined && sp[f.key] !== "" && sp[f.key] !== null);
+              const statsEntries = statsSchema.filter((f) => stats[f.key] !== undefined && stats[f.key] !== "" && stats[f.key] !== null);
+              if (!profileEntries.length && !statsEntries.length) return null;
+              return (
+                <div key={s} data-testid={`admin-player-sport-${s}`} className="border border-white/10 rounded-sm bg-black/30 p-4">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-[#84CC16] mb-3">/ {(SPORT_SCHEMAS[s]?.label || s).replace(/-/g, " ")} profile</div>
+                  {profileEntries.length > 0 && (
+                    <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+                      {profileEntries.map((f) => (
+                        <div key={f.key}>
+                          <div className="text-[10px] font-mono uppercase text-neutral-500">{(f.label || f.key).replace(/_/g, " ")}</div>
+                          <div className="text-neutral-200 break-words">{Array.isArray(sp[f.key]) ? sp[f.key].join(", ") : String(sp[f.key])}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {statsEntries.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-white/10">
+                      <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-2">/ Lifetime career stats</div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                        {statsEntries.map((f) => (
+                          <div key={f.key}>
+                            <div className="text-[10px] font-mono uppercase text-neutral-500">{(f.label || f.key).replace(/_/g, " ")}</div>
+                            <div className="font-display text-2xl text-[#84CC16]">{stats[f.key]}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <TabBar tab={tab} setTab={setTab} tabs={[
@@ -211,7 +285,7 @@ function PlayerDetailView({ data, tab, setTab }) {
           { label: "Teams", value: teams.length, icon: Users },
           { label: "Events", value: events.length, icon: Trophy },
           { label: "Reviews", value: reviews.length, icon: Star },
-          { label: "Profile views", value: player.view_count || 0, icon: Users },
+          { label: "Profile views", value: player.view_count || 0, icon: Eye },
         ]} />}
         {tab === "teams" && <TeamsTable teams={teams} />}
         {tab === "events" && <EventsTable events={events} />}

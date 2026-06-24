@@ -43,9 +43,10 @@ export default function AdminDetail({ type }) {
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <Nav />
       <div className="mx-auto max-w-6xl px-6 py-10">
-        <Link to="/platform-admin" data-testid="admin-detail-back" className="inline-flex items-center gap-1 text-xs font-mono text-neutral-400 hover:text-white">
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to platform admin
-        </Link>
+        <button onClick={() => nav(-1)} data-testid="admin-detail-back"
+          className="inline-flex items-center gap-1 text-xs font-mono text-neutral-400 hover:text-white">
+          <ArrowLeft className="w-3.5 h-3.5" /> Back
+        </button>
 
         {type === "vendor" && <VendorDetail data={data} tab={tab} setTab={setTab} />}
         {type === "company" && <CompanyDetail data={data} tab={tab} setTab={setTab} />}

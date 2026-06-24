@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
 import Nav from "@/components/Nav";
@@ -44,6 +44,16 @@ const ABOUT_DEFAULTS = { company_description: "", mission: "", vision: "", found
 export default function PlatformAdmin() {
   const { ready, isPlatformAdmin, isSuperAdmin, hasPermission } = useAuth();
   const nav = useNavigate();
+  // Persist the active tab in the URL so the browser's back button (and "Open in new tab")
+  // restore the right view — e.g. clicking "View profile" from the Users tab and pressing
+  // Back returns the admin to /platform-admin?tab=users, not the default Dashboard.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "dashboard";
+  const setActiveTab = (next) => {
+    const sp = new URLSearchParams(searchParams);
+    if (next === "dashboard") sp.delete("tab"); else sp.set("tab", next);
+    setSearchParams(sp, { replace: true });
+  };
   const [services, setServices] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [events, setEvents] = useState([]);
@@ -114,7 +124,7 @@ export default function PlatformAdmin() {
           )}
         </div>
 
-        <Tabs defaultValue="dashboard" className="mt-10">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-10">
           <TabsList className="bg-[#141414] border border-white/10 rounded-sm flex-wrap">
             <TabsTrigger value="dashboard" data-testid="pa-tab-dashboard" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Dashboard</TabsTrigger>
             <TabsTrigger value="services" data-testid="pa-tab-services" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Services ({services.length})</TabsTrigger>

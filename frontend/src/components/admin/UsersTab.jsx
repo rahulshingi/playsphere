@@ -75,6 +75,16 @@ export default function UsersTab() {
 
   return (
     <div className="space-y-5">
+      <div className="border border-white/10 rounded-sm bg-[#141414]/60 p-3 text-xs text-neutral-400" data-testid="users-tab-note">
+        <b className="text-neutral-200">Note:</b> this tab lists every signed-up
+        <span className="text-[#06B6D4]"> user</span> (one row per person). The
+        <span className="text-[#84CC16]"> Companies</span> /
+        <span className="text-[#06B6D4]"> Organisers</span> tabs above list the
+        <span className="text-neutral-200"> organisations themselves</span> — so a
+        single company with multiple HR users will appear once in <i>Companies</i>
+        but multiple times here under <i>Company HR</i>.
+      </div>
+
       {/* Search + filters */}
       <div className="flex flex-wrap gap-3 items-center">
         <div className="flex-1 min-w-[240px] relative">
@@ -123,25 +133,25 @@ export default function UsersTab() {
   );
 }
 
-/** Map a user record to the most useful click-through. Falls back to the platform-admin
- *  user-detail page if no role-specific destination is wired. */
+/** Map a user record to the most useful click-through. Uses platform-admin routes
+ *  so the back link returns to the admin instead of bouncing to dashboard. */
 function deepLinkFor(u) {
   if (u.role === "player" && u.player_profile_id) {
-    return { href: `/players/${u.player_profile_id}`, label: "View profile" };
+    return { href: `/platform-admin/players/${u.player_profile_id}`, label: "View profile" };
   }
-  if (u.role === "vendor" && u.id) {
-    // Existing platform-admin vendor detail page uses the vendor record id, not user id.
-    // We surface a search-link to the vendors tab instead — keeps things consistent.
-    return { href: `/platform-admin?focus_vendor=${u.id}`, label: "View vendor" };
+  if (u.role === "vendor" && u.vendor_id) {
+    return { href: `/platform-admin/vendors/${u.vendor_id}`, label: "View vendor" };
   }
   if ((u.role === "organiser" || u.role === "company_admin") && u.company_id) {
     return { href: `/platform-admin/companies/${u.company_id}`, label: "View company" };
   }
+  // No dedicated admin detail pages for sponsors / scorers yet — surface their
+  // public marketplace presence or scorer console as the best available context.
   if (u.role === "sponsor") {
-    return { href: `/sponsors/${u.id}`, label: "View sponsor" };
+    return { href: `/sponsorships`, label: "View marketplace" };
   }
   if (u.role === "scorer") {
-    return { href: `/platform-admin?focus_scorer=${u.id}`, label: "View scorer" };
+    return { href: `/scorer/dashboard`, label: "Open console" };
   }
   return null;
 }

@@ -2157,7 +2157,7 @@ async def admin_list_users(role: str | None = None, _: dict = Depends(require_pl
     vendor_user_ids = [d["id"] for d in docs if d.get("role") == "vendor"]
     vendor_map = {}
     if vendor_user_ids:
-        async for v in db.vendors.find({"user_id": {"$in": vendor_user_ids}}, {"_id": 0, "user_id": 1, "business_name": 1, "vendor_type": 1, "approved": 1}):
+        async for v in db.vendors.find({"user_id": {"$in": vendor_user_ids}}, {"_id": 0, "user_id": 1, "id": 1, "business_name": 1, "vendor_type": 1, "approved": 1}):
             vendor_map[v["user_id"]] = v
 
     # Enrich player accounts with their player_profile id so the admin UI can deep-link
@@ -2201,6 +2201,7 @@ async def admin_list_users(role: str | None = None, _: dict = Depends(require_pl
             d["org_type"] = c.get("org_type")
         if d["role"] == "vendor":
             v = vendor_map.get(d["id"]) or {}
+            d["vendor_id"] = v.get("id")
             d["vendor_business_name"] = v.get("business_name")
             d["vendor_type"] = v.get("vendor_type")
             d["vendor_approved"] = bool(v.get("approved"))

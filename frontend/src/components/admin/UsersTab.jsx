@@ -137,13 +137,13 @@ export default function UsersTab() {
  *  so the back link returns to the admin instead of bouncing to dashboard. */
 function deepLinkFor(u) {
   if (u.role === "player" && u.player_profile_id) {
-    return { href: `/platform-admin/players/${u.player_profile_id}`, label: "View profile" };
+    return { href: `/platform-admin/players/${u.player_profile_id}?from=users`, label: "View profile" };
   }
   if (u.role === "vendor" && u.vendor_id) {
-    return { href: `/platform-admin/vendors/${u.vendor_id}`, label: "View vendor" };
+    return { href: `/platform-admin/vendors/${u.vendor_id}?from=users`, label: "View vendor" };
   }
   if ((u.role === "organiser" || u.role === "company_admin") && u.company_id) {
-    return { href: `/platform-admin/companies/${u.company_id}`, label: "View company" };
+    return { href: `/platform-admin/companies/${u.company_id}?from=users`, label: "View company" };
   }
   // No dedicated admin detail pages for sponsors / scorers yet — surface their
   // public marketplace presence or scorer console as the best available context.

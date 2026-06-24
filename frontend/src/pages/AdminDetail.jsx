@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
@@ -17,10 +17,21 @@ const TYPES = {
 export default function AdminDetail({ type }) {
   const { id } = useParams();
   const nav = useNavigate();
+  const [searchParams] = useSearchParams();
   const { ready, isPlatformAdmin } = useAuth();
   const [data, setData] = useState(null);
   const [tab, setTab] = useState("overview");
   const [error, setError] = useState(null);
+
+  // Source tab — UsersTab links pass ?from=users, other tabs pass their own slug.
+  // Drives the breadcrumb "Platform admin / Users / <name>" so the admin always
+  // knows how they got here.
+  const fromTab = searchParams.get("from") || (type === "vendor" ? "vendors" : type === "company" ? "companies" : "users");
+  const fromLabels = {
+    users: "Users", vendors: "Vendors", companies: "Companies",
+    organisers: "Organisers", approvals: "Approvals", events: "Events",
+  };
+  const fromLabel = fromLabels[fromTab] || "Platform admin";
 
   useEffect(() => {
     if (!ready) return;
@@ -41,12 +52,29 @@ export default function AdminDetail({ type }) {
     );
   }
 
+  // Derive the display name for the breadcrumb tail.
+  const displayName = type === "vendor"
+    ? data.vendor?.business_name
+    : type === "company"
+      ? data.company?.name
+      : data.player?.name;
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white">
       <Nav />
       <div className="mx-auto max-w-6xl px-6 py-10">
+        {/* Breadcrumb */}
+        <nav data-testid="admin-breadcrumb"
+          className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+          <Link to={`/platform-admin?tab=${fromTab}`} className="hover:text-white">Platform admin</Link>
+          <span>/</span>
+          <Link to={`/platform-admin?tab=${fromTab}`} className="hover:text-white">{fromLabel}</Link>
+          <span>/</span>
+          <span className="text-neutral-300 truncate">{displayName}</span>
+        </nav>
+
         <button onClick={() => nav(-1)} data-testid="admin-detail-back"
-          className="inline-flex items-center gap-1 text-xs font-mono text-neutral-400 hover:text-white">
+          className="mt-3 inline-flex items-center gap-1 text-xs font-mono text-neutral-400 hover:text-white">
           <ArrowLeft className="w-3.5 h-3.5" /> Back
         </button>
 

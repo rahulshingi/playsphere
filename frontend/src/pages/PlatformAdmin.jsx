@@ -18,6 +18,7 @@ import ServiceEditor from "@/components/admin/ServiceEditor";
 import AccountsManager from "@/components/admin/AccountsManager";
 import EventsTab from "@/components/admin/EventsTab";
 import PendingApprovalsTab from "@/components/admin/PendingApprovalsTab";
+import UsersTab from "@/components/admin/UsersTab";
 import VendorsTab from "@/components/admin/VendorsTab";
 import ListingsTab from "@/components/admin/ListingsTab";
 import SettingsTab from "@/components/admin/SettingsTab";
@@ -119,6 +120,7 @@ export default function PlatformAdmin() {
             <TabsTrigger value="services" data-testid="pa-tab-services" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Services ({services.length})</TabsTrigger>
             <TabsTrigger value="events" data-testid="pa-tab-events" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Events ({events.length})</TabsTrigger>
             <TabsTrigger value="approvals" data-testid="pa-tab-approvals" className={`data-[state=active]:bg-[#FACC15] data-[state=active]:text-black rounded-sm ${pendingApprovals.length > 0 ? "text-[#FACC15]" : ""}`}>Approvals ({pendingApprovals.length})</TabsTrigger>
+            <TabsTrigger value="users" data-testid="pa-tab-users" className="data-[state=active]:bg-[#06B6D4] data-[state=active]:text-black rounded-sm">Users</TabsTrigger>
             <TabsTrigger value="sports" data-testid="pa-tab-sports" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sports</TabsTrigger>
             <TabsTrigger value="companies" data-testid="pa-tab-companies" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Companies ({corporateCompanies.length})</TabsTrigger>
             <TabsTrigger value="organisers" data-testid="pa-tab-organisers" className="data-[state=active]:bg-[#06B6D4] data-[state=active]:text-black rounded-sm">Organisers ({organiserCompanies.length})</TabsTrigger>
@@ -161,6 +163,10 @@ export default function PlatformAdmin() {
 
           <TabsContent value="approvals" className="mt-6">
             <PendingApprovalsTab pending={pendingApprovals} companies={companies} reload={load} />
+          </TabsContent>
+
+          <TabsContent value="users" className="mt-6">
+            <UsersTab />
           </TabsContent>
 
           <TabsContent value="companies" className="mt-6 space-y-2">

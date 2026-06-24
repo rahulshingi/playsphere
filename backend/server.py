@@ -2136,7 +2136,7 @@ async def delete_staff_admin(admin_id: str, user: dict = Depends(require_super_a
 
 # ---------- Account suspension (uniform for organisers / vendors / players / company admins) ----------
 # Roles a platform admin is allowed to disable. Platform admins themselves are managed via /admin/staff.
-SUSPENDABLE_ROLES = {"organiser", "vendor", "player", "company_admin"}
+SUSPENDABLE_ROLES = {"organiser", "vendor", "player", "company_admin", "sponsor", "scorer"}
 
 
 @api.get("/admin/users")
@@ -2159,6 +2159,40 @@ async def admin_list_users(role: str | None = None, _: dict = Depends(require_pl
     if vendor_user_ids:
         async for v in db.vendors.find({"user_id": {"$in": vendor_user_ids}}, {"_id": 0, "user_id": 1, "business_name": 1, "vendor_type": 1, "approved": 1}):
             vendor_map[v["user_id"]] = v
+
+    # Enrich player accounts with their player_profile id so the admin UI can deep-link
+    # straight to /players/{id} on click.
+    player_user_ids = [d["id"] for d in docs if d.get("role") == "player"]
+    player_map = {}
+    if player_user_ids:
+        async for p in db.player_profiles.find(
+            {"user_id": {"$in": player_user_ids}},
+            {"_id": 0, "user_id": 1, "id": 1, "city": 1, "interested_sports": 1, "view_count": 1},
+        ):
+            player_map[p["user_id"]] = p
+
+    # Sponsors: their profile is keyed by user_id directly.
+    sponsor_user_ids = [d["id"] for d in docs if d.get("role") == "sponsor"]
+    sponsor_map = {}
+    if sponsor_user_ids:
+        async for s in db.sponsor_profiles.find(
+            {"user_id": {"$in": sponsor_user_ids}},
+            {"_id": 0, "user_id": 1, "brand_name": 1, "industry": 1, "logo_url": 1, "location": 1},
+        ):
+            sponsor_map[s["user_id"]] = s
+
+    # Scorers: list of events / fixtures they've been assigned to (count only).
+    scorer_user_ids = [d["id"] for d in docs if d.get("role") == "scorer"]
+    scorer_map = {}
+    if scorer_user_ids:
+        async for a in db.event_scorers.find(
+            {"user_id": {"$in": scorer_user_ids}},
+            {"_id": 0, "user_id": 1, "event_id": 1, "fixture_ids": 1},
+        ):
+            entry = scorer_map.setdefault(a["user_id"], {"assignments": 0, "fixtures": 0})
+            entry["assignments"] += 1
+            entry["fixtures"] += len(a.get("fixture_ids") or [])
+
     for d in docs:
         d["disabled"] = bool(d.get("disabled"))
         if d.get("company_id"):
@@ -2170,6 +2204,22 @@ async def admin_list_users(role: str | None = None, _: dict = Depends(require_pl
             d["vendor_business_name"] = v.get("business_name")
             d["vendor_type"] = v.get("vendor_type")
             d["vendor_approved"] = bool(v.get("approved"))
+        if d["role"] == "player":
+            p = player_map.get(d["id"]) or {}
+            d["player_profile_id"] = p.get("id")
+            d["player_city"] = p.get("city")
+            d["player_sports"] = p.get("interested_sports") or []
+            d["player_view_count"] = p.get("view_count") or 0
+        if d["role"] == "sponsor":
+            s = sponsor_map.get(d["id"]) or {}
+            d["sponsor_brand_name"] = s.get("brand_name")
+            d["sponsor_industry"] = s.get("industry")
+            d["sponsor_logo_url"] = s.get("logo_url")
+            d["sponsor_location"] = s.get("location")
+        if d["role"] == "scorer":
+            sc = scorer_map.get(d["id"]) or {"assignments": 0, "fixtures": 0}
+            d["scorer_assignments"] = sc["assignments"]
+            d["scorer_fixtures"] = sc["fixtures"]
     return docs
 
 

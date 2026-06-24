@@ -91,24 +91,54 @@ function KV({ label, value, icon: Icon }) {
 
 function VendorDetail({ data, tab, setTab }) {
   const { vendor, owner, listings, bookings, reviews, schedules } = data;
+  // Vendor records don't store a logo, but the first listing's first image is a great
+  // proxy for an avatar — gives the admin instant visual recognition.
+  const heroImage = listings.find((L) => L.images?.[0])?.images?.[0];
+  const avgRating = reviews.length
+    ? (reviews.reduce((acc, r) => acc + (r.rating || 0), 0) / reviews.length).toFixed(1)
+    : null;
+  const totalRevenue = bookings.reduce((acc, b) => acc + (b.total_amount || 0), 0);
   return (
     <>
       <div className="mt-4 border border-white/10 rounded-sm bg-[#141414] p-6">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <div className="font-mono text-[10px] uppercase text-[#EC4899]">/ Vendor</div>
-            <h1 className="font-display text-3xl mt-1">{vendor.business_name}</h1>
-            <div className="font-mono text-xs text-neutral-500 mt-1">{vendor.vendor_type} · {vendor.city}</div>
+        <div className="grid md:grid-cols-[180px_1fr] gap-6 items-start">
+          <div className="aspect-square rounded-sm overflow-hidden bg-black/40 border border-white/10 flex items-center justify-center">
+            {heroImage ? (
+              <img src={heroImage} alt={vendor.business_name} className="w-full h-full object-cover" data-testid="admin-vendor-photo" />
+            ) : (
+              <ShoppingBag className="w-16 h-16 text-neutral-700" />
+            )}
           </div>
-          <span className={`px-3 py-1 text-[11px] font-mono uppercase rounded-sm border ${vendor.approved ? "border-[#84CC16] text-[#84CC16]" : "border-[#F59E0B] text-[#F59E0B]"}`}>
-            {vendor.approved ? "Approved" : "Pending approval"}
-          </span>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-2 mt-4">
-          <KV label="Contact" value={vendor.contact_name} icon={Users} />
-          <KV label="Email" value={vendor.email} icon={Mail} />
-          <KV label="Mobile" value={vendor.mobile} icon={Phone} />
-          <KV label="Owner user" value={owner?.email} icon={Mail} />
+          <div className="min-w-0">
+            <div className="flex items-start justify-between flex-wrap gap-3">
+              <div>
+                <div className="font-mono text-[10px] uppercase text-[#EC4899]">/ Vendor</div>
+                <h1 className="font-display text-3xl mt-1" data-testid="admin-vendor-name">{vendor.business_name}</h1>
+                <div className="font-mono text-xs text-neutral-500 mt-1">{vendor.vendor_type} · {vendor.city}</div>
+              </div>
+              <span className={`px-3 py-1 text-[11px] font-mono uppercase rounded-sm border ${vendor.approved ? "border-[#84CC16] text-[#84CC16]" : "border-[#F59E0B] text-[#F59E0B]"}`}>
+                {vendor.approved ? "Approved" : "Pending approval"}
+              </span>
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2 mt-4">
+              <KV label="Contact" value={vendor.contact_name} icon={Users} />
+              <KV label="Email" value={vendor.email} icon={Mail} />
+              <KV label="Mobile" value={vendor.mobile} icon={Phone} />
+              <KV label="Owner user" value={owner?.email} icon={Mail} />
+            </div>
+            {/* Quick KPI band */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+              <MiniStat label="Listings" value={listings.length} accent="#EC4899" />
+              <MiniStat label="Approved" value={listings.filter((L) => L.approved).length} accent="#84CC16" />
+              <MiniStat label="Bookings" value={bookings.length} accent="#06B6D4" />
+              <MiniStat label="Rating" value={avgRating ? `${avgRating} ★` : "—"} accent="#FACC15" />
+            </div>
+            {totalRevenue > 0 && (
+              <div className="mt-3 text-xs font-mono text-neutral-500">
+                Lifetime booking value: <span className="text-[#84CC16]">{listings[0]?.currency || "INR"} {totalRevenue.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -141,19 +171,55 @@ function VendorDetail({ data, tab, setTab }) {
 function CompanyDetail({ data, tab, setTab }) {
   const { company, members, players, bookings, events } = data;
   const isOrganiser = company.org_type === "organiser";
+  const totalSpend = bookings.reduce((acc, b) => acc + (b.total_amount || 0), 0);
   return (
     <>
       <div className="mt-4 border border-white/10 rounded-sm bg-[#141414] p-6">
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <div className={`font-mono text-[10px] uppercase ${isOrganiser ? "text-[#06B6D4]" : "text-[#84CC16]"}`}>/ {isOrganiser ? "Organiser" : "Company"}</div>
-            <h1 className="font-display text-3xl mt-1">{company.name}</h1>
-            <div className="font-mono text-xs text-neutral-500 mt-1">{company.slug || ""} · {company.industry || (isOrganiser ? "Tournament organiser" : "—")}</div>
+        <div className="grid md:grid-cols-[180px_1fr] gap-6 items-start">
+          <div className="aspect-square rounded-sm overflow-hidden bg-black/40 border border-white/10 flex items-center justify-center">
+            {company.logo_url ? (
+              <img src={company.logo_url} alt={company.name} className="w-full h-full object-contain p-4" data-testid="admin-company-logo" />
+            ) : (
+              <Users className="w-16 h-16 text-neutral-700" />
+            )}
           </div>
-        </div>
-        <div className="grid sm:grid-cols-2 gap-2 mt-4">
-          <KV label="Contact email" value={company.contact_email} icon={Mail} />
-          <KV label="City" value={company.city} icon={MapPin} />
+          <div className="min-w-0">
+            <div className="flex items-start justify-between flex-wrap gap-3">
+              <div>
+                <div className={`font-mono text-[10px] uppercase ${isOrganiser ? "text-[#06B6D4]" : "text-[#84CC16]"}`}>/ {isOrganiser ? "Organiser" : "Company"}</div>
+                <h1 className="font-display text-3xl mt-1" data-testid="admin-company-name">{company.name}</h1>
+                <div className="font-mono text-xs text-neutral-500 mt-1">{company.slug || ""} · {company.industry || (isOrganiser ? "Tournament organiser" : "—")}</div>
+              </div>
+              {company.headcount && (
+                <span className="px-3 py-1 text-[11px] font-mono uppercase rounded-sm border border-white/10 text-neutral-300">
+                  {company.headcount} people
+                </span>
+              )}
+            </div>
+            <div className="grid sm:grid-cols-2 gap-2 mt-4">
+              <KV label="Contact email" value={company.contact_email} icon={Mail} />
+              <KV label="Contact phone" value={company.contact_phone} icon={Phone} />
+              <KV label="City" value={company.city} icon={MapPin} />
+              <KV label="Website" value={company.website} icon={Trophy} />
+            </div>
+            {company.description && (
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-1.5">/ About</div>
+                <p className="text-sm text-neutral-300 whitespace-pre-wrap" data-testid="admin-company-about">{company.description}</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
+              <MiniStat label="Team" value={members.length} accent={isOrganiser ? "#06B6D4" : "#84CC16"} />
+              <MiniStat label="Players" value={players.length} accent="#84CC16" />
+              <MiniStat label="Events" value={events.length} accent="#FACC15" />
+              <MiniStat label="Bookings" value={bookings.length} accent="#06B6D4" />
+            </div>
+            {totalSpend > 0 && (
+              <div className="mt-3 text-xs font-mono text-neutral-500">
+                Lifetime spend: <span className="text-[#84CC16]">INR {totalSpend.toLocaleString()}</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
@@ -178,6 +244,15 @@ function CompanyDetail({ data, tab, setTab }) {
         {tab === "bookings" && <BookingsTable bookings={bookings} />}
       </div>
     </>
+  );
+}
+
+function MiniStat({ label, value, accent }) {
+  return (
+    <div className="bg-black/30 rounded-sm px-3 py-2 border border-white/5">
+      <div className="text-[9px] font-mono uppercase tracking-widest text-neutral-500">{label}</div>
+      <div className="font-display text-2xl mt-0.5" style={{ color: accent }}>{value}</div>
+    </div>
   );
 }
 

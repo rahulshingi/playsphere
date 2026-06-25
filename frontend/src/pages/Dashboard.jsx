@@ -9,6 +9,7 @@ import { CalendarDays, Users, Activity, Package, Plus, ChevronRight } from "luci
 import { fmtPrice } from "@/lib/currency";
 import DashboardPanel from "@/components/DashboardPanel";
 import UpcomingBookingsWidget from "@/components/UpcomingBookingsWidget";
+import CompanyAddressCard from "@/components/CompanyAddressCard";
 
 export default function Dashboard() {
   const { ready, isCompanyAdmin, companyName, user } = useAuth();
@@ -53,6 +54,10 @@ export default function Dashboard() {
 
         <div className="mt-10">
           <UpcomingBookingsWidget />
+        </div>
+
+        <div className="mt-6">
+          <CompanyAddressCard />
         </div>
 
         <div className="grid md:grid-cols-2 gap-6 mt-12">

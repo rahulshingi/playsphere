@@ -225,6 +225,12 @@ class CompanySignupBody(BaseModel):
     contact_phone: Optional[str] = ""
     logo_url: Optional[str] = ""
     otp: Optional[str] = ""  # 6-digit code from /companies/signup/request-otp
+    # Detailed address — used to auto-suggest nearby venues during event creation.
+    address_line: Optional[str] = ""
+    area: Optional[str] = ""
+    city: Optional[str] = ""
+    state: Optional[str] = ""
+    pincode: Optional[str] = ""
 
 
 class Company(BaseModel):
@@ -236,6 +242,12 @@ class Company(BaseModel):
     contact_email: Optional[str] = ""
     contact_phone: Optional[str] = ""
     owner_user_id: Optional[str] = None
+    # Detailed address (used to localise venue suggestions during event creation).
+    address_line: Optional[str] = ""
+    area: Optional[str] = ""
+    city: Optional[str] = ""
+    state: Optional[str] = ""
+    pincode: Optional[str] = ""
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -1475,7 +1487,16 @@ async def list_player_profiles(
     - city: case-insensitive city contains.
     """
     flt = {}
-    if company_id:
+    # Company HRs are scoped: they can only see player profiles linked to THEIR company.
+    # This overrides any `company_id` they may pass — prevents browsing other companies'
+    # rosters. Platform admins / organisers / players see the full directory (subject to
+    # the optional company_id query param).
+    if user.get("role") == "company_admin":
+        own_cid = user.get("company_id")
+        if not own_cid:
+            return []  # HR without a company shouldn't see any players
+        flt["company_id"] = own_cid
+    elif company_id:
         flt["company_id"] = company_id
     if q:
         flt["$or"] = [

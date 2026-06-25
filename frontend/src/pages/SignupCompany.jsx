@@ -23,6 +23,11 @@ export default function SignupCompany() {
     admin_email: "",
     admin_password: "",
     contact_phone: "",
+    address_line: "",
+    area: "",
+    city: "",
+    state: "",
+    pincode: "",
   });
   const [step, setStep] = useState("details"); // details → verify
   const [otp, setOtp] = useState("");
@@ -166,6 +171,51 @@ export default function SignupCompany() {
               />
               <p className="text-[11px] text-neutral-500 mt-1.5 flex items-center gap-1.5">
                 <ShieldCheck className="w-3 h-3 text-[#84CC16]" /> Use your official company email — Gmail, Yahoo, Outlook etc. aren&apos;t supported.
+              </p>
+            </div>
+            {/* Company address — used to surface nearby verified venues when this
+                HR creates events. Optional but encouraged. */}
+            <div>
+              <Label className="text-xs font-mono uppercase text-neutral-500">Company address (optional)</Label>
+              <Input
+                data-testid="signup-address-line"
+                value={form.address_line}
+                onChange={(e) => setForm({ ...form, address_line: e.target.value })}
+                placeholder="Building / street"
+                className="mt-2 bg-[#141414] border-white/10 text-white"
+              />
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <Input
+                  data-testid="signup-area"
+                  value={form.area}
+                  onChange={(e) => setForm({ ...form, area: e.target.value })}
+                  placeholder="Area (e.g. Kharadi)"
+                  className="bg-[#141414] border-white/10 text-white"
+                />
+                <Input
+                  data-testid="signup-city"
+                  value={form.city}
+                  onChange={(e) => setForm({ ...form, city: e.target.value })}
+                  placeholder="City (e.g. Pune)"
+                  className="bg-[#141414] border-white/10 text-white"
+                />
+                <Input
+                  data-testid="signup-state"
+                  value={form.state}
+                  onChange={(e) => setForm({ ...form, state: e.target.value })}
+                  placeholder="State"
+                  className="bg-[#141414] border-white/10 text-white"
+                />
+                <Input
+                  data-testid="signup-pincode"
+                  value={form.pincode}
+                  onChange={(e) => setForm({ ...form, pincode: e.target.value })}
+                  placeholder="Pincode"
+                  className="bg-[#141414] border-white/10 text-white"
+                />
+              </div>
+              <p className="text-[11px] text-neutral-500 mt-1.5">
+                Helps us suggest nearby verified venues when you create tournaments. You can update this later from your dashboard.
               </p>
             </div>
             <div>

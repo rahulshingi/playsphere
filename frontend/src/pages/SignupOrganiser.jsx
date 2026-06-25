@@ -21,6 +21,11 @@ export default function SignupOrganiser() {
     admin_email: "",
     admin_password: "",
     contact_phone: "",
+    address_line: "",
+    area: "",
+    city: "",
+    state: "",
+    pincode: "",
   });
   const [step, setStep] = useState("details");
   const [busy, setBusy] = useState(false);
@@ -111,6 +116,17 @@ export default function SignupOrganiser() {
             <div>
               <Label className="text-xs font-mono uppercase text-neutral-500">Password</Label>
               <Input data-testid="org-signup-password" type="password" required minLength={6} value={form.admin_password} onChange={(e) => setForm({ ...form, admin_password: e.target.value })} className="mt-2 bg-[#141414] border-white/10 text-white" />
+            </div>
+            {/* Address — fuels nearby venue suggestions when this organiser creates tournaments. */}
+            <div>
+              <Label className="text-xs font-mono uppercase text-neutral-500">Address (optional, helps surface nearby venues)</Label>
+              <Input data-testid="org-signup-address-line" value={form.address_line} onChange={(e) => setForm({ ...form, address_line: e.target.value })} placeholder="Building / street" className="mt-2 bg-[#141414] border-white/10 text-white" />
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <Input data-testid="org-signup-area" value={form.area} onChange={(e) => setForm({ ...form, area: e.target.value })} placeholder="Area (e.g. Kharadi)" className="bg-[#141414] border-white/10 text-white" />
+                <Input data-testid="org-signup-city" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="City (e.g. Pune)" className="bg-[#141414] border-white/10 text-white" />
+                <Input data-testid="org-signup-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="State" className="bg-[#141414] border-white/10 text-white" />
+                <Input data-testid="org-signup-pincode" value={form.pincode} onChange={(e) => setForm({ ...form, pincode: e.target.value })} placeholder="Pincode" className="bg-[#141414] border-white/10 text-white" />
+              </div>
             </div>
             <Button type="submit" data-testid="org-signup-request-otp" disabled={busy} className="w-full bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold h-12 rounded-sm">
               {busy ? "Sending code..." : "Send verification code"}

@@ -223,7 +223,7 @@ export default function Admin() {
         </Tabs>
       </div>
       <Footer />
-      <VenuePicker open={venuePickerOpen} onClose={() => setVenuePickerOpen(false)} onPick={(v) => setNewEvent({ ...newEvent, venue: `${v.title} · ${v.city}` })} />
+      <VenuePicker open={venuePickerOpen} onClose={() => setVenuePickerOpen(false)} sport={newEvent.sport} onPick={(v) => setNewEvent({ ...newEvent, venue: `${v.title} · ${v.city}` })} />
     </div>
   );
 }

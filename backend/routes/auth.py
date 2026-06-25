@@ -248,6 +248,11 @@ def register(api, db, deps):
             logo_url=body.logo_url or "",
             contact_email=email,
             contact_phone=body.contact_phone or "",
+            address_line=body.address_line or "",
+            area=body.area or "",
+            city=body.city or "",
+            state=body.state or "",
+            pincode=body.pincode or "",
         )
         org_doc = org.model_dump()
         org_doc["org_type"] = "organiser"  # distinguishes from corporate companies
@@ -299,6 +304,11 @@ def register(api, db, deps):
             logo_url=body.logo_url or "",
             contact_email=email,
             contact_phone=body.contact_phone or "",
+            address_line=body.address_line or "",
+            area=body.area or "",
+            city=body.city or "",
+            state=body.state or "",
+            pincode=body.pincode or "",
         )
         user_id = str(uuid.uuid4())
         company.owner_user_id = user_id

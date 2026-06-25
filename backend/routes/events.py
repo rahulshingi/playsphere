@@ -143,16 +143,48 @@ def register(api, db, deps):
         return [Team(**d) for d in docs]
 
     @api.get("/venues/suggest")
-    async def venues_suggest(city: Optional[str] = None, q: Optional[str] = None):
-        """Venue picker for event creation — approved venue listings filtered by city / name."""
+    async def venues_suggest(
+        city: Optional[str] = None,
+        q: Optional[str] = None,
+        sport: Optional[str] = None,
+        user: Optional[dict] = Depends(get_current_user_optional),
+    ):
+        """Venue picker for event creation.
+        - Returns approved + active venue listings only (ground or court).
+        - `sport` (cricket / football / badminton / …) filters to listings that include
+          that sport in their `sports` array — so a cricket event won't suggest
+          badminton courts.
+        - `q` is a free-text contains match against either title OR city — that's how
+          a user in Pune can search "kharadi" or "balewadi" and find venues whose city
+          field is "Kharadi" / "Pune" even if they only typed an area name.
+        - `city` is an explicit city contains filter, kept for the old dropdown.
+        - Results are ordered so venues in the caller's company's stored city come first,
+          giving an "things near you" feel without needing geo-coordinates.
+        """
         flt: dict = {"approved": True, "active": True, "vendor_type": {"$in": ["ground", "court"]}}
+        if sport:
+            flt["sports"] = sport
         if city:
-            flt["city"] = {"$regex": f"^{city}$", "$options": "i"}
+            flt["city"] = {"$regex": city, "$options": "i"}
         if q:
-            flt["title"] = {"$regex": q, "$options": "i"}
+            flt["$or"] = [
+                {"title": {"$regex": q, "$options": "i"}},
+                {"city": {"$regex": q, "$options": "i"}},
+            ]
         docs = await db.vendor_listings.find(
             flt, {"_id": 0, "title": 1, "city": 1, "price": 1, "currency": 1, "id": 1, "sports": 1}
-        ).limit(40).to_list(40)
+        ).limit(60).to_list(60)
+
+        # If we know the caller's company city, surface those venues first.
+        nearby_city = None
+        if user and user.get("company_id"):
+            company = await db.companies.find_one(
+                {"id": user["company_id"]}, {"_id": 0, "city": 1}
+            )
+            nearby_city = (company or {}).get("city") or None
+        if nearby_city:
+            nc = nearby_city.lower()
+            docs.sort(key=lambda d: 0 if (d.get("city") or "").lower() == nc else 1)
         return docs
 
     @api.get("/events/pending-approval", response_model=List[Event])

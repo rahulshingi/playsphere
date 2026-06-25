@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2 } from "lucide-react";
 import { SPORTS } from "@/lib/sports";
 import ImageUpload from "@/components/ImageUpload";
+import VenuePicker from "@/components/VenuePicker";
 
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
 const BLANK_EVENT = { name: "", sport: "cricket", format: "round_robin", event_type: "playsphere_organized", description: "", venue: "", banner_url: "", stream_url: "" };
@@ -21,6 +22,7 @@ const onSportChange = (current, value) => ({
 export default function EventsTab({ events, companies = [], reload, canManage }) {
   const nav = useNavigate();
   const [newEvent, setNewEvent] = useState(BLANK_EVENT);
+  const [venuePickerOpen, setVenuePickerOpen] = useState(false);
   // Build a quick lookup so each event row can show the organising company / organiser name
   // without an extra round-trip. PlatformAdmin already loads companies in the same fetch.
   const companyMap = Object.fromEntries((companies || []).map((c) => [c.id, c]));
@@ -79,12 +81,17 @@ export default function EventsTab({ events, companies = [], reload, canManage })
             <SelectItem value="single_company">Single company tournament</SelectItem>
           </SelectContent>
         </Select>
-        <Input data-testid="pa-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+        <div className="flex gap-2">
+          <Input data-testid="pa-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          <Button type="button" data-testid="pa-event-venue-pick" variant="outline" onClick={() => setVenuePickerOpen(true)} className="rounded-sm border-white/10 text-white whitespace-nowrap">Pick verified venue</Button>
+        </div>
         <ImageUpload value={newEvent.banner_url} onChange={(v) => setNewEvent({ ...newEvent, banner_url: v })} testid="pa-event-banner" placeholder="Banner image — paste URL or upload" />
         <Input data-testid="pa-event-stream" placeholder="Live stream URL (YouTube / Twitch / any)" value={newEvent.stream_url} onChange={(e) => setNewEvent({ ...newEvent, stream_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
         <Button data-testid="pa-create-event-btn" type="submit" className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Create event</Button>
         <p className="text-[10px] text-neutral-500 leading-relaxed">Once created, click <strong>Open</strong> on the event to add teams, assign captains, attach participating companies (inter-company), and add players.</p>
       </form>
+      <VenuePicker open={venuePickerOpen} onClose={() => setVenuePickerOpen(false)} sport={newEvent.sport}
+        onPick={(v) => setNewEvent({ ...newEvent, venue: `${v.title} · ${v.city}` })} />
 
       <div className="space-y-2">
         {events.length === 0 && <div className="text-neutral-500 text-sm text-center py-12 border border-dashed border-white/10 rounded-sm">No events yet.</div>}

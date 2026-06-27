@@ -3878,6 +3878,14 @@ bookings_routes.register(api, db, SimpleNamespace(
 ))
 
 
+# Vendor memberships (Phase 1 — vendor-defined, no payment yet)
+from routes import memberships as memberships_routes  # noqa: E402
+
+memberships_routes.register(api, db, SimpleNamespace(
+    get_current_user=get_current_user,
+))
+
+
 # Register router + static mount AFTER all @api.x definitions above
 app.include_router(api)
 api_router = api  # alias kept for any callers

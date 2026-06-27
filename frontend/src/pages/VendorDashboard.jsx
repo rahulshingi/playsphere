@@ -16,6 +16,7 @@ import ImageUpload from "@/components/ImageUpload";
 import DashboardPanel from "@/components/DashboardPanel";
 import VenueScheduleEditor from "@/components/VenueScheduleEditor";
 import { VendorReviewsInbox } from "@/components/Reviews";
+import VendorMembershipsPanel from "@/components/vendor/VendorMembershipsPanel";
 
 const SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
 
@@ -140,6 +141,8 @@ export default function VendorDashboard() {
             {listings.length === 0 && <div className="col-span-full text-neutral-500 text-sm">No listings yet. Click &ldquo;New listing&rdquo;.</div>}
           </div>
         </div>
+
+        <VendorMembershipsPanel listings={listings} />
 
         <div className="mt-12">
           <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Booking requests ({bookings.length})</div>

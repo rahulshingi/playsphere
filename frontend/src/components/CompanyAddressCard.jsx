@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -41,11 +41,18 @@ export default function CompanyAddressCard() {
   };
   useEffect(() => { load(); }, []);
 
+  // Memoised values must be declared before any conditional early-return so React
+  // hooks always run in the same order.
+  const draftSnap = useMemo(() => snapshot(draft || {}), [draft]);
+  const isEmpty = useMemo(
+    () => ADDRESS_FIELDS.every((f) => !((company || {})[f.key] || "").trim()),
+    [company],
+  );
+
   if (!company) return null;
 
   const upd = (k, v) => setDraft({ ...draft, [k]: v });
-  const isDirty = snapshot(draft) !== original;
-  const isEmpty = ADDRESS_FIELDS.every((f) => !(company[f.key] || "").trim());
+  const isDirty = draftSnap !== original;
 
   const save = async () => {
     setBusy(true);

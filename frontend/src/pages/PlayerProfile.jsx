@@ -107,8 +107,10 @@ export default function PlayerProfile() {
   };
 
   const cancel = () => {
-    // Revert any unsaved tweaks by parsing the stored snapshot.
-    try { setProfile(JSON.parse(original)); } catch { /* keep current */ }
+    // Revert any unsaved tweaks by parsing the stored snapshot. Failure here is
+    // benign (corrupt snapshot) — log so it's discoverable instead of swallowed silently.
+    try { setProfile(JSON.parse(original)); }
+    catch (err) { console.warn("Could not revert profile draft from snapshot:", err); }
     setEditing(false);
   };
 

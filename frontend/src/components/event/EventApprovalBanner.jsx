@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
+import DOMPurify from "dompurify";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +29,18 @@ export default function EventApprovalBanner({
     api.get("/settings").then((r) => setInstructions(r.data?.organiser_event_instructions || ""))
       .catch(() => setInstructions(""));
   }, [isPendingAck, isRejected]);
+
+  // Sanitize the admin-authored instructions HTML before injecting it. The platform admin
+  // composes these in a textarea (basic HTML allowed for bold / lists), so we DOMPurify
+  // them per-render to neutralise any <script>, on-event handlers, or malicious tags
+  // that might slip in.
+  const safeInstructions = useMemo(() => {
+    if (!instructions) return "";
+    return DOMPurify.sanitize(instructions, {
+      ALLOWED_TAGS: ["b", "strong", "i", "em", "u", "p", "br", "ul", "ol", "li", "a", "span", "div", "h3", "h4"],
+      ALLOWED_ATTR: ["href", "target", "rel", "class"],
+    });
+  }, [instructions]);
 
   const acknowledge = async () => {
     setBusy(true);
@@ -78,7 +91,7 @@ export default function EventApprovalBanner({
         </p>
         <div data-testid="approval-instructions"
           className="mt-4 bg-black/40 border border-white/10 rounded-sm p-4 text-sm text-neutral-200 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto"
-          dangerouslySetInnerHTML={{ __html: instructions || "<em class='text-neutral-500'>No instructions have been set by the platform admin yet — proceed to submit.</em>" }}
+          dangerouslySetInnerHTML={{ __html: safeInstructions || "<em class='text-neutral-500'>No instructions have been set by the platform admin yet — proceed to submit.</em>" }}
         />
         <Button data-testid="approval-acknowledge-btn" onClick={acknowledge} disabled={busy}
           className="mt-4 bg-[#FACC15] hover:bg-[#EAB308] text-black font-semibold rounded-sm">

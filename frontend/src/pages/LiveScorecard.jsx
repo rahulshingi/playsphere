@@ -439,7 +439,9 @@ function GenericBody({ fixture, teamA, teamB, sport }) {
               <tr className="text-[10px] font-mono uppercase text-neutral-500">
                 <th className="text-left py-2">Team</th>
                 {Array.from({ length: maxSets }).map((_, i) => (
-                  <th key={i} className="text-center py-2 w-14">Set {i + 1}</th>
+                  // Set scores are positional and the column count never changes
+                  // mid-render, so a stable string key prefix is sufficient + clearer.
+                  <th key={`set-${i + 1}`} className="text-center py-2 w-14">Set {i + 1}</th>
                 ))}
                 <th className="text-center py-2 w-14">Sets won</th>
               </tr>
@@ -465,7 +467,15 @@ function GenericBody({ fixture, teamA, teamB, sport }) {
   }
 
   // Football / chess / quiz / hackathon / fallback — single numeric score per side.
-  const valueKey = sport === "football" ? "goals" : sport === "hackathon" ? "score" : (a.points !== undefined ? "points" : "score");
+  // Picks the right key from the score doc for the given sport. Kept as a small helper
+  // instead of a nested ternary so the precedence is explicit and easier to extend.
+  const pickValueKey = () => {
+    if (sport === "football") return "goals";
+    if (sport === "hackathon") return "score";
+    if (a.points !== undefined) return "points";
+    return "score";
+  };
+  const valueKey = pickValueKey();
   const label = SCORE_LABEL[sport] || (valueKey.charAt(0).toUpperCase() + valueKey.slice(1));
   return (
     <ScoreSidesBox sport={sport} teamA={teamA} teamB={teamB}
@@ -485,7 +495,10 @@ function TeamSetRow({ team, sets, other, wins, winner }) {
       {sets.map((s, i) => {
         const o = other[i] ?? 0;
         return (
-          <td key={i} className={`text-center py-3 font-mono ${s > o ? "text-[#84CC16] font-semibold" : "text-neutral-400"}`}>{s}</td>
+          // Composite key ties each cell to its team + set position so React can
+          // reconcile correctly when the underlying team flips or sets are added.
+          <td key={`${team?.id || team?.name || "team"}-set-${i + 1}`}
+              className={`text-center py-3 font-mono ${s > o ? "text-[#84CC16] font-semibold" : "text-neutral-400"}`}>{s}</td>
         );
       })}
       <td className="text-center py-3 font-display text-2xl text-white">{wins}</td>

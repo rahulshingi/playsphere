@@ -187,8 +187,9 @@ def register(api, db, deps):
             flt["city"] = {"$regex": f"^{city}$", "$options": "i"}
         if sport:
             flt["sports"] = sport
-        docs = await db.vendor_listings.find(flt, {"_id": 0, "vendor_id": 0}).sort("created_at", -1).to_list(500)
+        docs = await db.vendor_listings.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
         listing_ids = [L["id"] for L in docs]
+        vendor_ids = list({L.get("vendor_id") for L in docs if L.get("vendor_id")})
         summaries = {}
         if listing_ids:
             async for s in db.reviews.aggregate([
@@ -196,11 +197,42 @@ def register(api, db, deps):
                 {"$group": {"_id": "$listing_id", "avg": {"$avg": "$rating"}, "count": {"$sum": 1}}},
             ]):
                 summaries[s["_id"]] = {"average": round(s["avg"] or 0, 2), "count": s["count"] or 0}
+
+        # Pull every active membership for the relevant vendors so we can attach a
+        # cheapest-plan summary to each listing — that's what powers the
+        # "Recommended membership" badge in the UI.
+        membership_by_listing: dict = {}
+        membership_by_vendor_open: dict = {}
+        if vendor_ids:
+            async for plan in db.membership_plans.find(
+                {"vendor_id": {"$in": vendor_ids}, "active": True, "paused": False},
+                {"_id": 0, "vendor_id": 1, "listing_ids": 1, "price": 1, "currency": 1, "plan_type": 1},
+            ):
+                p = {"price": plan["price"], "currency": plan.get("currency", "INR"), "plan_type": plan["plan_type"]}
+                if plan.get("listing_ids"):
+                    for lid in plan["listing_ids"]:
+                        cur = membership_by_listing.get(lid)
+                        if not cur or p["price"] < cur["price"]:
+                            membership_by_listing[lid] = p
+                else:
+                    # Empty listing_ids = plan covers every listing this vendor owns.
+                    cur = membership_by_vendor_open.get(plan["vendor_id"])
+                    if not cur or p["price"] < cur["price"]:
+                        membership_by_vendor_open[plan["vendor_id"]] = p
+
         for L in docs:
             s = summaries.get(L["id"], {"average": 0, "count": 0})
             L["rating_average"] = s["average"]
             L["rating_count"] = s["count"]
             L["verified"] = s["count"] >= 5 and s["average"] >= 4.0
+            specific = membership_by_listing.get(L["id"])
+            open_plan = membership_by_vendor_open.get(L.get("vendor_id"))
+            cheapest = None
+            for cand in (specific, open_plan):
+                if cand and (not cheapest or cand["price"] < cheapest["price"]):
+                    cheapest = cand
+            if cheapest:
+                L["cheapest_membership"] = cheapest
         return docs
 
     @api.get("/vendor-listings/cities")
@@ -215,9 +247,21 @@ def register(api, db, deps):
 
     @api.get("/vendor-listings/{listing_id}")
     async def get_public_listing(listing_id: str):
-        doc = await db.vendor_listings.find_one({"id": listing_id, "approved": True, "active": True}, {"_id": 0, "vendor_id": 0})
+        doc = await db.vendor_listings.find_one({"id": listing_id, "approved": True, "active": True}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Listing not available")
+        # Attach the cheapest active membership covering this listing (or vendor-wide).
+        vendor_id = doc.get("vendor_id")
+        if vendor_id:
+            cheapest = None
+            async for plan in db.membership_plans.find({
+                "vendor_id": vendor_id, "active": True, "paused": False,
+                "$or": [{"listing_ids": listing_id}, {"listing_ids": {"$size": 0}}],
+            }, {"_id": 0, "price": 1, "currency": 1, "plan_type": 1}):
+                if cheapest is None or plan["price"] < cheapest["price"]:
+                    cheapest = {"price": plan["price"], "currency": plan.get("currency", "INR"), "plan_type": plan["plan_type"]}
+            if cheapest:
+                doc["cheapest_membership"] = cheapest
         return doc
 
     # ---------- Vendor's own listings CRUD ----------

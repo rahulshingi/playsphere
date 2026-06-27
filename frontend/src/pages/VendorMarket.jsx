@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
 import { SPORTS } from "@/lib/sports";
-import { MapPin, BadgeCheck, ChevronRight, Calendar, Clock } from "lucide-react";
+import { MapPin, BadgeCheck, ChevronRight, Calendar, Clock, Sparkles } from "lucide-react";
 import VerifiedBadge from "@/components/VerifiedBadge";
 
 const VENDOR_TYPE_LABEL = {
@@ -194,6 +194,12 @@ export default function VendorMarket() {
                       {(l.rating_count ?? 0) > 0 && <VerifiedBadge listing={l} />}
                     </div>
                     <div className="text-xs text-neutral-400 mt-1 line-clamp-2">{l.description}</div>
+                    {l.cheapest_membership && (
+                      <div data-testid={`vm-memb-${l.id}`}
+                        className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-widest px-2 py-1 rounded-sm bg-[#EC4899]/15 text-[#EC4899] border border-[#EC4899]/40">
+                        <Sparkles className="w-3 h-3" /> Membership from {fmtPrice(l.cheapest_membership.price, l.cheapest_membership.currency)}
+                      </div>
+                    )}
                     <div className="flex items-end justify-between mt-3">
                       <div>
                         <div className="font-mono text-xl text-[#84CC16]">{fmtPrice(l.price, l.currency)}</div>
@@ -274,6 +280,20 @@ function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
             </div>
             <div className="text-xs font-mono text-neutral-500 uppercase mt-1">{listing.city} · {listing.sports?.join(" · ") || ""}</div>
             <p className="text-sm text-neutral-300 mt-2">{listing.description}</p>
+            {listing.cheapest_membership && (
+              <div data-testid="vm-detail-memb"
+                className="mt-3 border border-[#EC4899]/40 bg-gradient-to-r from-[#EC4899]/10 to-transparent rounded-sm p-3 flex items-center gap-3">
+                <Sparkles className="w-5 h-5 text-[#EC4899] shrink-0" />
+                <div className="text-sm">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-[#EC4899]">/ Recommended membership</div>
+                  <div className="text-neutral-200">
+                    Save vs hourly rates — memberships from
+                    <span className="text-[#EC4899] font-semibold ml-1">{fmtPrice(listing.cheapest_membership.price, listing.cheapest_membership.currency)}</span>.
+                    Ask the venue desk to sign up; online purchase coming soon.
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>

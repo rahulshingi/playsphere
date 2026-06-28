@@ -436,8 +436,22 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
   - `pages/MyMemberships.jsx` (route `/my-memberships`) — buyer's pass list with statuses, expiry counters, cancel CTA.
   - `components/vendor/VendorPurchaseRequests.jsx` — vendor's purchase inbox with Activate/Reject + Issue-manually form (mounted inside `VendorMembershipsPanel`).
   - Nav link "Memberships" added for HR + Player roles.
-- **Testing**: testing agent iteration_21 ran 18/18 backend tests + frontend code-level review with 0 bugs.
+- **Testing**: iteration_21 ran 18/18 backend tests + frontend code-level review with 0 bugs.
 - **Mocked**: Online payment is a UI stub. Both `payment_method=online` and `=offline` land as `pending_payment`. Razorpay integration is the next planned phase.
+
+## Implemented (Feb 28, 2026 — Phase 3: Apply membership at booking + renewal reminders)
+- **Booking flow now consumes memberships** — `VendorBookingRequest.apply_membership_id` + `VendorBooking.applied_membership_id`. The buyer's slot is free until `max_bookings` is reached; after that the toggle disappears and the buyer pays hourly.
+- **Validation chain on the apply path**: membership must be active, owned by the buyer, expires in the future, and either vendor-wide or scoped to the listing. Any violation → HTTP 400 with a precise reason.
+- **Usage tracking** — `db.membership_purchases.$inc.bookings_used` runs on every successful booking-with-membership.
+- **Eligibility endpoint** `GET /api/memberships/my-eligibility?listing_id=…` powers the new "Apply membership" toggle in the booking modal (`pages/VendorMarket.jsx` → `vm-apply-memb`, `vm-apply-memb-toggle`). Total flips to ₹0 when ticked.
+- **Renewal-reminder background job** — `/app/backend/routes/memberships_scheduler.py` spawns an asyncio loop on startup (default cadence: every 6 h). `_check_and_send(db, send_email)` looks up actives expiring within the next 7 days whose `renewal_reminder_sent_at` is still null, emails the buyer once via SendGrid, then stamps the timestamp for idempotency.
+- **Tested in iteration_22**: 14 new backend tests + 18 Phase 2 regression tests (32/32 pass).
+
+## Implemented (Feb 28, 2026 — Phase 4: Membership utilization dashboard)
+- New endpoint `GET /api/memberships/purchase/{id}/utilization` returns the side-by-side metrics: `sessions_used`/`sessions_allowed`/`sessions_percent` AND `days_elapsed`/`days_total`/`days_percent`/`days_remaining` + an `expired` flag. Authorised to buyer + owning vendor + platform admin (everyone else → 403).
+- New component `components/memberships/UtilizationBars.jsx` renders the two coloured progress bars (cyan = sessions, pink = days). data-testids `util-{purchase_id}`, `util-sessions-{id}`, `util-days-{id}`.
+- Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
+- **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
 ## Test Credentials
 - Platform Admin (Super): admin@kreedanation.com / admin123

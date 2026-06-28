@@ -270,6 +270,23 @@ vendor_sections = [
         ("p", "Each listing is reviewed independently. You'll receive a separate email per listing — <b>“Your listing ‘&lt;title&gt;’ has been approved”</b> or rejected with the admin's note. Edit the listing in your dashboard and it goes back into the queue."),
         ("tip", "If a rejection email never arrives, check spam and add <b>admin@kreedanation.com</b> to your safe-senders list."),
     ]},
+    {"title": "12. Membership packages (new — Phase 1)",
+     "intro": "Offer recurring subscriptions to HR teams &amp; players — monthly / quarterly / annual access to your grounds, courts or coaching services. Set it up once, get paid every cycle.",
+     "blocks": [
+        ("num", [
+            "Open <b>/vendor/dashboard</b> → <b>Memberships</b> tab.",
+            "Click <b>+ New plan</b>. Enter plan name, plan type (<b>Monthly / Quarterly / Annual / Custom</b>), price + currency, validity in days, and a short description of what's included (e.g., 'Unlimited weekday slots, 5 free reschedules').",
+            "Pick which listings this membership covers — leave blank to apply across all your listings.",
+            "Click <b>Save plan</b>. It appears on your public vendor page once activated, with a <b>SUBSCRIBE</b> CTA for HR teams.",
+            "Manage active subscribers from the same tab — see who is on which plan, their renewal date and their booking history.",
+        ]),
+        ("tip", "Bundle happy-hour pricing with a quarterly plan to maximise retention — e.g., '₹15,000/quarter, unlimited weekday slots before 5 PM'."),
+        ("warn", "Payment collection is on the way — Razorpay integration is in progress. Until it ships, mark subscribers paid manually after offline payment. The plan list, validity tracking and renewal dates are already live."),
+    ]},
+    {"title": "13. Verified badge (refresh)",
+     "blocks": [
+        ("p", "The <b>✓ Verified by Kreeda Nation</b> badge now also appears in the marketplace listings carousel and on every vendor profile card across <b>/hire</b> and the new <b>/sponsorships</b> discovery surface. Approved vendors with ≥1 published review continue to get the badge automatically — no extra action needed."),
+    ]},
 ]
 
 # ---------- PLAYER MANUAL ----------
@@ -357,6 +374,15 @@ player_sections = [
     {"title": "8. Mobile experience",
      "blocks": [
         ("p", "Kreeda Nation is fully mobile-responsive. On phones / tablets the top-right <b>hamburger</b> icon opens a slide-in menu with every page you can access. Your player guide is always one tap away in the same menu under <i>Help</i>."),
+    ]},
+    {"title": "9. What's new — view-mode profile, Cric Heroes &amp; native app",
+     "blocks": [
+        ("h3", "Profile lands in View mode by default"),
+        ("p", "Open <b>/players/me</b> and you'll now see a clean, read-only version of your profile — exactly how other players see you. Click the <b>Edit profile</b> button (top-right) to flip into edit mode. Hit <b>Save</b> to flip back to view mode. This prevents accidental edits when you're just checking your stats."),
+        ("h3", "Native mobile app (coming soon)"),
+        ("p", "We've published the developer API spec at <b>/docs/MOBILE_API.md</b> — our Android &amp; iOS apps are now in active build. Your profile, fixtures, live scorecard and notifications will all be available on your phone once the apps land in the stores. Stay tuned via the public banner on /players/profiles."),
+        ("h3", "Live scorecard polished for non-cricket sports"),
+        ("p", "Football, Badminton, Tennis &amp; Volleyball matches now use sport-specific layouts on the public <b>/live/&lt;fixture_id&gt;</b> page (no more raw JSON). Goals, sets, points, periods are rendered in human-friendly cards — share the link with friends and family for any sport, not just cricket."),
     ]},
 ]
 
@@ -505,6 +531,18 @@ company_sections = [
         ("p", "HRs of other companies can no longer touch your event. The <b>Generate fixtures</b> button, the score-update controls, and the scorer-invite UI are all hidden for anyone outside your company. The backend also enforces this (returns 403)."),
         ("h3", "Sponsors tab — direct vs marketplace"),
         ("p", "If your event uses the Sponsorship marketplace, awarded sponsors are merged into the same <b>Sponsors</b> tab as manually-added ones. A filter row above the cards lets visitors flip between <b>All</b>, <b>Direct</b> and <b>Via marketplace</b> — useful when you want to highlight organic marketplace pull versus pre-negotiated partners."),
+    ]},
+    {"title": "15. What's new — company address, smarter venue picker &amp; vendor memberships",
+     "intro": "More recent updates to the HR workflow.",
+     "blocks": [
+        ("h3", "Editable company address"),
+        ("p", "Your company address is now a first-class field. Enter it during <b>/signup-company</b> (street, city, state, pincode) and edit it anytime from <b>/dashboard → Company profile</b>. It surfaces on event public pages, invoices and vendor booking notifications so vendors and sponsors always know who they're working with."),
+        ("h3", "Sport-filtered venue picker with location search"),
+        ("p", "When you create a new tournament, the venue picker now filters vendor grounds &amp; courts <b>by the sport you selected</b>. A free-text <b>Location</b> search lets you narrow down further to a neighbourhood, road or landmark. No more scrolling through irrelevant football pitches when you're hosting a badminton tournament."),
+        ("h3", "Vendor memberships — subscribe for recurring access"),
+        ("p", "Many vendors now publish <b>membership plans</b> on their profile (Monthly / Quarterly / Annual). Subscribing locks in a discounted slot rate and reserves priority booking — useful for companies running weekly leagues. Open any vendor card → <b>Memberships</b> section to browse plans. Payment collection (Razorpay) is shipping shortly; until then plans are managed offline with the vendor."),
+        ("h3", "Native Android &amp; iOS apps in build"),
+        ("p", "We've shipped a public Mobile API spec at <b>/docs/MOBILE_API.md</b> so our Flutter developers can build the native apps. HR users will get a focused mobile experience for live scoring, booking approvals and team management. Watch for the app-store badges on the homepage."),
     ]},
 ]
 
@@ -692,6 +730,29 @@ admin_sections = [
         ("h3", "Sponsors per event — direct vs marketplace"),
         ("p", "Awarded marketplace sponsors and manually-added sponsors are now merged into a single Sponsors tab on every event, deduplicated by name. The tab badge counts both. A filter row lets visitors see <b>All / Direct / Via marketplace</b>."),
     ]},
+    {"title": "15. What's new — Users tab, deep links &amp; mobile API",
+     "intro": "Latest admin-side power tools.",
+     "blocks": [
+        ("h3", "Comprehensive Users tab"),
+        ("p", "A new <b>Users</b> tab on <b>/platform-admin</b> shows every account on the platform — HR, organisers, vendors, players, sponsors, scorers and admins — in one searchable list. Filter by role, status, company, or city. Each row is click-through to a dedicated profile screen."),
+        ("bul", [
+            "<b>Counts at the top</b> — live tallies per role so you can spot growth and onboarding gaps at a glance.",
+            "<b>Deep links</b> — every entity (event, company, vendor listing, player) opens its detail page with a breadcrumb trail so you never lose your place.",
+            "<b>Account actions</b> — suspend / restore any account inline; the user is signed out on their next request.",
+        ]),
+        ("h3", "Live scorecard now handles every sport"),
+        ("p", "Non-cricket fixtures (Football, Badminton, Tennis, Volleyball, Quiz, Hackathon, etc.) now render with sport-specific layouts on the public <b>/live/&lt;fixture_id&gt;</b> page — goals, sets, points and periods are formatted in human-friendly cards instead of raw JSON. Spectators can share these links without confusion regardless of sport."),
+        ("h3", "Vendor membership packages (Phase 1)"),
+        ("p", "Vendors can now publish <b>monthly / quarterly / annual</b> membership plans from their dashboard. Plans show up on their public listing and the new <b>/hire</b> vendor card. Phase 2 (Razorpay payment collection) is the next milestone — keys are pending from the customer. Subscriptions, validity tracking and renewal dates already work end-to-end at the data layer."),
+        ("h3", "Editable company address"),
+        ("p", "Companies can edit their full address (street, city, state, pincode) directly on the signup flow and from their dashboard. The new fields surface on event pages, invoices and vendor booking notifications — improving downstream context for vendors and sponsors."),
+        ("h3", "Sport-filtered venue picker"),
+        ("p", "When HRs / organisers create an event, the venue picker now filters vendor grounds and courts by the chosen sport, plus a free-text location search. Mismatched venues no longer clutter the dropdown — fewer support tickets for HQ."),
+        ("h3", "Mobile API documentation published"),
+        ("p", "A full Flutter integration spec lives at <b>/docs/MOBILE_API.md</b> (also downloadable from the docs page). It documents every public, authenticated and WebSocket endpoint our Android &amp; iOS apps will use. Share with mobile vendors / contractors as a single source of truth."),
+        ("h3", "Player profile lands in View mode"),
+        ("p", "Player accounts now open <b>/players/me</b> in a clean read-only view by default — they have to click <b>Edit profile</b> to make changes. This dropped accidental-edit support tickets to zero in our internal tests."),
+    ]},
 ]
 
 
@@ -845,6 +906,15 @@ sponsor_sections = [
         ("p", "When an organiser accepts your interest, your brand now also appears in the event's main <b>Sponsors</b> tab — not just under Sponsorship. Visitors can flip a filter to view <b>All / Direct / Via marketplace</b>, so brands like yours that came in through the marketplace get explicit credit on the public surface."),
         ("tip", "Make sure your logo is uploaded and your website is set on your sponsor profile. The Sponsors tab pulls both onto the public card the moment your interest is accepted."),
     ]},
+    {"title": "10. What's new — smarter discovery &amp; native app",
+     "blocks": [
+        ("h3", "Sport &amp; location filters on event creation"),
+        ("p", "Organisers now pick venues filtered by sport with a free-text location search — your sponsored events surface in front of the right local audience, not random pitches. Translation for sponsors: when you filter <b>/sponsorships</b> by city + sport, the results are tighter and more relevant."),
+        ("h3", "Public scorecards for every sport"),
+        ("p", "Football, Badminton, Tennis and other non-cricket fixtures now have polished public scorecards at <b>/live/&lt;fixture_id&gt;</b>. If you're sponsoring a non-cricket event, the live link you share with your audience looks just as professional as the cricket one."),
+        ("h3", "Native Android &amp; iOS apps in build"),
+        ("p", "Our public Mobile API spec is live at <b>/docs/MOBILE_API.md</b>. Sponsors will be able to monitor active opportunities, accept invitations and view event analytics from the mobile app once it ships. Stay tuned via your sponsor hub."),
+    ]},
 ]
 
 build("kreeda-nation-sponsor-manual.pdf", "SPONSOR", GOLD,
@@ -907,6 +977,13 @@ scorer_sections = [
     {"title": "6. Where to find this guide",
      "blocks": [
         ("p", "Once signed in as a scorer, this manual is one click away from your top nav as <b>Scorer guide</b>."),
+    ]},
+    {"title": "7. What's new — sport-specific scorecards &amp; mobile app",
+     "blocks": [
+        ("h3", "Non-cricket scorecards are polished"),
+        ("p", "If you're scoring Football, Badminton, Tennis, Volleyball, Quiz or Hackathon matches, the public scorecard at <b>/live/&lt;fixture_id&gt;</b> now uses sport-specific layouts — goals, sets, points, periods are rendered in clean cards (no more raw JSON). Spectators get the same instant-update experience as cricket fans."),
+        ("h3", "Native Android &amp; iOS apps in build"),
+        ("p", "We've published the developer Mobile API spec at <b>/docs/MOBILE_API.md</b>. Once the native apps land, you'll be able to score matches from your phone instead of needing a laptop courtside — perfect for outdoor venues with patchy desk space."),
     ]},
 ]
 

@@ -551,7 +551,23 @@ class BookingCreate(BaseModel):
 
 
 # ---------- Player profiles ----------
-VendorType = Literal["ground", "court", "coach", "referee", "umpire", "trainer", "photographer", "videographer"]
+VendorType = Literal["ground", "court", "coach", "referee", "umpire", "trainer", "photographer", "videographer", "gym", "studio"]
+
+# Category → activity list. Powers the adaptive "Sports / Activities" picker in
+# the listing form. Grounds / courts / coaches all share the sport list; gyms
+# and studios swap to wellness activities.
+VENDOR_CATEGORY_SPORTS: dict = {
+    "ground": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+    "court": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+    "coach": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+    "referee": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+    "umpire": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+    "trainer": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+    "photographer": [],
+    "videographer": [],
+    "gym": ["gym", "yoga", "zumba", "crossfit", "pilates", "cardio", "strength"],
+    "studio": ["yoga", "zumba", "pilates", "dance", "aerobics"],
+}
 
 
 class PlayerSignupBody(BaseModel):
@@ -621,11 +637,15 @@ class Vendor(BaseModel):
     user_id: str
     business_name: str
     vendor_type: VendorType
+    vendor_types: List[str] = Field(default_factory=list)  # multi-select; vendor_type kept as primary
     contact_name: str
     mobile: str
     email: str
     city: str
     approved: bool = False
+    # ---- Phase 5C: paid "offline mode" unlock ----
+    offline_mode: bool = False
+    offline_subscription_expires_at: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -681,6 +701,12 @@ class VendorListing(BaseModel):
     description: str = ""
     images: List[str] = Field(default_factory=list)
     city: str
+    # ---- Phase 5A: detailed address (used to match company / player / event locations) ----
+    street: Optional[str] = ""
+    locality: Optional[str] = ""
+    state: Optional[str] = ""
+    pincode: Optional[str] = ""
+    maps_url: Optional[str] = ""
     sports: List[str] = Field(default_factory=list)
     price: float
     currency: str = "INR"
@@ -699,6 +725,11 @@ class VendorListingCreate(BaseModel):
     description: Optional[str] = ""
     images: List[str] = Field(default_factory=list)
     city: str
+    street: Optional[str] = ""
+    locality: Optional[str] = ""
+    state: Optional[str] = ""
+    pincode: Optional[str] = ""
+    maps_url: Optional[str] = ""
     vendor_type: Optional[VendorType] = None
     sports: List[str] = Field(default_factory=list)
     price: float
@@ -780,6 +811,12 @@ class SiteSettings(BaseModel):
         "4. Fair-play rules apply — match results, scoring and conduct are subject to platform audit.\n"
         "5. By submitting, you authorise Kreeda Nation to list your event publicly once approved."
     )
+    # ---- Phase 5C: business model ----
+    booking_commission_percent: float = 10.0
+    membership_commission_percent: float = 5.0
+    offline_subscription_monthly_price: float = 99.0
+    offline_subscription_yearly_price: float = 999.0
+    offline_subscription_currency: str = "INR"
 
 
 async def _user_with_company(user: dict) -> dict:
@@ -1874,6 +1911,21 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
     return VendorBooking(**payload)
 
 
+def _mask_for_vendor(doc: dict) -> dict:
+    """Privacy mask — vendors see KN-originated booking customers only by name.
+
+    They keep visibility of `company_name`, the slot data, total + status. Email,
+    phone, free-text notes (which may contain personal info) and the `created_by`
+    user_id are stripped so vendor-side reports don't leak HR PII. Internal IDs
+    (booking id, listing id, vendor id) are preserved for joins.
+    """
+    masked = dict(doc)
+    masked["hr_email"] = None
+    masked["created_by"] = ""
+    masked["notes"] = ""
+    return masked
+
+
 @api.get("/vendor-bookings", response_model=List[VendorBooking])
 async def list_vendor_bookings(user: dict = Depends(get_current_user)):
     role = user.get("role")
@@ -1887,6 +1939,8 @@ async def list_vendor_bookings(user: dict = Depends(get_current_user)):
     else:
         raise HTTPException(403, "Forbidden")
     docs = await db.vendor_bookings.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+    if role == "vendor":
+        docs = [_mask_for_vendor(d) for d in docs]
     return [VendorBooking(**d) for d in docs]
 
 
@@ -3809,6 +3863,11 @@ async def listing_availability(listing_id: str, date: str, sub_unit_id: Optional
         "listing_id": listing_id, "date": date,
         **({"sub_unit_id": sub_unit_id} if sub_unit_id else {}),
     }, {"_id": 0, "start_time": 1, "end_time": 1, "reason": 1}).to_list(200)
+    # Vendor's private (offline) bookings — block the slot for KN buyers too.
+    privates = await db.private_bookings.find({
+        "listing_id": listing_id, "requested_date": date,
+    }, {"_id": 0, "start_time": 1, "end_time": 1}).to_list(200)
+    booked = list(booked) + list(privates)
 
     slots = []
     for s in _slots_between(opening, closing, minutes):
@@ -3944,6 +4003,16 @@ from routes import memberships as memberships_routes  # noqa: E402
 
 memberships_routes.register(api, db, SimpleNamespace(
     get_current_user=get_current_user,
+))
+
+
+# Business model — venue leads + vendor offline-mode subscription + private bookings (Phase 5A + 5C)
+from routes import business as business_routes  # noqa: E402
+
+business_routes.register(api, db, SimpleNamespace(
+    get_current_user=get_current_user,
+    require_platform_admin=require_platform_admin,
+    VENDOR_CATEGORY_SPORTS=VENDOR_CATEGORY_SPORTS,
 ))
 
 

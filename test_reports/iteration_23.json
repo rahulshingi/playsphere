@@ -1,0 +1,61 @@
+{
+  "summary": "Iteration 23 — Phase 5A + 5C backend testing. New suite /app/backend/tests/test_phase5_business.py: 14/19 PASS, 5 FAIL traceable to 3 distinct backend bugs (vendor_types not persisted on signup, PrivateBooking constructor TypeError, settings price override never read). Phase 2 + Phase 3+4 regression — 34/34 PASS (no regression). Frontend code-level: /vendor/signup correctly renders vendor-signup-types multi-select chip grid with required data-testids (gym, studio, ground, etc.) confirmed via live screenshot.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/vendors/signup",
+        "issue": "vendor_types from request body is silently dropped — VendorSignupBody only declares `vendor_type` (singular), and routes/vendors.py vendor_signup() constructs Vendor(...) without passing vendor_types. Result: vendor_types is persisted as [] regardless of frontend payload. UI sends both fields correctly. Fix: add `vendor_types: List[str] = []` to VendorSignupBody and pass it through to Vendor(...) — and if non-empty, also set vendor_type = vendor_types[0] for primary.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "POST /api/vendor/private-bookings",
+        "issue": "Returns 500 — 'routes.business.PrivateBooking() got multiple values for keyword argument hours'. business.py L291-297 spreads **body.model_dump() AND explicitly passes hours=, amount=, currency= — duplicate kwargs. Fix: either pop those from the dict before spreading or build a sanitized dict.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "POST /api/offline-subscriptions/request (price override)",
+        "issue": "PATCH /api/settings stores under {id: 'site'} (settings.py L28) but business.py _site_settings_doc() reads with {_id: 'site'} (L185). Override never applies → always falls back to hardcoded 99/999 defaults. Fix: change find_one to {'id': 'site'}.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase5_business.py",
+    "/app/test_reports/pytest/iter23_phase5.xml",
+    "/app/test_reports/pytest/iter23_regression.xml"
+  ],
+  "action_items": [
+    "FIX server.py L623 VendorSignupBody: add `vendor_types: List[str] = Field(default_factory=list)`. Then in routes/vendors.py vendor_signup(): pass vendor_types=body.vendor_types or [body.vendor_type] into Vendor(...). Also enforce server-side guard: if len(vendor_types) == 0 → 400 'Pick at least one vendor type'.",
+    "FIX routes/business.py L291-297 create_private_booking: replace `PrivateBooking(vendor_id=..., **body.model_dump(), hours=body.hours or 1, ...)` with a body.model_dump() dict where hours/amount/currency are normalized first (e.g. `data = body.model_dump(); data['hours'] = data.get('hours') or 1; ...; PrivateBooking(vendor_id=vendor['id'], **data)`).",
+    "FIX routes/business.py L185 _site_settings_doc: change `db.settings.find_one({'_id': 'site'})` to `db.settings.find_one({'id': 'site'})` so the offline_subscription_*_price overrides actually apply. (settings.py writes with id, not _id.)",
+    "After the 3 fixes above, re-run pytest /app/backend/tests/test_phase5_business.py — expect 19/19 PASS.",
+    "Frontend test (manual or Playwright follow-up) — vendor dashboard Activities chip swap on listing-type change (gym → wellness chips, studio → yoga/zumba/pilates/dance/aerobics, grounds → cricket/football). Backend categories endpoint confirmed correct."
+  ],
+  "critical_code_review_comments": [
+    "business.py — VenueLead and PrivateBooking are stored without indexes. `private_bookings` will be queried per-availability-call by {listing_id, requested_date}; add a compound index (listing_id, requested_date) before scale.",
+    "business.py _ensure_offline_mode compares ISO date strings with `<` — works because they're all in the same UTC ISO8601 format, but a `datetime.fromisoformat()` parse is more robust if a legacy non-Z record ever leaks in.",
+    "server.py _mask_for_vendor — sets `created_by` to '' but the Pydantic VendorBooking model may require non-empty; tests pass currently because the model accepts ''. If created_by is later typed `Optional[str]`, change to None for clarity.",
+    "settings.py PATCH /settings accepts an unvalidated `dict`. Anyone with platform_admin role can write arbitrary keys (including typos). Consider validating keys against the SiteSettings field set before $set.",
+    "VendorSignupBody only types vendor_type as a single Literal — when multi-types is added, also validate each entry of vendor_types against the same VendorType Literal to prevent typos sneaking through.",
+    "Availability endpoint at server.py L3870 marks private-booked slots with status='booked'. The PRD wording says 'unavailable' — semantically fine but the frontend must treat 'booked' as locked for KN buyers (it already does in current code, but worth a comment)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase5_business.py (NEW — 19 tests across 7 classes)"
+  ],
+  "success_rate": {
+    "backend": "73.7% Phase 5 (14/19 passing). 3 distinct backend bugs cause the 5 failures. Phase 2 + Phase 3+4 regression: 100% (34/34).",
+    "frontend": "Not exercised end-to-end. Code/UI level: VendorSignup multi-select chip grid renders with all required data-testids — confirmed live."
+  },
+  "test_credentials": "Platform admin admin@kreedanation.com / admin123. All other accounts (3+ vendors, 1 HR, 1 player) created per-run via OTP-from-DB pattern; all rows prefixed P5_/p5_ and cleaned up at session teardown.",
+  "seed_data_creation": "Per-run vendor signups (P5_VMain, P5_VSub, P5_VPriceOverride, P5_VReject), HR signup (P5_AcmeHR), player signup (PLAYER_EMAIL), 1-2 listings, 1 venue lead, 4 offline subs, 1 private booking, 1 HR vendor-booking. All cleaned up by autouse session fixture.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent applies the 3 fixes (VendorSignupBody.vendor_types, PrivateBooking kwargs dedup, settings _id→id), simply re-run `pytest /app/backend/tests/test_phase5_business.py -v --junitxml=...` — should return 19/19. The test file uses the same OTP-from-DB helper pattern as test_memberships_phase3_4.py (see _get_otp + collections vendor_signup_otps / company_signup_otps / player_signup_otps). Note: /api/players/register (NOT /players/signup) is the player signup endpoint — the test was corrected accordingly. Playwright UI coverage for the adaptive Activities chip swap (gym/studio vs ground) and the OfflineModeCard / PrivateBookingsPanel still pending — recommend a follow-up Playwright pass once the 3 backend fixes land.",
+  "rca of the issue": "(1) vendor_types bug: VendorSignupBody schema misses the field even though the Vendor model and the frontend both have it — classic 'forgotten DTO update' when extending a multi-step form. Reproduce: POST /api/vendors/signup with `vendor_types:['gym','studio']` → GET /api/vendors/me shows vendor_types=[]. (2) PrivateBooking 500: `**body.model_dump()` already contains hours/amount/currency, and then they're re-passed explicitly — Python's `__init__` raises TypeError on duplicate kwargs. Reproduce: hit /api/vendor/private-bookings with any valid body once vendor.offline_mode=true → 500. (3) Settings override: settings.py persists with key 'id' but business.py reads with key '_id' — silent no-match → fallback to 99/999. Reproduce: PATCH /api/settings {offline_subscription_monthly_price:199} → POST /api/offline-subscriptions/request {plan_type:'monthly'} returns amount=99."
+}

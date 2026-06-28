@@ -17,12 +17,27 @@ import DashboardPanel from "@/components/DashboardPanel";
 import VenueScheduleEditor from "@/components/VenueScheduleEditor";
 import { VendorReviewsInbox } from "@/components/Reviews";
 import VendorMembershipsPanel from "@/components/vendor/VendorMembershipsPanel";
+import OfflineModeCard from "@/components/vendor/OfflineModeCard";
+import PrivateBookingsPanel from "@/components/vendor/PrivateBookingsPanel";
 
 const SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
+
+const ACTIVITY_BY_TYPE = {
+  ground: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+  court: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+  coach: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+  referee: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+  umpire: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+  trainer: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+  gym: ["gym", "yoga", "zumba", "crossfit", "pilates", "cardio", "strength"],
+  studio: ["yoga", "zumba", "pilates", "dance", "aerobics"],
+};
 
 const LISTING_TYPES = [
   { v: "ground", l: "Cricket / Football Ground" },
   { v: "court", l: "Badminton / Tennis / Basketball Court" },
+  { v: "gym", l: "Gym" },
+  { v: "studio", l: "Yoga / Dance Studio" },
   { v: "coach", l: "Coach" },
   { v: "referee", l: "Referee" },
   { v: "umpire", l: "Umpire" },
@@ -31,17 +46,19 @@ const LISTING_TYPES = [
   { v: "videographer", l: "Videographer" },
 ];
 
-const NEEDS_SPORTS = new Set(["ground", "court", "coach", "referee", "umpire", "trainer"]);
-const NEEDS_CAPACITY = new Set(["ground", "court"]);
+const NEEDS_SPORTS = new Set(["ground", "court", "coach", "referee", "umpire", "trainer", "gym", "studio"]);
+const NEEDS_CAPACITY = new Set(["ground", "court", "gym", "studio"]);
 const LISTING_TITLE_LABEL = {
   ground: "Venue name", court: "Court / venue name",
+  gym: "Gym name", studio: "Studio name",
   coach: "Coach name & specialty", referee: "Referee profile title",
   umpire: "Umpire profile title", trainer: "Trainer profile title",
   photographer: "Photography package name", videographer: "Videography package name",
 };
 const PRICE_UNIT_HINT = {
-  ground: "per hour", court: "per hour", coach: "per session",
-  referee: "per match", umpire: "per match", trainer: "per session",
+  ground: "per hour", court: "per hour",
+  gym: "per month", studio: "per session",
+  coach: "per session", referee: "per match", umpire: "per match", trainer: "per session",
   photographer: "per event", videographer: "per event",
 };
 
@@ -181,6 +198,11 @@ export default function VendorDashboard() {
 
       <VendorReviewsInbox />
 
+      <div className="max-w-7xl mx-auto px-6">
+        <OfflineModeCard vendor={vendor} onChange={load} />
+        <PrivateBookingsPanel vendor={vendor} listings={listings} />
+      </div>
+
       <Footer />
     </div>
   );
@@ -228,6 +250,26 @@ function ListingEditor({ listing, setListing, onSave, onClose }) {
             <Label className="text-xs font-mono uppercase text-neutral-500">City *</Label>
             <Input data-testid="vl-city" value={listing.city} onChange={(e) => upd({ city: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
           </div>
+          <div>
+            <Label className="text-xs font-mono uppercase text-neutral-500">Locality / area</Label>
+            <Input data-testid="vl-locality" value={listing.locality || ""} onChange={(e) => upd({ locality: e.target.value })} placeholder="e.g., Whitefield" className="mt-2 bg-black/40 border-white/10 text-white" />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-xs font-mono uppercase text-neutral-500">Street / building</Label>
+            <Input data-testid="vl-street" value={listing.street || ""} onChange={(e) => upd({ street: e.target.value })} placeholder="House / building / street" className="mt-2 bg-black/40 border-white/10 text-white" />
+          </div>
+          <div>
+            <Label className="text-xs font-mono uppercase text-neutral-500">State</Label>
+            <Input data-testid="vl-state" value={listing.state || ""} onChange={(e) => upd({ state: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
+          </div>
+          <div>
+            <Label className="text-xs font-mono uppercase text-neutral-500">Pincode</Label>
+            <Input data-testid="vl-pincode" value={listing.pincode || ""} onChange={(e) => upd({ pincode: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
+          </div>
+          <div className="col-span-2">
+            <Label className="text-xs font-mono uppercase text-neutral-500">Google Maps URL (optional)</Label>
+            <Input data-testid="vl-maps" value={listing.maps_url || ""} onChange={(e) => upd({ maps_url: e.target.value })} placeholder="https://maps.google.com/..." className="mt-2 bg-black/40 border-white/10 text-white" />
+          </div>
           {NEEDS_CAPACITY.has(t) && (
             <div>
               <Label className="text-xs font-mono uppercase text-neutral-500">Capacity / spectators</Label>
@@ -255,9 +297,9 @@ function ListingEditor({ listing, setListing, onSave, onClose }) {
 
         {NEEDS_SPORTS.has(t) && (
           <div>
-            <Label className="text-xs font-mono uppercase text-neutral-500">{t === "ground" || t === "court" ? "Suitable sports" : "Specialises in"}</Label>
+            <Label className="text-xs font-mono uppercase text-neutral-500">{t === "ground" || t === "court" ? "Suitable sports" : (t === "gym" || t === "studio") ? "Activities offered" : "Specialises in"}</Label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {SPORTS.map((s) => (
+              {(ACTIVITY_BY_TYPE[t] || SPORTS).map((s) => (
                 <button key={s} type="button" onClick={() => toggleSport(s)} data-testid={`vl-sport-${s}`}
                   className={`px-3 py-1.5 text-xs font-mono uppercase rounded-sm border ${listing.sports?.includes(s) ? "bg-[#84CC16] text-black border-[#84CC16]" : "border-white/10 text-neutral-400"}`}>
                   {s}

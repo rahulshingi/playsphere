@@ -412,6 +412,33 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
   - `components/VenueScheduleEditor.jsx` (vendor block-dates form — `date` + `start_time` + `end_time`).
 - Backend defence-in-depth: new `_reject_past_slot()` helper in `server.py` called from `POST /api/vendor-bookings`, `POST /api/vendor-bookings/{id}/reschedule`, and `POST /api/vendor-listings/{id}/blocks`. Returns 400 if `requested_date + start_time < utcnow - 1h`. Validated via inline test harness (5/5 pass).
 
+## Implemented (Feb 28, 2026 — Phase 1: Visible Calendar Widget)
+- New reusable `DatePicker` component at `/app/frontend/src/components/ui/DatePicker.jsx` — shadcn `Calendar` wrapped in a `Popover`. Month grid, past dates greyed, optional `blockedDates` prop for vendor-blocked days.
+- Replaced every browser-native `<input type="date">` in booking flows with `DatePicker`:
+  - `pages/VendorMarket.jsx` (HR booking modal).
+  - `components/VendorBookings.jsx` (HR reschedule form).
+  - `components/VenueScheduleEditor.jsx` (vendor block-dates form).
+- Testing agent (iteration_21) verified the DatePicker is used in all 3 surfaces and 0 native date inputs remain.
+
+## Implemented (Feb 28, 2026 — Phase 2: Membership Purchase Flow)
+- **New buyer endpoints** in `/app/backend/routes/memberships.py`:
+  - `POST /api/memberships/purchase` — HR/Player/Organiser request to buy. Online payments are still queued as `pending_payment` (Razorpay stub). Duplicate active/pending purchases blocked (400).
+  - `GET /api/memberships/my-purchases` — buyer's purchase history.
+  - `POST /api/memberships/my-purchases/{id}/cancel` — buyer cancels their pending request.
+- **New vendor endpoints**:
+  - `GET /api/memberships/mine/purchases?status=` — vendor's purchase inbox.
+  - `POST /api/memberships/mine/purchases/{id}/activate` — confirms offline payment, sets `status=active`, `starts_at`, `expires_at`.
+  - `POST /api/memberships/mine/purchases/{id}/reject` — declines a pending request with reason.
+  - `POST /api/memberships/mine/issue` — vendor manually issues a membership to an existing user (by email) for walk-in customers. Returns 404 if email not registered.
+- **New frontend surfaces**:
+  - `components/memberships/MembershipPurchaseModal.jsx` — two-CTA dialog (online disabled + offline active).
+  - `components/memberships/PublicMembershipsList.jsx` — plan cards with Buy button. Mounted inside the VendorMarket booking modal.
+  - `pages/MyMemberships.jsx` (route `/my-memberships`) — buyer's pass list with statuses, expiry counters, cancel CTA.
+  - `components/vendor/VendorPurchaseRequests.jsx` — vendor's purchase inbox with Activate/Reject + Issue-manually form (mounted inside `VendorMembershipsPanel`).
+  - Nav link "Memberships" added for HR + Player roles.
+- **Testing**: testing agent iteration_21 ran 18/18 backend tests + frontend code-level review with 0 bugs.
+- **Mocked**: Online payment is a UI stub. Both `payment_method=online` and `=offline` land as `pending_payment`. Razorpay integration is the next planned phase.
+
 ## Test Credentials
 - Platform Admin (Super): admin@kreedanation.com / admin123
 - Company HR: hr@acme.com / hr123

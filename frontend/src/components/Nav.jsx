@@ -100,19 +100,19 @@ export default function Nav() {
       data-testid="site-nav"
       className="sticky top-0 z-50 w-full backdrop-blur-xl bg-black/70 border-b border-white/10"
     >
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
+      <div className="mx-auto max-w-7xl px-4 sm:px-6 h-20 flex items-center justify-between gap-3">
         <Link to="/" data-testid="nav-logo" className="flex items-center gap-3 shrink-0">
           <img src={LOGO_URL} alt="Kreeda Nation" className="w-11 h-11 object-contain" />
-          <div className="leading-none hidden lg:block">
-            <div data-testid="brand-kreeda" className="font-brand font-extrabold text-2xl text-white tracking-[0.04em] uppercase">
+          <div className="leading-none hidden lg:flex flex-col items-center">
+            <div data-testid="brand-kreeda" className="font-logo text-[34px] text-white uppercase leading-[0.9]">
               KREEDA
             </div>
-            <div data-testid="brand-nation" className="mt-1 flex items-center gap-1.5 justify-start">
-              <span className="h-0.5 w-3 bg-[#22C55E] rounded-full" aria-hidden="true" />
-              <span className="font-brand text-[11px] tracking-[0.32em] text-[#22C55E] uppercase">NATION</span>
-              <span className="h-0.5 w-3 bg-[#22C55E] rounded-full" aria-hidden="true" />
+            <div data-testid="brand-nation" className="-mt-px flex items-center gap-1.5 justify-center">
+              <span className="h-[2px] w-3 bg-[#22C55E] rounded-full" aria-hidden="true" />
+              <span className="font-logo text-[14px] tracking-[0.32em] text-[#22C55E] uppercase leading-none">NATION</span>
+              <span className="h-[2px] w-3 bg-[#22C55E] rounded-full" aria-hidden="true" />
             </div>
-            <div className="text-[10px] font-mono uppercase tracking-widest mt-1">
+            <div className="text-[10px] font-mono uppercase tracking-widest mt-1.5">
               <span className="text-[#EC4899]">compete</span>
               <span className="text-neutral-500"> · </span>
               <span className="text-[#84CC16]">connect</span>
@@ -120,13 +120,13 @@ export default function Nav() {
               <span className="text-[#06B6D4]">grow</span>
             </div>
           </div>
-          <div className="leading-none block lg:hidden">
-            <div className="font-brand font-extrabold text-base sm:text-lg text-white tracking-[0.04em] uppercase">
+          <div className="leading-none flex lg:hidden flex-col items-center">
+            <div className="font-logo text-xl sm:text-2xl text-white uppercase leading-[0.9]">
               KREEDA
             </div>
-            <div className="mt-0.5 flex items-center gap-1">
+            <div className="-mt-px flex items-center gap-1 justify-center">
               <span className="h-px w-2 bg-[#22C55E] rounded-full" aria-hidden="true" />
-              <span className="font-brand text-[9px] tracking-[0.3em] text-[#22C55E] uppercase">NATION</span>
+              <span className="font-logo text-[10px] tracking-[0.3em] text-[#22C55E] uppercase leading-none">NATION</span>
               <span className="h-px w-2 bg-[#22C55E] rounded-full" aria-hidden="true" />
             </div>
           </div>

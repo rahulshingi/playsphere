@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { fmtPrice } from "@/lib/currency";
 import { Pause, Play, Trash2, Plus, X, BadgeCheck } from "lucide-react";
+import VendorPurchaseRequests from "./VendorPurchaseRequests";
 
 const PLAN_TYPES = [
   { v: "monthly",     l: "Monthly access" },
@@ -149,6 +150,8 @@ export default function VendorMembershipsPanel({ listings = [] }) {
       {showForm && editing && (
         <PlanForm editing={editing} setEditing={setEditing} listings={listings} busy={busy} onSave={save} onCancel={cancel} />
       )}
+
+      <VendorPurchaseRequests plans={plans} />
     </div>
   );
 }

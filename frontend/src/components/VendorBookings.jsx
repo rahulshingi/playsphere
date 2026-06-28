@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
 import { CheckCircle, XCircle, Clock, Ban, Megaphone, Edit3 } from "lucide-react";
 import { ReviewForm } from "@/components/Reviews";
-import { todayLocalISO, minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
+import { minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
+import DatePicker from "@/components/ui/DatePicker";
 
 const STATUS_META = {
   pending: { label: "Awaiting vendor", color: "bg-[#F59E0B] text-black", icon: Clock },
@@ -69,7 +70,12 @@ function HrCancelReschedule({ booking, onCancel, onReschedule }) {
       <div className="mt-3 border-t border-white/5 pt-3 space-y-2">
         <div className="font-mono text-[10px] uppercase text-neutral-500">/ Reschedule booking</div>
         <div className="grid grid-cols-3 gap-2">
-          <Input type="date" min={todayLocalISO()} data-testid={`vb-hr-reschedule-date-${booking.id}`} value={date} onChange={(e) => setDate(e.target.value)} className="bg-black/40 border-white/10 text-white text-sm" />
+          <DatePicker
+            testid={`vb-hr-reschedule-date-${booking.id}`}
+            value={date}
+            onChange={(v) => setDate(v)}
+            placeholder="New date"
+          />
           <Input type="time" min={minTimeForDate(date)} data-testid={`vb-hr-reschedule-time-${booking.id}`} value={start} onChange={(e) => setStart(e.target.value.slice(0, 5))} className="bg-black/40 border-white/10 text-white text-sm" />
           <Input type="number" min="1" data-testid={`vb-hr-reschedule-hours-${booking.id}`} value={hours} onChange={(e) => setHours(Number(e.target.value) || 1)} className="bg-black/40 border-white/10 text-white text-sm" />
         </div>

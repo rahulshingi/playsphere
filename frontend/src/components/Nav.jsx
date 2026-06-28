@@ -21,6 +21,7 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
   if (isCompanyAdmin) {
     out.push({ to: "/dashboard", label: "Dashboard", icon: Briefcase, accent: "#84CC16" });
     out.push({ to: "/hire", label: "Hire" });
+    out.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
     out.push({ to: "/players/profiles", label: "Players" });
     out.push({ to: "/sponsors/me", label: "Sponsor hub", accent: "#FACC15" });
     out.push({ to: "/admin", label: "Manage", icon: Shield, accent: "#84CC16" });
@@ -28,6 +29,7 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
   if (isPlayer) {
     out.push({ to: "/players/me", label: "My profile", icon: User, accent: "#84CC16" });
     out.push({ to: "/players/profiles", label: "Find players" });
+    out.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
   }
   if (isVendor) {
     out.push({ to: "/vendor/dashboard", label: "Vendor", icon: Store, accent: "#EC4899" });

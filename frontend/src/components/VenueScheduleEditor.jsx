@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Trash2, X } from "lucide-react";
-import { todayLocalISO, minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
+import { minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
+import DatePicker from "@/components/ui/DatePicker";
 
 const HOURS_24 = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
 
@@ -155,7 +156,12 @@ export default function VenueScheduleEditor({ listing, onClose }) {
               ))}
             </div>
             <div className="grid grid-cols-4 gap-2">
-              <Input data-testid="block-date" type="date" min={todayLocalISO()} value={newBlock.date} onChange={(e) => setNewBlock({ ...newBlock, date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <DatePicker
+                testid="block-date"
+                value={newBlock.date}
+                onChange={(v) => setNewBlock({ ...newBlock, date: v })}
+                placeholder="Block date"
+              />
               <Input data-testid="block-start" type="time" min={minTimeForDate(newBlock.date)} value={newBlock.start_time} onChange={(e) => setNewBlock({ ...newBlock, start_time: e.target.value })} className="bg-black/40 border-white/10 text-white" />
               <Input data-testid="block-end" type="time" min={newBlock.start_time || undefined} value={newBlock.end_time} onChange={(e) => setNewBlock({ ...newBlock, end_time: e.target.value })} className="bg-black/40 border-white/10 text-white" />
               <Input data-testid="block-reason" placeholder="Reason" value={newBlock.reason} onChange={(e) => setNewBlock({ ...newBlock, reason: e.target.value })} className="bg-black/40 border-white/10 text-white" />

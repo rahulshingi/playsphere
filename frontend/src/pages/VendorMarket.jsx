@@ -14,7 +14,9 @@ import { fmtPrice } from "@/lib/currency";
 import { SPORTS } from "@/lib/sports";
 import { MapPin, BadgeCheck, ChevronRight, Calendar, Clock, Sparkles } from "lucide-react";
 import VerifiedBadge from "@/components/VerifiedBadge";
-import { todayLocalISO, minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
+import { minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
+import DatePicker from "@/components/ui/DatePicker";
+import PublicMembershipsList from "@/components/memberships/PublicMembershipsList";
 
 const VENDOR_TYPE_LABEL = {
   ground: "Grounds", court: "Courts", coach: "Coaches", referee: "Referees",
@@ -291,16 +293,23 @@ function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
                   <div className="text-neutral-200">
                     Save vs hourly rates — memberships from
                     <span className="text-[#EC4899] font-semibold ml-1">{fmtPrice(listing.cheapest_membership.price, listing.cheapest_membership.currency)}</span>.
-                    Ask the venue desk to sign up; online purchase coming soon.
                   </div>
                 </div>
               </div>
             )}
+            <PublicMembershipsList listingId={listing.id} title="Buy a membership for this venue" />
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label className="text-xs font-mono uppercase text-neutral-500 flex items-center gap-1"><Calendar className="w-3 h-3" />Date *</Label>
-              <Input data-testid="vm-book-date" type="date" min={todayLocalISO()} value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
+              <Input data-testid="vm-book-date-fallback" type="hidden" value={form.requested_date} readOnly />
+              <DatePicker
+                testid="vm-book-date"
+                value={form.requested_date}
+                onChange={(v) => setForm({ ...form, requested_date: v })}
+                placeholder="Pick a date"
+                className="mt-2"
+              />
             </div>
             <div>
               <Label className="text-xs font-mono uppercase text-neutral-500 flex items-center gap-1"><Clock className="w-3 h-3" />Start</Label>

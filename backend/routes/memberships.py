@@ -80,6 +80,59 @@ class MembershipPlanUpdate(BaseModel):
     active: Optional[bool] = None
 
 
+class MembershipPurchase(BaseModel):
+    """A purchase of a membership plan by a player or company HR.
+
+    Lifecycle:
+      - status="pending_payment" → created by buyer, awaiting vendor confirmation of payment.
+      - status="active" → vendor activated (offline payment received). starts_at set; expires_at = starts_at + plan.duration_days.
+      - status="expired" → expires_at passed (computed lazily).
+      - status="cancelled" → buyer or vendor cancelled before activation.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    plan_id: str
+    vendor_id: str
+    plan_title: str
+    plan_type: str
+    price: float
+    currency: str = "INR"
+    duration_days: int = 30
+    max_bookings: Optional[int] = None
+    # Buyer identity — exactly one of (user_id+role) is enough; convenience fields cached
+    buyer_user_id: str
+    buyer_role: str  # "company_admin" | "player" | "organiser"
+    buyer_name: str = ""
+    buyer_email: str = ""
+    buyer_company_id: Optional[str] = None
+    payment_method: str = "offline"  # "offline" | "online" (online stub for now)
+    notes: Optional[str] = ""
+    status: str = "pending_payment"
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    starts_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    bookings_used: int = 0
+    cancelled_reason: Optional[str] = None
+    issued_by_vendor: bool = False  # True if vendor walked-in created the purchase manually
+
+
+class MembershipPurchaseRequest(BaseModel):
+    plan_id: str
+    payment_method: str = "offline"  # frontend can pass "online" — backend returns pending_payment regardless until Razorpay lands
+    notes: Optional[str] = ""
+
+
+class VendorManualIssueBody(BaseModel):
+    """Vendor manually issues a membership to a walk-in customer (HR or player).
+
+    The vendor types the buyer's email; we look up the existing user. If no user
+    is found we fail clearly so vendor knows to ask the customer to sign up first.
+    """
+    plan_id: str
+    buyer_email: str
+    notes: Optional[str] = ""
+    activate_immediately: bool = True
+
+
 def register(api, db, deps):
     """deps must expose: get_current_user, require_role (`vendor` gate)."""
     get_current_user = deps.get_current_user
@@ -170,3 +223,163 @@ def register(api, db, deps):
             "$or": [{"listing_ids": listing_id}, {"listing_ids": {"$size": 0}}],
         }, {"_id": 0}).sort("price", 1).to_list(200)
         return [MembershipPlan(**d) for d in docs]
+
+    # ---------- Purchase flow (offline first; online stub for now) ----------
+    def _buyer_payload(user: dict) -> dict:
+        return {
+            "buyer_user_id": user["id"],
+            "buyer_role": user.get("role") or "viewer",
+            "buyer_name": user.get("name") or "",
+            "buyer_email": user.get("email") or "",
+            "buyer_company_id": user.get("company_id"),
+        }
+
+    def _activation_dates(duration_days: int) -> tuple:
+        now = datetime.now(timezone.utc)
+        starts = now.isoformat()
+        from datetime import timedelta
+        expires = (now + timedelta(days=int(duration_days or 30))).isoformat()
+        return starts, expires
+
+    @api.post("/memberships/purchase", response_model=MembershipPurchase)
+    async def request_purchase(body: MembershipPurchaseRequest, user: dict = Depends(get_current_user)):
+        """A signed-in player / company HR requests to purchase a plan.
+
+        Until Razorpay is wired, every request lands as `pending_payment` regardless
+        of `payment_method`. The vendor activates from their dashboard after they
+        receive cash / UPI / bank transfer.
+        """
+        if user.get("role") not in ("company_admin", "player", "organiser"):
+            raise HTTPException(403, "Only company HR, organisers, or players can buy memberships")
+        plan = await db.membership_plans.find_one({"id": body.plan_id, "active": True, "paused": False}, {"_id": 0})
+        if not plan:
+            raise HTTPException(404, "Plan not available for purchase")
+        # Prevent duplicate active OR pending purchase by the same buyer for this plan
+        existing = await db.membership_purchases.find_one({
+            "plan_id": plan["id"],
+            "buyer_user_id": user["id"],
+            "status": {"$in": ["pending_payment", "active"]},
+        }, {"_id": 0})
+        if existing:
+            raise HTTPException(400, f"You already have a {existing['status'].replace('_', ' ')} request for this plan.")
+        pm = (body.payment_method or "offline").lower()
+        if pm not in ("offline", "online"):
+            pm = "offline"
+        purchase = MembershipPurchase(
+            plan_id=plan["id"], vendor_id=plan["vendor_id"],
+            plan_title=plan["title"], plan_type=plan["plan_type"],
+            price=float(plan["price"]), currency=plan.get("currency", "INR"),
+            duration_days=int(plan.get("duration_days", 30)),
+            max_bookings=plan.get("max_bookings"),
+            payment_method=pm, notes=body.notes or "",
+            **_buyer_payload(user),
+        )
+        await db.membership_purchases.insert_one(purchase.model_dump())
+        logger.info("membership purchase requested | buyer=%s plan=%s method=%s", user.get("email"), plan["id"], pm)
+        return purchase
+
+    @api.get("/memberships/my-purchases", response_model=List[MembershipPurchase])
+    async def list_my_purchases(user: dict = Depends(get_current_user)):
+        if user.get("role") not in ("company_admin", "player", "organiser"):
+            raise HTTPException(403, "Forbidden")
+        docs = await db.membership_purchases.find(
+            {"buyer_user_id": user["id"]}, {"_id": 0}
+        ).sort("created_at", -1).to_list(200)
+        return [MembershipPurchase(**d) for d in docs]
+
+    @api.post("/memberships/my-purchases/{purchase_id}/cancel", response_model=MembershipPurchase)
+    async def cancel_my_purchase(purchase_id: str, body: dict = None, user: dict = Depends(get_current_user)):
+        doc = await db.membership_purchases.find_one({"id": purchase_id}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Purchase not found")
+        if doc["buyer_user_id"] != user["id"]:
+            raise HTTPException(403, "Not your purchase")
+        if doc["status"] not in ("pending_payment",):
+            raise HTTPException(400, "Only pending_payment requests can be cancelled by the buyer")
+        reason = (body or {}).get("reason", "Cancelled by buyer")
+        await db.membership_purchases.update_one(
+            {"id": purchase_id},
+            {"$set": {"status": "cancelled", "cancelled_reason": reason}},
+        )
+        return MembershipPurchase(**(await db.membership_purchases.find_one({"id": purchase_id}, {"_id": 0})))
+
+    # ---------- Vendor-side activation, manual issue, and listing of requests ----------
+    @api.get("/memberships/mine/purchases", response_model=List[MembershipPurchase])
+    async def list_vendor_purchases(status: Optional[str] = None, user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        flt = {"vendor_id": vendor["id"]}
+        if status:
+            flt["status"] = status
+        docs = await db.membership_purchases.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+        return [MembershipPurchase(**d) for d in docs]
+
+    @api.post("/memberships/mine/purchases/{purchase_id}/activate", response_model=MembershipPurchase)
+    async def activate_purchase(purchase_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        doc = await db.membership_purchases.find_one({"id": purchase_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Purchase not found")
+        if doc["status"] != "pending_payment":
+            raise HTTPException(400, f"Cannot activate from status '{doc['status']}'")
+        starts, expires = _activation_dates(doc.get("duration_days") or 30)
+        await db.membership_purchases.update_one(
+            {"id": purchase_id},
+            {"$set": {"status": "active", "starts_at": starts, "expires_at": expires}},
+        )
+        return MembershipPurchase(**(await db.membership_purchases.find_one({"id": purchase_id}, {"_id": 0})))
+
+    @api.post("/memberships/mine/purchases/{purchase_id}/reject", response_model=MembershipPurchase)
+    async def reject_purchase(purchase_id: str, body: dict = None, user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        doc = await db.membership_purchases.find_one({"id": purchase_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Purchase not found")
+        if doc["status"] != "pending_payment":
+            raise HTTPException(400, "Only pending_payment requests can be rejected")
+        reason = (body or {}).get("reason", "Rejected by vendor")
+        await db.membership_purchases.update_one(
+            {"id": purchase_id},
+            {"$set": {"status": "cancelled", "cancelled_reason": reason}},
+        )
+        return MembershipPurchase(**(await db.membership_purchases.find_one({"id": purchase_id}, {"_id": 0})))
+
+    @api.post("/memberships/mine/issue", response_model=MembershipPurchase)
+    async def vendor_issue_purchase(body: VendorManualIssueBody, user: dict = Depends(get_current_user)):
+        """Vendor manually issues a membership to a walk-in customer.
+
+        Looks up the customer by email in the users table. If `activate_immediately`
+        is True (default) the purchase is created directly with status='active' —
+        used when the vendor collected payment offline at the venue desk.
+        """
+        vendor = await _vendor_for_user(user)
+        plan = await db.membership_plans.find_one({"id": body.plan_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not plan:
+            raise HTTPException(404, "Plan not found in your catalogue")
+        email = (body.buyer_email or "").strip().lower()
+        if not email:
+            raise HTTPException(400, "buyer_email is required")
+        buyer = await db.users.find_one({"email": email}, {"_id": 0})
+        if not buyer:
+            raise HTTPException(404, f"No Kreeda Nation user with email '{email}' — ask them to sign up first.")
+        if buyer.get("role") not in ("company_admin", "player", "organiser"):
+            raise HTTPException(400, "Buyer must be a Player, HR, or Organiser account")
+        status = "active" if body.activate_immediately else "pending_payment"
+        starts, expires = (None, None)
+        if body.activate_immediately:
+            starts, expires = _activation_dates(plan.get("duration_days") or 30)
+        purchase = MembershipPurchase(
+            plan_id=plan["id"], vendor_id=vendor["id"],
+            plan_title=plan["title"], plan_type=plan["plan_type"],
+            price=float(plan["price"]), currency=plan.get("currency", "INR"),
+            duration_days=int(plan.get("duration_days", 30)),
+            max_bookings=plan.get("max_bookings"),
+            payment_method="offline", notes=body.notes or "",
+            buyer_user_id=buyer["id"], buyer_role=buyer.get("role") or "player",
+            buyer_name=buyer.get("name") or "", buyer_email=buyer.get("email") or "",
+            buyer_company_id=buyer.get("company_id"),
+            status=status, starts_at=starts, expires_at=expires,
+            issued_by_vendor=True,
+        )
+        await db.membership_purchases.insert_one(purchase.model_dump())
+        return purchase
+

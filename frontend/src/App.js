@@ -37,6 +37,7 @@ import SponsorProfile from "@/pages/SponsorProfile";
 import SponsorshipMarketplace from "@/pages/SponsorshipMarketplace";
 import About from "@/pages/About";
 import ScorerDashboard from "@/pages/ScorerDashboard";
+import MyMemberships from "@/pages/MyMemberships";
 import WelcomeModal from "@/components/WelcomeModal";
 import { installGlobalImageHealer } from "@/lib/imageUrl";
 import Contact from "@/pages/Contact";
@@ -68,6 +69,7 @@ function App() {
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/hire" element={<VendorMarket />} />
+          <Route path="/my-memberships" element={<MyMemberships />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/bookings" element={<Bookings />} />
           <Route path="/admin" element={<Admin />} />

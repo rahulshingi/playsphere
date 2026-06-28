@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { fmtPrice } from "@/lib/currency";
 import { Sparkles, Clock, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
+import UtilizationBars from "@/components/memberships/UtilizationBars";
 
 const STATUS_META = {
   pending_payment: { label: "Awaiting vendor activation", color: "bg-amber-500 text-black", icon: Clock },
@@ -98,6 +99,7 @@ export default function MyMemberships() {
                       {p.max_bookings && <span className="ml-2 text-neutral-500">· {p.bookings_used || 0}/{p.max_bookings} bookings used</span>}
                     </div>
                   )}
+                  {p.status === "active" && <UtilizationBars purchaseId={p.id} />}
                   {p.status === "pending_payment" && (
                     <div className="text-xs text-amber-300/90 bg-amber-500/5 border border-amber-500/30 rounded-sm px-3 py-2">
                       Pay the vendor offline (cash / UPI / bank). Once they confirm, the status flips to <b>Active</b> here.

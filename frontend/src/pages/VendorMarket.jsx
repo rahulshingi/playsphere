@@ -37,7 +37,7 @@ export default function VendorMarket() {
   const [cities, setCities] = useState([]);
   const [listings, setListings] = useState([]);
   const [selected, setSelected] = useState(null);
-  const [form, setForm] = useState({ requested_date: "", start_time: "18:00", hours: 2, notes: "" });
+  const [form, setForm] = useState({ requested_date: "", start_time: "18:00", hours: 2, notes: "", apply_membership_id: "" });
 
   useEffect(() => {
     if (ready && !isCompanyAdmin) nav("/login");
@@ -80,8 +80,11 @@ export default function VendorMarket() {
         hours: Number(form.hours),
         sport,
         notes: form.notes,
+        apply_membership_id: form.apply_membership_id || null,
       });
-      toast.success("Booking request sent — admin will confirm with the vendor");
+      toast.success(form.apply_membership_id
+        ? "Booked using your membership — vendor will confirm shortly"
+        : "Booking request sent — admin will confirm with the vendor");
       setSelected(null);
       nav("/bookings");
     } catch (e) {
@@ -255,6 +258,7 @@ function SectionTitle({ n, title }) {
 function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
   const total = useMemo(() => Number(listing.price) * Number(form.hours || 0), [listing.price, form.hours]);
   const [availability, setAvailability] = useState(null);
+  const [eligibility, setEligibility] = useState(null);
 
   useEffect(() => {
     if (!form.requested_date) { setAvailability(null); return; }
@@ -265,10 +269,22 @@ function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
     return () => { cancelled = true; };
   }, [form.requested_date, listing.id]);
 
+  // Fetch buyer's eligible membership for this listing once on open
+  useEffect(() => {
+    let cancelled = false;
+    api.get(`/memberships/my-eligibility?listing_id=${listing.id}`)
+      .then((r) => { if (!cancelled) setEligibility(r.data?.eligible || null); })
+      .catch(() => { if (!cancelled) setEligibility(null); });
+    return () => { cancelled = true; };
+  }, [listing.id]);
+
   const pickSlot = (s) => {
     if (s.status !== "available") return;
     setForm({ ...form, start_time: s.time });
   };
+
+  const applyOn = !!form.apply_membership_id;
+  const displayTotal = applyOn ? 0 : total;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 flex items-start justify-center overflow-auto p-6" onClick={onClose}>
@@ -358,12 +374,39 @@ function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
             <Label className="text-xs font-mono uppercase text-neutral-500">Notes</Label>
             <Textarea data-testid="vm-book-notes" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Tournament name, slot preference, etc." className="mt-2 bg-black/40 border-white/10 text-white" />
           </div>
+
+          {eligibility && (
+            <label data-testid="vm-apply-memb" className="flex items-start gap-2 border border-[#EC4899]/40 bg-[#EC4899]/5 rounded-sm p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                data-testid="vm-apply-memb-toggle"
+                checked={applyOn}
+                onChange={(e) => setForm({ ...form, apply_membership_id: e.target.checked ? eligibility.purchase_id : "" })}
+                className="mt-0.5 accent-[#EC4899]"
+              />
+              <div className="min-w-0">
+                <div className="text-sm font-semibold flex items-center gap-2 flex-wrap">
+                  Apply my <span className="text-[#EC4899]">{eligibility.plan_title}</span> membership
+                </div>
+                <div className="text-[11px] font-mono text-neutral-400 mt-0.5">
+                  {eligibility.bookings_allowed != null
+                    ? `${eligibility.bookings_used}/${eligibility.bookings_allowed} bookings used · ${eligibility.bookings_remaining} left`
+                    : "Unlimited bookings"}
+                  {eligibility.expires_at && ` · expires ${eligibility.expires_at.slice(0, 10)}`}
+                </div>
+                {applyOn && (
+                  <div className="text-[11px] text-[#84CC16] mt-1">This slot is free under your membership.</div>
+                )}
+              </div>
+            </label>
+          )}
+
           <div className="border-t border-white/10 pt-4 flex items-end justify-between">
             <div>
               <div className="text-[10px] font-mono uppercase text-neutral-500">Rate · {listing.price_unit}</div>
               <div className="font-mono text-base text-neutral-300">{fmtPrice(listing.price, listing.currency)}</div>
-              <div className="text-[10px] font-mono uppercase text-neutral-500 mt-1">Estimated total ({form.hours || 0}h)</div>
-              <div data-testid="vm-book-total" className="font-display text-3xl text-[#84CC16]">{fmtPrice(total, listing.currency)}</div>
+              <div className="text-[10px] font-mono uppercase text-neutral-500 mt-1">Estimated total ({form.hours || 0}h){applyOn && <span className="text-[#EC4899] ml-1">· via membership</span>}</div>
+              <div data-testid="vm-book-total" className={`font-display text-3xl ${applyOn ? "text-[#EC4899]" : "text-[#84CC16]"}`}>{fmtPrice(displayTotal, listing.currency)}</div>
             </div>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={onClose} className="text-neutral-400">Cancel</Button>

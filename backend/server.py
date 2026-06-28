@@ -718,6 +718,7 @@ class VendorBookingRequest(BaseModel):
     hours: Optional[int] = None
     sport: Optional[str] = None
     notes: Optional[str] = ""
+    apply_membership_id: Optional[str] = None  # buyer wants to use this active membership
 
 
 class VendorBooking(BaseModel):
@@ -750,6 +751,7 @@ class VendorBooking(BaseModel):
     cancelled_at: Optional[str] = None
     refund_amount: Optional[float] = None
     refund_reason: Optional[str] = None
+    applied_membership_id: Optional[str] = None  # if set, slot was paid via membership
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -1810,7 +1812,37 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
 
     end_time, hours = _normalize_booking_time(body.start_time, body.end_time, body.hours)
     price = float(listing["price"])
+    total_price = price * hours
     sport = _resolve_booking_sport(body.sport, listing.get("sports") or [])
+    applied_membership_id = None
+
+    # --- Apply membership (Phase 3) ---------------------------------------
+    if body.apply_membership_id:
+        mem = await db.membership_purchases.find_one({
+            "id": body.apply_membership_id,
+            "buyer_user_id": user["id"],
+            "status": "active",
+        }, {"_id": 0})
+        if not mem:
+            raise HTTPException(400, "Membership not found, not yours, or not active")
+        # Plan must cover this listing (either explicit list or vendor-wide)
+        plan = await db.membership_plans.find_one({"id": mem["plan_id"]}, {"_id": 0}) or {}
+        plan_listings = plan.get("listing_ids") or []
+        if plan_listings and listing["id"] not in plan_listings:
+            raise HTTPException(400, "Your membership doesn't cover this listing")
+        if plan.get("vendor_id") and plan["vendor_id"] != listing["vendor_id"]:
+            raise HTTPException(400, "Your membership belongs to a different vendor")
+        # Has the membership expired?
+        if mem.get("expires_at") and mem["expires_at"] < datetime.now(timezone.utc).isoformat():
+            raise HTTPException(400, "Membership has expired — please renew before applying")
+        # Free until max_bookings reached
+        max_b = mem.get("max_bookings")
+        used = int(mem.get("bookings_used", 0))
+        if max_b is not None and used >= int(max_b):
+            raise HTTPException(400, f"Membership already used its {max_b} included bookings — pay hourly or upgrade")
+        # All good — free slot
+        total_price = 0.0
+        applied_membership_id = mem["id"]
 
     booking = VendorBooking(
         listing_id=listing["id"], listing_title=listing["title"],
@@ -1818,16 +1850,23 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         company_id=user["company_id"], company_name=(company or {}).get("name", ""),
         requested_date=body.requested_date, start_time=body.start_time, end_time=end_time,
         hours=hours, sport=sport, city=listing.get("city"), sub_unit_id=body.sub_unit_id,
-        price=price, currency=listing.get("currency", "INR"), total=price * hours,
+        price=price, currency=listing.get("currency", "INR"), total=total_price,
         notes=body.notes or "", created_by=user["id"], hr_email=user.get("email"),
+        applied_membership_id=applied_membership_id,
     )
     payload = booking.model_dump()
     payload["notifications"] = [_booking_notification(
         "created",
-        f"Request submitted for {listing['title']} on {body.requested_date} {body.start_time} ({hours}h).",
+        (f"Request submitted for {listing['title']} on {body.requested_date} {body.start_time} ({hours}h)."
+         + (" Paid via membership." if applied_membership_id else "")),
         user,
     )]
     await db.vendor_bookings.insert_one(payload)
+    # Increment usage counter on the membership (best-effort)
+    if applied_membership_id:
+        await db.membership_purchases.update_one(
+            {"id": applied_membership_id}, {"$inc": {"bookings_used": 1}}
+        )
     logger.warning(
         "BOOKING NOTIFICATION for %s | booking=%s | created — Request submitted for %s on %s %s (%sh).",
         user.get("email"), booking.id, listing["title"], body.requested_date, body.start_time, hours,
@@ -3930,11 +3969,17 @@ async def on_startup():
     await db.vendor_listings.create_index("vendor_id")
     await db.vendor_bookings.create_index("company_id")
     await db.vendor_bookings.create_index("vendor_id")
+    await db.membership_purchases.create_index("buyer_user_id")
+    await db.membership_purchases.create_index("vendor_id")
+    await db.membership_purchases.create_index([("status", 1), ("expires_at", 1)])
     await seed_admin()
     # seed_demo_data() intentionally disabled (Feb 18, 2026) — production wants a clean slate.
     # Only services + sports catalogs are still seeded so the platform UI has its lookups.
     await seed_services()
     await seed_sports()
+    # Background: send membership renewal reminders 7d before expiry
+    from routes.memberships_scheduler import start_membership_scheduler
+    start_membership_scheduler(db, send_email)
 
 
 @app.on_event("shutdown")

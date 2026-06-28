@@ -113,6 +113,7 @@ class MembershipPurchase(BaseModel):
     bookings_used: int = 0
     cancelled_reason: Optional[str] = None
     issued_by_vendor: bool = False  # True if vendor walked-in created the purchase manually
+    renewal_reminder_sent_at: Optional[str] = None  # ISO ts when the 7-day expiry reminder went out (idempotency)
 
 
 class MembershipPurchaseRequest(BaseModel):
@@ -382,4 +383,98 @@ def register(api, db, deps):
         )
         await db.membership_purchases.insert_one(purchase.model_dump())
         return purchase
+
+    # ---------- Phase 3 — Apply membership during booking ----------
+    @api.get("/memberships/my-eligibility")
+    async def my_eligibility(listing_id: str, user: dict = Depends(get_current_user)):
+        """Returns the buyer's eligible active membership for a listing (if any).
+
+        UI calls this when the booking modal opens and uses the response to show
+        the 'Apply membership' toggle. Returns None inside `eligible` if no match.
+        """
+        if user.get("role") not in ("company_admin", "player", "organiser"):
+            return {"eligible": None}
+        listing = await db.vendor_listings.find_one({"id": listing_id}, {"_id": 0, "vendor_id": 1})
+        if not listing:
+            return {"eligible": None}
+        now = datetime.now(timezone.utc).isoformat()
+        actives = await db.membership_purchases.find({
+            "buyer_user_id": user["id"],
+            "vendor_id": listing["vendor_id"],
+            "status": "active",
+        }, {"_id": 0}).to_list(50)
+        for mem in actives:
+            if mem.get("expires_at") and mem["expires_at"] < now:
+                continue
+            plan = await db.membership_plans.find_one({"id": mem["plan_id"]}, {"_id": 0}) or {}
+            plan_listings = plan.get("listing_ids") or []
+            if plan_listings and listing_id not in plan_listings:
+                continue
+            max_b = mem.get("max_bookings")
+            used = int(mem.get("bookings_used", 0))
+            remaining = None if max_b is None else max(0, int(max_b) - used)
+            if remaining is not None and remaining <= 0:
+                continue
+            return {"eligible": {
+                "purchase_id": mem["id"],
+                "plan_title": mem["plan_title"],
+                "bookings_used": used,
+                "bookings_allowed": max_b,
+                "bookings_remaining": remaining,
+                "expires_at": mem.get("expires_at"),
+            }}
+        return {"eligible": None}
+
+    # ---------- Phase 4 — Utilization ----------
+    @api.get("/memberships/purchase/{purchase_id}/utilization")
+    async def purchase_utilization(purchase_id: str, user: dict = Depends(get_current_user)):
+        """Side-by-side utilization for a purchase.
+
+        Returns sessions_used vs sessions_allowed AND days_elapsed vs days_total —
+        formatted as percentages so the UI can render two progress bars. Visible to
+        the purchase owner OR the vendor who owns the plan.
+        """
+        doc = await db.membership_purchases.find_one({"id": purchase_id}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Purchase not found")
+        # Authorise: buyer OR the vendor (via their vendor record)
+        if doc["buyer_user_id"] != user["id"]:
+            v = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0, "id": 1})
+            if not v or v.get("id") != doc.get("vendor_id"):
+                if user.get("role") not in ("platform_admin", "admin"):
+                    raise HTTPException(403, "Forbidden")
+        sessions_used = int(doc.get("bookings_used", 0))
+        sessions_allowed = doc.get("max_bookings")
+        sessions_percent = None if sessions_allowed is None else (
+            round(min(100.0, (sessions_used / int(sessions_allowed)) * 100), 1) if int(sessions_allowed) else 0
+        )
+        days_total = int(doc.get("duration_days") or 30)
+        days_elapsed = 0
+        days_remaining = days_total
+        if doc.get("starts_at"):
+            try:
+                started = datetime.fromisoformat(doc["starts_at"].replace("Z", "+00:00"))
+                now = datetime.now(timezone.utc)
+                delta_days = (now - started).total_seconds() / 86400
+                days_elapsed = max(0, min(days_total, int(delta_days)))
+                days_remaining = max(0, days_total - days_elapsed)
+            except ValueError:
+                pass
+        days_percent = round((days_elapsed / days_total) * 100, 1) if days_total else 0
+        expired = doc.get("status") == "expired" or (
+            doc.get("expires_at") and doc["expires_at"] < datetime.now(timezone.utc).isoformat()
+        )
+        return {
+            "purchase_id": doc["id"],
+            "status": doc.get("status"),
+            "sessions_used": sessions_used,
+            "sessions_allowed": sessions_allowed,
+            "sessions_percent": sessions_percent,
+            "days_elapsed": days_elapsed,
+            "days_total": days_total,
+            "days_remaining": days_remaining,
+            "days_percent": days_percent,
+            "expired": bool(expired),
+        }
+
 

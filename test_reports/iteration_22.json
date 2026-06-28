@@ -1,0 +1,58 @@
+{
+  "summary": "Iteration 22 — Validated Phase 3 (apply membership at vendor-booking + SendGrid renewal-reminder loop) and Phase 4 (utilization endpoint) end-to-end. 14/14 new backend tests pass; 18/18 Phase 2 regression tests still green (32/32 total). Frontend code-level confirmed the `vm-apply-memb`, `vm-apply-memb-toggle`, `vm-book-total` testids in VendorMarket.jsx and `util-{id}`, `util-sessions-{id}`, `util-days-{id}` in UtilizationBars + correct gating to status==='active' on both MyMemberships.jsx (buyer) and VendorPurchaseRequests.jsx (vendor, compact). Frontend smoke: /my-memberships correctly redirects unauthenticated visitors to /login (no JS errors).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_memberships_phase3_4.py",
+    "/app/backend/tests/test_memberships_phase2.py",
+    "/app/test_reports/pytest/iter22_phase34.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "memberships.py L411 — eligibility check returns the first matching active membership for the vendor; if a buyer has multiple actives on the same vendor (e.g. a max_bookings one + a vendor-wide one) only the first is offered. Low priority but worth surfacing all eligible options in a dropdown later.",
+    "_check_and_send filters `buyer_email: {$ne: ''}` but not `{$ne: null}`. If a legacy purchase has email=null the query still matches; the subsequent guard `if not email: continue` handles it safely, but the Mongo filter could be `{ $nin: ['', null] }` for cleaner intent.",
+    "VendorBookingRequest now silently turns total → 0 when apply_membership_id is set. Currently the response carries `applied_membership_id` so the audit trail is preserved — good. Consider also stamping `payment_method='membership'` on the booking row for finance reports.",
+    "server.py grew to ~3,988 lines. Continue extraction (memberships.py is already split — vendor_bookings would be the next big win).",
+    "frontend UtilizationBars makes a GET on every render for active purchases. For MyMemberships with many active purchases this is N calls — acceptable for current volumes but a server-side batch endpoint (`/utilization?ids=...`) would be cleaner long-term.",
+    "renewal_reminder body hardcodes https://kreedanation.com/my-memberships — fine for prod but tests/staging will deep-link to the wrong host. Consider env-driven base URL inside the email template."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_memberships_phase3_4.py (new — 14 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% (32/32 = 14 Phase 3+4 + 18 Phase 2 regression)",
+    "frontend": "100% (code-level: every required data-testid present; /my-memberships redirect-to-login confirmed live)"
+  },
+  "test_credentials": "Platform admin admin@kreedanation.com / admin123. All other accounts (2 vendors, 2 HRs) created per-run via the existing OTP-from-DB helper and cleaned up at session teardown.",
+  "seed_data_creation": "Each run creates: vendor A (with 2 listings + 2 plans — listing-scoped max_bookings=2 plan and a vendor-wide unlimited plan), vendor B (1 listing for cross-vendor case), 2 HR companies, 1-2 fake renewal-reminder purchase rows. All TEST_/P34_ prefixed; autouse session cleanup wipes them.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All Phase 3+4 backend tests live in /app/backend/tests/test_memberships_phase3_4.py and complete in ~28s alongside the Phase 2 suite. Two important patterns to reuse: (1) MongoDB stores vendor emails LOWER-cased — lookups must use email.lower(); the phase2 test happens to use a lowercase email so it never tripped on this. (2) The renewal scheduler tests stub `send_email` (3-arg + kind kwarg) and call `_check_and_send(db, stub)` directly via the test's `_run` helper to stay on motor's default event loop — using asyncio.new_event_loop() breaks motor with 'attached to a different loop'. Phase 5 (Razorpay) hasn't started; the online stub still force-routes to pending_payment. Frontend smoke against the actual booking modal was not exercised live (requires HR login + listing browse); the testids were confirmed via grep — recommend a Playwright pass once Razorpay arrives and the modal needs full E2E coverage.",
+  "tested_scenarios": [
+    "GET /memberships/my-eligibility returns {eligible: {...}} for HR with active membership; numbers (used/allowed/remaining) match.",
+    "GET /memberships/my-eligibility returns {eligible: null} when the buyer has no active membership for that vendor.",
+    "POST /vendor-bookings with apply_membership_id → total=0, applied_membership_id set; subsequent GET /memberships/my-purchases shows bookings_used=1.",
+    "POST /vendor-bookings WITHOUT apply_membership_id → total = listing.price * hours (₹1500 for 1h); applied_membership_id stays null.",
+    "POST /vendor-bookings with apply_membership_id on a listing NOT in plan.listing_ids → 400 'doesn't cover this listing'.",
+    "POST /vendor-bookings with apply_membership_id on a DIFFERENT vendor's listing (plan has listing_ids=[]) → 400 'different vendor'.",
+    "POST /vendor-bookings with apply_membership_id whose expires_at < now → 400 'Membership has expired'.",
+    "POST /vendor-bookings with apply_membership_id whose bookings_used >= max_bookings → 400 'already used its X included bookings'.",
+    "GET /memberships/purchase/{id}/utilization (buyer) → 200, sessions_percent = bookings_used/max*100, days_total=30, days_percent ~0 fresh.",
+    "GET /memberships/purchase/{id}/utilization (owning vendor) → 200.",
+    "GET /memberships/purchase/{id}/utilization (other HR) → 403.",
+    "GET /memberships/purchase/unknown/utilization → 404.",
+    "_check_and_send(db, send_email) sends a renewal email for an ACTIVE purchase expiring in 5 days, sets renewal_reminder_sent_at = now ISO; second run does NOT modify the timestamp (idempotent).",
+    "_check_and_send skips a purchase whose expires_at is 10 days out (outside the 7-day window) — renewal_reminder_sent_at stays None.",
+    "Phase 2 regression suite (18 tests) still 100% green: vendor signup→approve→listing→plan, HR purchase offline & online (both pending), vendor activate / reject / manual-issue / rejection-twice, auth guards, public list of plans, past-date booking + block rejection.",
+    "Frontend code-level: VendorMarket.jsx has vm-apply-memb / vm-apply-memb-toggle / vm-book-total + apply_membership_id field. UtilizationBars.jsx renders util-{id}, util-sessions-{id}, util-days-{id}. MyMemberships.jsx + VendorPurchaseRequests.jsx render UtilizationBars only when p.status === 'active' (pending/cancelled excluded).",
+    "Frontend live smoke: /my-memberships correctly redirects unauthenticated visitors to /login; no JS errors."
+  ],
+  "rca of the issue": "Not applicable — Phase 3 + Phase 4 implementations are working end-to-end as specified. Only test-harness fix needed: the test must lowercase the email when looking up the vendor doc in MongoDB because the vendors collection stores it lowercased; this is a test-side adjustment, not a product bug."
+}

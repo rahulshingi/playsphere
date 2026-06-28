@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import { fmtPrice } from "@/lib/currency";
 import { CheckCircle2, XCircle, Clock, UserPlus, Sparkles } from "lucide-react";
+import UtilizationBars from "@/components/memberships/UtilizationBars";
 
 const STATUS_META = {
   pending_payment: { label: "Pending payment", color: "bg-amber-500 text-black", icon: Clock },
@@ -183,6 +184,7 @@ function PurchaseRow({ p, onActivate, onReject }) {
           </Button>
         </div>
       )}
+      {p.status === "active" && <UtilizationBars purchaseId={p.id} compact />}
     </div>
   );
 }

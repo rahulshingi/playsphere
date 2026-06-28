@@ -453,6 +453,26 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
 - **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
+## Implemented (Feb 28, 2026 — Phase 5A + 5C: Vendor profile + business model)
+- **Phase 5A — vendor profile upgrades**:
+  - VendorType literal extended to include `gym`, `studio`. Vendor signup now uses a **multi-select chip grid** (`/vendor/signup` data-testid `vendor-signup-types`); the primary `vendor_type` falls out as the first selected chip, full list lives in `vendor_types[]`. Server-side normalises empty → `[vendor_type]` for backwards compat.
+  - VendorListing extended with `street`, `locality`, `state`, `pincode`, `maps_url` so detailed addresses can be matched with company / event / player city + locality.
+  - New `VENDOR_CATEGORY_SPORTS` constant + `GET /api/meta/vendor-categories` endpoint power the adaptive Activities chip list in `pages/VendorDashboard.jsx`: Gym → gym/yoga/zumba/crossfit/pilates/cardio/strength, Studio → yoga/zumba/pilates/dance/aerobics, Grounds/Courts/Coaches → cricket/football/etc.
+  - New `SuggestVenueButton` mounted in `components/admin/EventsTab.jsx`: HR / organiser / admin can submit a venue that isn't on the platform → recorded in the `venue_leads` collection → Platform Admin can list (`GET /api/admin/venue-leads`) and PATCH status (open → contacted → converted → archived) with notes for follow-up.
+- **Phase 5C — business model**:
+  - `SiteSettings` extended with `booking_commission_percent` (default 10), `membership_commission_percent` (default 5), and offline-subscription prices `offline_subscription_monthly_price` (₹99), `offline_subscription_yearly_price` (₹999). All admin-editable via existing `/settings` endpoint.
+  - **Offline-mode subscription** — vendors can subscribe to use Kreeda Nation tools for their own offline business. New endpoints: `POST /api/offline-subscriptions/request`, `GET /api/offline-subscriptions/mine`, admin `GET /api/admin/offline-subscriptions`, `POST .../activate`, `POST .../reject`. Activation flips `Vendor.offline_mode = true` + sets `offline_subscription_expires_at` (now + 30d or +365d). Online payment stubbed (same offline-first rail as memberships).
+  - **Private bookings** — `POST/GET/DELETE /api/vendor/private-bookings` for vendors with `offline_mode=true`. Supports one-off + weekly recurring (`recurrence_days_of_week`). These slots merge into the public availability grid so KN buyers see them as **unavailable** without leaking the private client's PII.
+  - **Privacy mask** — `list_vendor_bookings` returns KN-originated bookings with `hr_email=null`, `created_by=''`, `notes=''` when the caller is a vendor. HR / Platform admin still see the full data.
+- **New frontend surfaces**:
+  - `components/vendor/OfflineModeCard.jsx` — vendor's subscription unlock CTA + plan tiles modal (monthly/yearly) + active/pending badges.
+  - `components/vendor/PrivateBookingsPanel.jsx` — locked + unlocked states; add/list/delete + weekly recurrence picker (days-of-week chips).
+  - `components/event/SuggestVenueButton.jsx` — modal usable from any event-create form.
+  - Updated nav-bar branding to a stacked **KREEDA / — NATION —** mark (white bold caps + green wordmark with flanking horizontal dashes) per user-supplied reference image.
+- **Testing**:
+  - Iteration 23 caught 3 bugs (vendor_types not persisted on signup, PrivateBooking duplicate-kwargs TypeError, settings price override never applying). All 3 fixed in the same session — `routes/vendors.py vendor_signup`, `routes/business.py create_private_booking`, `routes/business.py _site_settings_doc`.
+  - **19/19 pytest pass** on `/app/backend/tests/test_phase5_business.py` post-fix. Note: subsequent test runs hit SendGrid quota throttle (502 on `/vendors/signup/request-otp`), so PR-time tests must mock SendGrid for repeatable runs.
+
 ## Test Credentials
 - Platform Admin (Super): admin@kreedanation.com / admin123
 - Company HR: hr@acme.com / hr123

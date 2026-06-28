@@ -104,8 +104,13 @@ export default function Nav() {
         <Link to="/" data-testid="nav-logo" className="flex items-center gap-3 shrink-0">
           <img src={LOGO_URL} alt="Kreeda Nation" className="w-11 h-11 object-contain" />
           <div className="leading-none hidden lg:block">
-            <div className="font-brand text-2xl">
-              <span className="text-white">KREEDA</span><span className="text-[#84CC16]"> NATION</span>
+            <div data-testid="brand-kreeda" className="font-brand font-extrabold text-2xl text-white tracking-[0.04em] uppercase">
+              KREEDA
+            </div>
+            <div data-testid="brand-nation" className="mt-1 flex items-center gap-1.5 justify-start">
+              <span className="h-0.5 w-3 bg-[#22C55E] rounded-full" aria-hidden="true" />
+              <span className="font-brand text-[11px] tracking-[0.32em] text-[#22C55E] uppercase">NATION</span>
+              <span className="h-0.5 w-3 bg-[#22C55E] rounded-full" aria-hidden="true" />
             </div>
             <div className="text-[10px] font-mono uppercase tracking-widest mt-1">
               <span className="text-[#EC4899]">compete</span>
@@ -116,9 +121,13 @@ export default function Nav() {
             </div>
           </div>
           <div className="leading-none block lg:hidden">
-            <div className="font-brand text-base sm:text-lg">
-              <span className="text-white">KREEDA</span>
-              <span className="text-[#84CC16]"> NATION</span>
+            <div className="font-brand font-extrabold text-base sm:text-lg text-white tracking-[0.04em] uppercase">
+              KREEDA
+            </div>
+            <div className="mt-0.5 flex items-center gap-1">
+              <span className="h-px w-2 bg-[#22C55E] rounded-full" aria-hidden="true" />
+              <span className="font-brand text-[9px] tracking-[0.3em] text-[#22C55E] uppercase">NATION</span>
+              <span className="h-px w-2 bg-[#22C55E] rounded-full" aria-hidden="true" />
             </div>
           </div>
         </Link>

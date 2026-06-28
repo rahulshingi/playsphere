@@ -127,8 +127,12 @@ def register(api, db, deps):
             "email_verified": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
+        # Normalise multi-type: prefer client-supplied vendor_types, fall back to [vendor_type].
+        types = list(dict.fromkeys([t for t in (body.vendor_types or []) if t])) or [body.vendor_type]
+        primary = types[0]
         vendor = Vendor(
-            user_id=user_id, business_name=body.business_name, vendor_type=body.vendor_type,
+            user_id=user_id, business_name=body.business_name,
+            vendor_type=primary, vendor_types=types,
             contact_name=body.contact_name, mobile=body.mobile, email=email, city=body.city,
         )
         await db.vendors.insert_one(vendor.model_dump())

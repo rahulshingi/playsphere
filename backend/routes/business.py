@@ -182,7 +182,9 @@ def register(api, db, deps):
         return vendor
 
     async def _site_settings_doc() -> dict:
-        s = await db.settings.find_one({"_id": "site"}) or {}
+        # settings.py persists with `id: 'site'` (NOT MongoDB's `_id`), so we must
+        # query the same key here. Otherwise admin price overrides never apply.
+        s = await db.settings.find_one({"id": "site"}) or {}
         return s
 
     def _sub_dates(plan_type: str) -> tuple:
@@ -288,13 +290,14 @@ def register(api, db, deps):
         await _own_listing(vendor["id"], body.listing_id)
         if body.recurrence and body.recurrence not in ("weekly",):
             raise HTTPException(400, "recurrence must be 'weekly' or omitted")
-        pb = PrivateBooking(
-            vendor_id=vendor["id"],
-            **body.model_dump(),
-            hours=body.hours or 1,
-            amount=body.amount or 0,
-            currency=body.currency or "INR",
-        )
+        # Normalise the payload BEFORE constructing PrivateBooking to avoid the
+        # "got multiple values for keyword argument" TypeError when defaults
+        # collide with explicit kwargs.
+        data = body.model_dump()
+        data["hours"] = data.get("hours") or 1
+        data["amount"] = data.get("amount") or 0
+        data["currency"] = data.get("currency") or "INR"
+        pb = PrivateBooking(vendor_id=vendor["id"], **data)
         await db.private_bookings.insert_one(pb.model_dump())
         return pb
 

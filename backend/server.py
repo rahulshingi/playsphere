@@ -623,6 +623,7 @@ class PlayerProfile(BaseModel):
 class VendorSignupBody(BaseModel):
     business_name: str
     vendor_type: VendorType
+    vendor_types: List[str] = Field(default_factory=list)  # multi-select; if empty falls back to [vendor_type]
     contact_name: str
     mobile: str
     email: EmailStr

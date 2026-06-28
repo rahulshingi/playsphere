@@ -14,6 +14,7 @@ import { fmtPrice } from "@/lib/currency";
 import { SPORTS } from "@/lib/sports";
 import { MapPin, BadgeCheck, ChevronRight, Calendar, Clock, Sparkles } from "lucide-react";
 import VerifiedBadge from "@/components/VerifiedBadge";
+import { todayLocalISO, minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
 
 const VENDOR_TYPE_LABEL = {
   ground: "Grounds", court: "Courts", coach: "Coaches", referee: "Referees",
@@ -66,7 +67,8 @@ export default function VendorMarket() {
   }, [sport, city, selected]);
 
   const submitBooking = async () => {
-    if (!form.requested_date) return toast.error("Pick a date");
+    const err = validateFutureDateTime(form.requested_date, form.start_time);
+    if (err) return toast.error(err);
     if (!form.hours || form.hours < 1) return toast.error("Hours must be at least 1");
     try {
       await api.post("/vendor-bookings", {
@@ -298,11 +300,11 @@ function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
           <div className="grid grid-cols-3 gap-3">
             <div>
               <Label className="text-xs font-mono uppercase text-neutral-500 flex items-center gap-1"><Calendar className="w-3 h-3" />Date *</Label>
-              <Input data-testid="vm-book-date" type="date" value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
+              <Input data-testid="vm-book-date" type="date" min={todayLocalISO()} value={form.requested_date} onChange={(e) => setForm({ ...form, requested_date: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
             </div>
             <div>
               <Label className="text-xs font-mono uppercase text-neutral-500 flex items-center gap-1"><Clock className="w-3 h-3" />Start</Label>
-              <Input data-testid="vm-book-start" type="time" value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
+              <Input data-testid="vm-book-start" type="time" min={minTimeForDate(form.requested_date)} value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
             </div>
             <div>
               <Label className="text-xs font-mono uppercase text-neutral-500">Hours *</Label>

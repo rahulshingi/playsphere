@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
 import { CheckCircle, XCircle, Clock, Ban, Megaphone, Edit3 } from "lucide-react";
 import { ReviewForm } from "@/components/Reviews";
+import { todayLocalISO, minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
 
 const STATUS_META = {
   pending: { label: "Awaiting vendor", color: "bg-[#F59E0B] text-black", icon: Clock },
@@ -68,12 +69,16 @@ function HrCancelReschedule({ booking, onCancel, onReschedule }) {
       <div className="mt-3 border-t border-white/5 pt-3 space-y-2">
         <div className="font-mono text-[10px] uppercase text-neutral-500">/ Reschedule booking</div>
         <div className="grid grid-cols-3 gap-2">
-          <Input type="date" data-testid={`vb-hr-reschedule-date-${booking.id}`} value={date} onChange={(e) => setDate(e.target.value)} className="bg-black/40 border-white/10 text-white text-sm" />
-          <Input type="time" data-testid={`vb-hr-reschedule-time-${booking.id}`} value={start} onChange={(e) => setStart(e.target.value.slice(0, 5))} className="bg-black/40 border-white/10 text-white text-sm" />
+          <Input type="date" min={todayLocalISO()} data-testid={`vb-hr-reschedule-date-${booking.id}`} value={date} onChange={(e) => setDate(e.target.value)} className="bg-black/40 border-white/10 text-white text-sm" />
+          <Input type="time" min={minTimeForDate(date)} data-testid={`vb-hr-reschedule-time-${booking.id}`} value={start} onChange={(e) => setStart(e.target.value.slice(0, 5))} className="bg-black/40 border-white/10 text-white text-sm" />
           <Input type="number" min="1" data-testid={`vb-hr-reschedule-hours-${booking.id}`} value={hours} onChange={(e) => setHours(Number(e.target.value) || 1)} className="bg-black/40 border-white/10 text-white text-sm" />
         </div>
         <div className="flex gap-2">
-          <Button data-testid={`vb-hr-reschedule-submit-${booking.id}`} size="sm" onClick={() => onReschedule({ requested_date: date, start_time: start, hours })} className="bg-[#06B6D4] hover:bg-[#0891B2] text-black rounded-sm">
+          <Button data-testid={`vb-hr-reschedule-submit-${booking.id}`} size="sm" onClick={() => {
+            const err = validateFutureDateTime(date, start);
+            if (err) { toast.error(err); return; }
+            onReschedule({ requested_date: date, start_time: start, hours });
+          }} className="bg-[#06B6D4] hover:bg-[#0891B2] text-black rounded-sm">
             Submit reschedule
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setMode(null)} className="text-neutral-400">Close</Button>

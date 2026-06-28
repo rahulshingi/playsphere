@@ -404,6 +404,14 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - **Editor lists UUIDs** — stable `_uid` schemas for VendorDashboard images, RegisterTeam players, PlatformAdmin variants/fields/people arrays (currently keyed by array index — works but breaks on reorder).
 - **Refactor large functions** — `seed_services`, `seed_demo_data`, `get_standings`, `listing_availability`.
 
+## Implemented (Feb 28, 2026 — Date-picker past-date validation)
+- New helper `/app/frontend/src/lib/dateConstraints.js` (`todayLocalISO`, `nowLocalHHMM`, `minTimeForDate`, `validateFutureDateTime`) — single source of truth for future-only date/time pickers.
+- Frontend `min` attribute + submit-time validation wired into all booking-related date/time inputs:
+  - `pages/VendorMarket.jsx` (vendor booking modal — `requested_date` + `start_time`).
+  - `components/VendorBookings.jsx` (HR reschedule form — `date` + `time`).
+  - `components/VenueScheduleEditor.jsx` (vendor block-dates form — `date` + `start_time` + `end_time`).
+- Backend defence-in-depth: new `_reject_past_slot()` helper in `server.py` called from `POST /api/vendor-bookings`, `POST /api/vendor-bookings/{id}/reschedule`, and `POST /api/vendor-listings/{id}/blocks`. Returns 400 if `requested_date + start_time < utcnow - 1h`. Validated via inline test harness (5/5 pass).
+
 ## Test Credentials
 - Platform Admin (Super): admin@kreedanation.com / admin123
 - Company HR: hr@acme.com / hr123

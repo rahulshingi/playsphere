@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Trash2, X } from "lucide-react";
+import { todayLocalISO, minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
 
 const HOURS_24 = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, "0")}:00`);
 
@@ -47,6 +48,9 @@ export default function VenueScheduleEditor({ listing, onClose }) {
   };
   const addBlock = async () => {
     if (!(newBlock.date && newBlock.start_time && newBlock.end_time)) return toast.error("Date + start + end required");
+    const err = validateFutureDateTime(newBlock.date, newBlock.start_time);
+    if (err) return toast.error(err);
+    if (newBlock.end_time <= newBlock.start_time) return toast.error("End time must be after start time");
     await api.post(`/vendor-listings/${listing.id}/blocks`, newBlock);
     setNewBlock({ date: "", start_time: "", end_time: "", reason: "" });
     load();
@@ -151,9 +155,9 @@ export default function VenueScheduleEditor({ listing, onClose }) {
               ))}
             </div>
             <div className="grid grid-cols-4 gap-2">
-              <Input data-testid="block-date" type="date" value={newBlock.date} onChange={(e) => setNewBlock({ ...newBlock, date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
-              <Input data-testid="block-start" type="time" value={newBlock.start_time} onChange={(e) => setNewBlock({ ...newBlock, start_time: e.target.value })} className="bg-black/40 border-white/10 text-white" />
-              <Input data-testid="block-end" type="time" value={newBlock.end_time} onChange={(e) => setNewBlock({ ...newBlock, end_time: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <Input data-testid="block-date" type="date" min={todayLocalISO()} value={newBlock.date} onChange={(e) => setNewBlock({ ...newBlock, date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <Input data-testid="block-start" type="time" min={minTimeForDate(newBlock.date)} value={newBlock.start_time} onChange={(e) => setNewBlock({ ...newBlock, start_time: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <Input data-testid="block-end" type="time" min={newBlock.start_time || undefined} value={newBlock.end_time} onChange={(e) => setNewBlock({ ...newBlock, end_time: e.target.value })} className="bg-black/40 border-white/10 text-white" />
               <Input data-testid="block-reason" placeholder="Reason" value={newBlock.reason} onChange={(e) => setNewBlock({ ...newBlock, reason: e.target.value })} className="bg-black/40 border-white/10 text-white" />
             </div>
             <Button data-testid="block-add" onClick={addBlock} className="mt-2 bg-[#FF3B30] hover:bg-[#DC2626] text-white rounded-sm">Add block</Button>

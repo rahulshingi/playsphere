@@ -1777,6 +1777,23 @@ def _normalize_booking_time(start: str, end_time: Optional[str], hours: Optional
     return e, h
 
 
+def _reject_past_slot(requested_date: str, start_time: str) -> None:
+    """Defence-in-depth: reject any booking/reschedule slot in the past.
+
+    Compares against the server's current UTC time. We treat the booking slot as
+    naive local-time stored as YYYY-MM-DD + HH:MM; a 1-hour grace window
+    absorbs minor clock skew between client and server."""
+    try:
+        slot = datetime.fromisoformat(f"{requested_date}T{start_time}")
+    except ValueError:
+        raise HTTPException(400, "Invalid date/time format")
+    # Strip tzinfo for naive compare; users pick local clock times.
+    now = datetime.utcnow()
+    if slot < now - timedelta(hours=1):
+        raise HTTPException(400, "Booking slot cannot be in the past")
+
+
+
 def _resolve_booking_sport(body_sport: Optional[str], listing_sports: list) -> Optional[str]:
     if body_sport and body_sport in listing_sports:
         return body_sport
@@ -1788,6 +1805,7 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
     listing = await db.vendor_listings.find_one({"id": body.listing_id, "approved": True, "active": True}, {"_id": 0})
     if not listing:
         raise HTTPException(404, "Listing not available")
+    _reject_past_slot(body.requested_date, body.start_time)
     company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
 
     end_time, hours = _normalize_booking_time(body.start_time, body.end_time, body.hours)
@@ -2373,6 +2391,7 @@ async def reschedule_vendor_booking(booking_id: str, body: dict, user: dict = De
     hours_arg = body.get("hours") or doc.get("hours") or 1
     if not (new_date and new_start):
         raise HTTPException(400, "requested_date and start_time are required")
+    _reject_past_slot(new_date, new_start)
 
     listing = await db.vendor_listings.find_one({"id": doc["listing_id"]}, {"_id": 0}) or {}
     pol = listing.get("reschedule_policy") or {}
@@ -3657,6 +3676,9 @@ async def create_block(listing_id: str, body: dict, user: dict = Depends(get_cur
     end = body.get("end_time") or ""
     if not (date and start and end):
         raise HTTPException(400, "date, start_time, end_time required")
+    _reject_past_slot(date, start)
+    if end <= start:
+        raise HTTPException(400, "end_time must be after start_time")
     doc = {
         "id": str(uuid.uuid4()),
         "listing_id": listing_id,

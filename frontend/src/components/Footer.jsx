@@ -14,9 +14,16 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-6 py-12 grid md:grid-cols-4 gap-8">
         <div>
           <div className="flex items-center gap-3">
-            <img src="/kreeda-mark.png" alt="Kreeda Nation" className="w-12 h-12 object-contain" />
-            <div className="font-brand text-3xl">
-              <span className="text-white">KREEDA</span><span className="text-[#84CC16]"> NATION</span>
+            <img src="/kreeda-mark.png" alt="Kreeda Nation" className="w-16 h-16 object-contain" />
+            <div className="leading-none flex flex-col items-stretch">
+              <div className="font-logo font-extrabold text-3xl text-white uppercase leading-[0.9] tracking-[0.18em] text-center">
+                KREEDA
+              </div>
+              <div className="mt-1 flex items-center justify-between gap-2">
+                <span className="h-[2px] flex-1 bg-[#22C55E] rounded-full" aria-hidden="true" />
+                <span className="font-logo font-light text-[12px] tracking-[0.35em] text-[#22C55E] uppercase leading-none">NATION</span>
+                <span className="h-[2px] flex-1 bg-[#22C55E] rounded-full" aria-hidden="true" />
+              </div>
             </div>
           </div>
           <p className="text-xs font-mono mt-3 tracking-wide">

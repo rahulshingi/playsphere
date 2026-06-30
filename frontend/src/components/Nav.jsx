@@ -3,7 +3,11 @@ import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { LogOut, Shield, Briefcase, Crown, User, Store, Menu, X, BookOpen } from "lucide-react";
+import {
+  DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
+  DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
+import { LogOut, Shield, Briefcase, Crown, User, Store, Menu, X, BookOpen, ChevronDown } from "lucide-react";
 import { getRoleGuide } from "@/lib/guides";
 
 const LOGO_URL = "/kreeda-mark.png";
@@ -16,36 +20,42 @@ const publicLinks = [
   { to: "/contact", label: "Contact" },
 ];
 
+/**
+ * Each role exposes a `primary` list (rendered horizontally in the header) and
+ * an optional `more` list (folded into the user-menu dropdown). Keep primary at
+ * 2-3 items max to avoid horizontal scroll on HR / admin accounts.
+ */
 function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer }) {
-  const out = [];
+  const primary = [];
+  const more = [];
   if (isCompanyAdmin) {
-    out.push({ to: "/dashboard", label: "Dashboard", icon: Briefcase, accent: "#84CC16" });
-    out.push({ to: "/hire", label: "Hire" });
-    out.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
-    out.push({ to: "/players/profiles", label: "Players" });
-    out.push({ to: "/sponsors/me", label: "Sponsor hub", accent: "#FACC15" });
-    out.push({ to: "/admin", label: "Manage", icon: Shield, accent: "#84CC16" });
+    primary.push({ to: "/dashboard", label: "Dashboard", icon: Briefcase, accent: "#84CC16" });
+    primary.push({ to: "/admin", label: "Manage", icon: Shield, accent: "#84CC16" });
+    more.push({ to: "/hire", label: "Hire vendors", icon: Store });
+    more.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
+    more.push({ to: "/players/profiles", label: "Players", icon: User });
+    more.push({ to: "/sponsors/me", label: "Sponsor hub", accent: "#FACC15" });
   }
   if (isPlayer) {
-    out.push({ to: "/players/me", label: "My profile", icon: User, accent: "#84CC16" });
-    out.push({ to: "/players/profiles", label: "Find players" });
-    out.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
+    primary.push({ to: "/players/me", label: "My profile", icon: User, accent: "#84CC16" });
+    more.push({ to: "/players/profiles", label: "Find players" });
+    more.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
   }
   if (isVendor) {
-    out.push({ to: "/vendor/dashboard", label: "Vendor", icon: Store, accent: "#EC4899" });
-    out.push({ to: "/bookings", label: "Requests" });
+    primary.push({ to: "/vendor/dashboard", label: "Vendor", icon: Store, accent: "#EC4899" });
+    primary.push({ to: "/bookings", label: "Requests" });
   }
   if (isSponsor) {
-    out.push({ to: "/sponsors/me", label: "Sponsor profile", icon: Briefcase, accent: "#FACC15" });
-    out.push({ to: "/sponsorships", label: "Sponsorships" });
+    primary.push({ to: "/sponsors/me", label: "Sponsor profile", icon: Briefcase, accent: "#FACC15" });
+    primary.push({ to: "/sponsorships", label: "Sponsorships" });
   }
   if (isScorer) {
-    out.push({ to: "/scorer/dashboard", label: "Scorer", icon: Shield, accent: "#06B6D4" });
+    primary.push({ to: "/scorer/dashboard", label: "Scorer", icon: Shield, accent: "#06B6D4" });
   }
   if (isPlatformAdmin) {
-    out.push({ to: "/platform-admin", label: "HQ", icon: Crown, accent: "#FF3B30" });
+    primary.push({ to: "/platform-admin", label: "HQ", icon: Crown, accent: "#FF3B30" });
   }
-  return out;
+  return { primary, more };
 }
 
 function DesktopLink({ link }) {
@@ -81,18 +91,17 @@ export default function Nav() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const isAuthed = user && user !== false;
   const roles = { isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer };
-  const extras = roleLinks(roles);
+  const { primary: primaryRoleLinks, more: moreRoleLinks } = roleLinks(roles);
+  const allRoleLinks = [...primaryRoleLinks, ...moreRoleLinks];  // used by mobile drawer
   const guide = isAuthed ? getRoleGuide(user.role) : null;
 
   const closeMobile = () => setMobileOpen(false);
 
-  // Once a user (other than a Player) is logged in, the workspace links eat horizontal space.
-  // Trim discoverability links (About, Services) for those roles to prevent the desktop nav
-  // from overflowing into a horizontal scroll. Players keep the full marketing nav since
-  // their workspace links are minimal.
-  const trimmedRoles = isAuthed && !isPlayer;
-  const visiblePublicLinks = trimmedRoles
-    ? publicLinks.filter((l) => l.to !== "/about" && l.to !== "/services")
+  // Corporate-style header: when authenticated, only show the role's PRIMARY
+  // workspace links in the top bar; secondary items collapse into the right-side
+  // user-menu dropdown. Unauthed visitors keep the full marketing nav.
+  const visiblePublicLinks = isAuthed
+    ? publicLinks.filter((l) => l.to === "/" || l.to === "/events")
     : publicLinks;
 
   return (
@@ -135,39 +144,98 @@ export default function Nav() {
         {/* Desktop nav */}
         <nav className="hidden md:flex items-center gap-0.5 flex-1 justify-center">
           {visiblePublicLinks.map((n) => <DesktopLink key={n.to} link={n} />)}
-          {extras.map((n) => <DesktopLink key={n.to} link={n} />)}
-          {guide && (
-            <a
-              key="guide-desktop"
-              href={guide.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              data-testid={guide.testid}
-              className="px-3 py-2 text-sm font-medium rounded-sm flex items-center gap-1 text-neutral-400 hover:text-white transition-colors"
-            >
-              <BookOpen className="w-3.5 h-3.5" /> {guide.label}
-            </a>
-          )}
+          {primaryRoleLinks.map((n) => <DesktopLink key={n.to} link={n} />)}
         </nav>
 
         {/* Right side actions */}
         <div className="flex items-center gap-2 shrink-0">
           {isAuthed ? (
-            <>
-              <div className="hidden sm:flex flex-col items-end leading-tight">
-                {companyName && <span className="text-xs font-mono text-[#84CC16]">{companyName}</span>}
-                <span data-testid="nav-user-email" className="text-[10px] text-neutral-500 font-mono">{user.email}</span>
-              </div>
-              <Button
-                data-testid="nav-logout-btn"
-                variant="ghost"
-                size="sm"
-                onClick={async () => { await logout(); navigate("/"); }}
-                className="text-neutral-400 hover:text-white hidden md:inline-flex"
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  data-testid="nav-user-menu"
+                  className="hidden md:flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-white/5 transition-colors"
+                  aria-label="Open account menu"
+                >
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#84CC16] to-[#06B6D4] flex items-center justify-center text-black font-bold text-sm shrink-0">
+                    {(user.name || user.email || "?").charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex flex-col items-start leading-tight max-w-[160px]">
+                    {companyName ? (
+                      <span className="text-xs font-mono text-[#84CC16] truncate max-w-full">{companyName}</span>
+                    ) : (
+                      <span className="text-xs font-medium text-neutral-200 truncate max-w-full">{user.name || "Account"}</span>
+                    )}
+                    <span data-testid="nav-user-email" className="text-[10px] text-neutral-500 font-mono truncate max-w-full">{user.email}</span>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 text-neutral-500" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                data-testid="nav-user-menu-content"
+                align="end"
+                sideOffset={6}
+                className="bg-[#0c0c0c] border-white/10 text-white w-64"
               >
-                <LogOut className="w-4 h-4" />
-              </Button>
-            </>
+                <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+                  Signed in as
+                </DropdownMenuLabel>
+                <div className="px-2 pb-2">
+                  <div className="text-sm text-neutral-200 truncate">{user.name || user.email}</div>
+                  <div className="text-[11px] text-neutral-500 font-mono truncate">{user.email}</div>
+                  {companyName && <div className="text-[11px] text-[#84CC16] font-mono truncate mt-0.5">{companyName}</div>}
+                </div>
+                {moreRoleLinks.length > 0 && (
+                  <>
+                    <DropdownMenuSeparator className="bg-white/10" />
+                    <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+                      Workspace
+                    </DropdownMenuLabel>
+                    {moreRoleLinks.map((n) => {
+                      const Icon = n.icon;
+                      return (
+                        <DropdownMenuItem
+                          key={n.to}
+                          asChild
+                          data-testid={`nav-menu-${n.label.toLowerCase().replace(/\s/g, "-")}`}
+                          className="cursor-pointer focus:bg-white/5 focus:text-white"
+                        >
+                          <Link to={n.to} className="flex items-center gap-2 w-full">
+                            {Icon ? <Icon className="w-4 h-4 text-neutral-400" /> : <span className="w-4 h-4" />}
+                            <span style={n.accent ? { color: n.accent } : undefined}>{n.label}</span>
+                          </Link>
+                        </DropdownMenuItem>
+                      );
+                    })}
+                  </>
+                )}
+                {guide && (
+                  <>
+                    <DropdownMenuSeparator className="bg-white/10" />
+                    <DropdownMenuItem asChild className="cursor-pointer focus:bg-white/5 focus:text-white">
+                      <a
+                        href={guide.href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        data-testid={guide.testid}
+                        className="flex items-center gap-2 w-full"
+                      >
+                        <BookOpen className="w-4 h-4 text-neutral-400" />
+                        {guide.label}
+                      </a>
+                    </DropdownMenuItem>
+                  </>
+                )}
+                <DropdownMenuSeparator className="bg-white/10" />
+                <DropdownMenuItem
+                  data-testid="nav-logout-btn"
+                  onClick={async () => { await logout(); navigate("/"); }}
+                  className="cursor-pointer focus:bg-[#FF3B30]/10 focus:text-[#FF3B30] text-[#FF3B30]"
+                >
+                  <LogOut className="w-4 h-4 mr-2" /> Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : (
             <>
               <Button
@@ -262,10 +330,10 @@ export default function Nav() {
                   </NavLink>
                 ))}
 
-                {extras.length > 0 && (
+                {allRoleLinks.length > 0 && (
                   <>
                     <div className="text-[10px] font-mono uppercase text-neutral-500 px-2 mt-4 mb-1 tracking-widest">/ My Workspace</div>
-                    {extras.map((n) => {
+                    {allRoleLinks.map((n) => {
                       const Icon = n.icon;
                       return (
                         <NavLink

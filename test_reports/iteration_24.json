@@ -1,0 +1,37 @@
+{
+  "summary": "Frontend-only verification of Nav.jsx 'corporate-style' menu redesign (HR overflow fix). Created fresh HR account via OTP-seeded MongoDB flow, then exercised desktop (1280/1366/1920), mobile (390) and platform-admin variants. All 9 acceptance criteria from the review request PASS — the horizontal scroll bug for HR is resolved, the avatar dropdown houses secondary links + role guide + sign out, the mobile Sheet drawer still contains every workspace link, and platform_admin/anon nav variants have no regressions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "acceptance_criteria_results": {
+    "NAV-NO-OVERFLOW-HR": "PASS — document.documentElement.scrollWidth == window.innerWidth (and header scrollWidth matches) at 1280px, 1366px, 1920px on /dashboard, /events, /admin while logged in as HR.",
+    "NAV-PRIMARY-LINKS-VISIBLE-HR": "PASS — at 1366px only nav-link-dashboard and nav-link-manage rendered inside header nav. nav-link-hire-vendors / -memberships / -players / -sponsor-hub are absent from the top bar (verified via header[data-testid=site-nav] nav a[data-testid=...] returning null for each).",
+    "NAV-USER-MENU-DROPDOWN": "PASS — clicking [data-testid=nav-user-menu] opens [data-testid=nav-user-menu-content]; content has (a) name 'NavTest HR Admin' + email + company 'NavTest HR'; (b) all 4 secondary links nav-menu-hire-vendors / -memberships / -players / -sponsor-hub visible; (c) HR role guide link (testid=nav-guide-company, href ends with kreeda-nation-company-manual.pdf); (d) nav-logout-btn visible. Clicking nav-menu-hire-vendors navigated to /hire and the dropdown auto-closed.",
+    "NAV-AVATAR-CIRCLE": "PASS — circle div text='N' (first letter of company-derived display), classes include 'bg-gradient-to-br from-[#84CC16] to-[#06B6D4]' and computed backgroundImage = linear-gradient(to right bottom, rgb(132,204,22), rgb(6,182,212)).",
+    "NAV-LOGOUT-WORKS": "PASS (with minor note) — after clicking nav-logout-btn the user-menu trigger disappears from DOM, dropdown auto-closes, all auth cookies are cleared (remaining cookies are only Cloudflare + PostHog analytics). NOTE: redirect lands on /login instead of '/'. Nav.jsx calls navigate('/'), but a route-guard / AuthContext side-effect kicks the unauthenticated user to /login. Functionally correct sign-out; URL deviates from PRD wording.",
+    "NAV-ANON-UNCHANGED": "PASS — anon view at 1366px shows all 5 public links (Home, Events, Services, About, Contact) plus nav-login-btn, nav-signup-organiser-btn, nav-signup-company-btn.",
+    "NAV-MOBILE-DRAWER": "PASS — at 390px, hamburger opens [data-testid=nav-mobile-drawer]. For HR, all 6 workspace links present: nav-mobile-link-dashboard, -manage, -hire-vendors, -memberships, -players, -sponsor-hub. HR role guide present (testid=nav-guide-company-mobile, manual PDF link). nav-mobile-logout present and visible.",
+    "NAV-OTHER-ROLES-NO-OVERFLOW": "PASS — platform_admin (admin@kreedanation.com) header has only 3 nav links: nav-link-home, nav-link-events, nav-link-hq. doc.scrollWidth == innerWidth at 1280 and 1366. User dropdown trigger present on right.",
+    "NAV-USER-EMAIL-PRESERVED-TESTID": "PASS — [data-testid=nav-user-email] still rendered inside the nav-user-menu trigger button with the user's email."
+  },
+  "test_report_links": ["/app/test_reports/iteration_24.json"],
+  "action_items": [
+    "OPTIONAL: After logout the URL settles on /login rather than '/' as spec'd in NAV-LOGOUT-WORKS. Nav.jsx itself calls navigate('/'), so investigate whether AuthContext.logout() or a Home/route-guard side-effect forces the redirect. Not a blocker — sign-out is fully effective (cookies cleared, user-menu gone)."
+  ],
+  "critical_code_review_comments": [
+    "Avatar initial uses (user.name || user.email).charAt(0) — for an HR with no name set, this would fall back to email's first char. Acceptable.",
+    "moreRoleLinks block is guarded by length > 0, so Player/Vendor/Sponsor users (who only have primary links) will have a leaner dropdown without empty 'Workspace' section. Good.",
+    "Mobile drawer uses allRoleLinks = [...primary, ...more] — duplicates won't occur because primary and more lists are disjoint per role definition. Confirmed in code.",
+    "Dropdown content uses a portal (radix), so query_selector on header subtree won't find dropdown items even when open — which is exactly what we want for the 'secondary not in topbar' assertion."
+  ],
+  "updated_files": [],
+  "success_rate": {"frontend": "100%", "backend": "n/a (frontend-only)"},
+  "test_credentials": "HR (created during test, persists in DB): hr-navtest@navtestco.in / Pass1234, company_name='NavTest HR'. Platform admin: admin@kreedanation.com / admin123.",
+  "seed_data_creation": "Inserted /tmp/create_hr.py — seeds a company_signup_otps doc with otp=123456 then calls /api/companies/signup. Creates user + companies docs. Re-runnable (deletes prior rows first).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "HR test account hr-navtest@navtestco.in / Pass1234 already lives in Mongo (users + companies). To re-create from scratch run /tmp/create_hr.py. Note: companies/signup/request-otp returns 502 in this environment because outbound SendGrid is unreachable — bypass by seeding OTP directly into db.company_signup_otps (see script). Login submit button is [data-testid=login-submit] (NOT button[type=submit] alone — there are two 'Sign in' buttons on /login). On every fresh login to HR the dashboard shows a 'WELCOME, HR CAPTAIN' first-time orientation modal that intercepts clicks; dismiss with the visible 'Got it — let me explore' button before opening the user menu."
+}

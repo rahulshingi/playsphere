@@ -86,6 +86,7 @@ class PrivateBooking(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     vendor_id: str
     listing_id: str
+    customer_id: Optional[str] = None  # links to VendorCustomer directory
     client_name: str
     client_phone: Optional[str] = ""
     client_email: Optional[str] = ""
@@ -93,9 +94,13 @@ class PrivateBooking(BaseModel):
     start_time: str  # HH:MM
     end_time: str  # HH:MM
     hours: int = 1
-    amount: float = 0
+    rate_type: str = "total"  # "total" (flat amount) | "hourly" (rate * hours)
+    rate_per_hour: Optional[float] = 0
+    amount: float = 0  # final total to be paid — always the source of truth for revenue
     currency: str = "INR"
     notes: Optional[str] = ""
+    status: str = "active"  # active | completed | cancelled
+    invoice_id: Optional[str] = None
     # Recurrence (Phase 5 — basic weekly pattern)
     recurrence: Optional[str] = None  # None | "weekly"
     recurrence_until: Optional[str] = None  # YYYY-MM-DD
@@ -105,6 +110,7 @@ class PrivateBooking(BaseModel):
 
 class PrivateBookingCreate(BaseModel):
     listing_id: str
+    customer_id: Optional[str] = None
     client_name: str
     client_phone: Optional[str] = ""
     client_email: Optional[str] = ""
@@ -112,12 +118,62 @@ class PrivateBookingCreate(BaseModel):
     start_time: str
     end_time: str
     hours: Optional[int] = 1
+    rate_type: Optional[str] = "total"
+    rate_per_hour: Optional[float] = 0
     amount: Optional[float] = 0
     currency: Optional[str] = "INR"
     notes: Optional[str] = ""
     recurrence: Optional[str] = None
     recurrence_until: Optional[str] = None
     recurrence_days_of_week: List[int] = Field(default_factory=list)
+
+
+class VendorCustomer(BaseModel):
+    """Reusable customer directory for a vendor's offline business."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_id: str
+    name: str
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    address: Optional[str] = ""
+    gstin: Optional[str] = ""
+    notes: Optional[str] = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class VendorCustomerCreate(BaseModel):
+    name: str
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    address: Optional[str] = ""
+    gstin: Optional[str] = ""
+    notes: Optional[str] = ""
+
+
+class VendorInvoice(BaseModel):
+    """A generated invoice against one or more private bookings.
+
+    Snapshots vendor + customer details at issue time so future edits to the
+    directory don't retroactively change already-issued invoices.
+    """
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_id: str
+    invoice_number: str  # V-YYYY-000123, per-vendor auto-increment
+    booking_id: str
+    customer_id: Optional[str] = None
+    customer_snapshot: dict = Field(default_factory=dict)  # {name, phone, email, gstin, address}
+    vendor_snapshot: dict = Field(default_factory=dict)    # {business_name, gstin, address, phone, email, logo_url}
+    line_items: List[dict] = Field(default_factory=list)   # [{description, hours, rate, amount}]
+    subtotal: float
+    tax_percent: float
+    tax_amount: float
+    total: float
+    currency: str = "INR"
+    notes: Optional[str] = ""
+    status: str = "issued"  # draft | issued | paid | void
+    issued_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    paid_at: Optional[str] = None
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 def register(api, db, deps):
@@ -352,13 +408,30 @@ def register(api, db, deps):
         return pb
 
     @api.get("/vendor/private-bookings", response_model=List[PrivateBooking])
-    async def list_private_bookings(listing_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    async def list_private_bookings(listing_id: Optional[str] = None, status: Optional[str] = None, user: dict = Depends(get_current_user)):
         vendor = await _vendor_for_user(user)
         flt = {"vendor_id": vendor["id"]}
         if listing_id:
             flt["listing_id"] = listing_id
+        if status:
+            flt["status"] = status
         docs = await db.private_bookings.find(flt, {"_id": 0}).sort("requested_date", -1).to_list(500)
         return [PrivateBooking(**d) for d in docs]
+
+    @api.patch("/vendor/private-bookings/{booking_id}", response_model=PrivateBooking)
+    async def update_private_booking(booking_id: str, body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        allowed = {"status", "notes", "amount", "rate_per_hour", "rate_type"}
+        upd = {k: v for k, v in body.items() if k in allowed}
+        if upd.get("status") and upd["status"] not in ("active", "completed", "cancelled"):
+            raise HTTPException(400, "Invalid status")
+        if not upd:
+            raise HTTPException(400, "Nothing to update")
+        res = await db.private_bookings.update_one({"id": booking_id, "vendor_id": vendor["id"]}, {"$set": upd})
+        if not res.matched_count:
+            raise HTTPException(404, "Booking not found")
+        doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        return PrivateBooking(**doc)
 
     @api.delete("/vendor/private-bookings/{booking_id}")
     async def delete_private_booking(booking_id: str, user: dict = Depends(get_current_user)):
@@ -367,3 +440,189 @@ def register(api, db, deps):
         if not res.deleted_count:
             raise HTTPException(404, "Booking not found")
         return {"ok": True}
+
+    # ============================================================
+    # Customer directory (Phase 5D)
+    # ============================================================
+    @api.get("/vendor/customers", response_model=List[VendorCustomer])
+    async def list_customers(user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        docs = await db.vendor_customers.find({"vendor_id": vendor["id"]}, {"_id": 0}).sort("name", 1).to_list(1000)
+        return [VendorCustomer(**d) for d in docs]
+
+    @api.post("/vendor/customers", response_model=VendorCustomer)
+    async def create_customer(body: VendorCustomerCreate, user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        await _ensure_offline_mode(vendor)
+        if not body.name.strip():
+            raise HTTPException(400, "Customer name is required")
+        # Dedupe by phone within a vendor (soft — vendors may still create if they intend)
+        cust = VendorCustomer(vendor_id=vendor["id"], **body.model_dump())
+        await db.vendor_customers.insert_one(cust.model_dump())
+        return cust
+
+    @api.patch("/vendor/customers/{customer_id}", response_model=VendorCustomer)
+    async def update_customer(customer_id: str, body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        allowed = {"name", "phone", "email", "address", "gstin", "notes"}
+        upd = {k: v for k, v in body.items() if k in allowed}
+        if not upd:
+            raise HTTPException(400, "Nothing to update")
+        await db.vendor_customers.update_one({"id": customer_id, "vendor_id": vendor["id"]}, {"$set": upd})
+        doc = await db.vendor_customers.find_one({"id": customer_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Customer not found")
+        return VendorCustomer(**doc)
+
+    @api.delete("/vendor/customers/{customer_id}")
+    async def delete_customer(customer_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        res = await db.vendor_customers.delete_one({"id": customer_id, "vendor_id": vendor["id"]})
+        if not res.deleted_count:
+            raise HTTPException(404, "Customer not found")
+        return {"ok": True}
+
+    # ============================================================
+    # Invoices (Phase 5D)
+    # ============================================================
+    @api.post("/vendor/invoices", response_model=VendorInvoice)
+    async def create_invoice(body: dict, user: dict = Depends(get_current_user)):
+        """Generate an invoice from a private booking.
+
+        Body: {booking_id, tax_percent?, notes?, description?}
+        Vendor's stored invoice_business_name / GSTIN / address / logo become
+        the vendor snapshot; the customer directory row (if linked) or the
+        booking's inline fields become the customer snapshot.
+        """
+        vendor = await _vendor_for_user(user)
+        await _ensure_offline_mode(vendor)
+        booking_id = body.get("booking_id")
+        if not booking_id:
+            raise HTTPException(400, "booking_id is required")
+        booking = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not booking:
+            raise HTTPException(404, "Booking not found")
+        if booking.get("invoice_id"):
+            raise HTTPException(400, "Invoice already generated for this booking")
+
+        # Customer snapshot: prefer directory row if linked
+        cust_snap = {}
+        if booking.get("customer_id"):
+            cd = await db.vendor_customers.find_one({"id": booking["customer_id"]}, {"_id": 0}) or {}
+            cust_snap = {"name": cd.get("name"), "phone": cd.get("phone"), "email": cd.get("email"),
+                         "gstin": cd.get("gstin"), "address": cd.get("address")}
+        else:
+            cust_snap = {"name": booking.get("client_name"), "phone": booking.get("client_phone"),
+                         "email": booking.get("client_email"), "gstin": "", "address": ""}
+
+        vendor_snap = {
+            "business_name": vendor.get("invoice_business_name") or vendor.get("business_name"),
+            "gstin": vendor.get("gstin") or "",
+            "address": vendor.get("invoice_address") or "",
+            "phone": vendor.get("invoice_phone") or vendor.get("mobile"),
+            "email": vendor.get("invoice_email") or vendor.get("email"),
+            "logo_url": vendor.get("invoice_logo_url") or "",
+            "footer_note": vendor.get("invoice_footer_note") or "",
+        }
+
+        subtotal = float(booking.get("amount", 0))
+        tax_percent = float(body.get("tax_percent", vendor.get("invoice_tax_percent") or 0))
+        tax_amount = round(subtotal * tax_percent / 100, 2)
+        total = round(subtotal + tax_amount, 2)
+
+        description = body.get("description") or f"{booking.get('start_time','')}–{booking.get('end_time','')} on {booking.get('requested_date','')} · {booking.get('hours',1)}h"
+        line_items = [{
+            "description": description,
+            "hours": booking.get("hours", 1),
+            "rate": booking.get("rate_per_hour") or subtotal,
+            "amount": subtotal,
+        }]
+
+        # Serial invoice number, per vendor
+        year = datetime.now(timezone.utc).strftime("%Y")
+        count = await db.vendor_invoices.count_documents({"vendor_id": vendor["id"]})
+        invoice_number = f"KN-{year}-{str(count + 1).zfill(5)}"
+
+        inv = VendorInvoice(
+            vendor_id=vendor["id"], invoice_number=invoice_number, booking_id=booking_id,
+            customer_id=booking.get("customer_id"), customer_snapshot=cust_snap,
+            vendor_snapshot=vendor_snap, line_items=line_items,
+            subtotal=subtotal, tax_percent=tax_percent, tax_amount=tax_amount, total=total,
+            currency=booking.get("currency", "INR"), notes=body.get("notes", ""),
+        )
+        await db.vendor_invoices.insert_one(inv.model_dump())
+        await db.private_bookings.update_one({"id": booking_id}, {"$set": {"invoice_id": inv.id}})
+        return inv
+
+    @api.get("/vendor/invoices", response_model=List[VendorInvoice])
+    async def list_invoices(user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        docs = await db.vendor_invoices.find({"vendor_id": vendor["id"]}, {"_id": 0}).sort("issued_at", -1).to_list(1000)
+        return [VendorInvoice(**d) for d in docs]
+
+    @api.get("/vendor/invoices/{invoice_id}", response_model=VendorInvoice)
+    async def get_invoice(invoice_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        doc = await db.vendor_invoices.find_one({"id": invoice_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Invoice not found")
+        return VendorInvoice(**doc)
+
+    @api.post("/vendor/invoices/{invoice_id}/mark-paid", response_model=VendorInvoice)
+    async def mark_invoice_paid(invoice_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _vendor_for_user(user)
+        res = await db.vendor_invoices.update_one(
+            {"id": invoice_id, "vendor_id": vendor["id"], "status": {"$ne": "paid"}},
+            {"$set": {"status": "paid", "paid_at": datetime.now(timezone.utc).isoformat()}},
+        )
+        if not res.matched_count:
+            raise HTTPException(404, "Invoice not found or already paid")
+        doc = await db.vendor_invoices.find_one({"id": invoice_id}, {"_id": 0})
+        return VendorInvoice(**doc)
+
+    # ============================================================
+    # Admin — per-vendor offline stats (Phase 5D)
+    # ============================================================
+    @api.get("/admin/vendors/{vendor_id}/offline-stats")
+    async def admin_vendor_offline_stats(vendor_id: str, _: dict = Depends(require_platform_admin)):
+        vendor = await db.vendors.find_one({"id": vendor_id}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(404, "Vendor not found")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        month_start = datetime.now(timezone.utc).strftime("%Y-%m-01")
+        total_customers = await db.vendor_customers.count_documents({"vendor_id": vendor_id})
+        total_bookings = await db.private_bookings.count_documents({"vendor_id": vendor_id})
+        active_bookings = await db.private_bookings.count_documents({"vendor_id": vendor_id, "status": "active"})
+        completed_bookings = await db.private_bookings.count_documents({"vendor_id": vendor_id, "status": "completed"})
+        # This-month + upcoming lists (calendar) — small limits so response stays snappy.
+        month_bookings = await db.private_bookings.find(
+            {"vendor_id": vendor_id, "requested_date": {"$gte": month_start}},
+            {"_id": 0, "requested_date": 1, "start_time": 1, "end_time": 1, "client_name": 1, "amount": 1, "status": 1},
+        ).sort("requested_date", 1).to_list(120)
+        # Revenue rolls
+        agg = await db.private_bookings.aggregate([
+            {"$match": {"vendor_id": vendor_id}},
+            {"$group": {"_id": None, "total_revenue": {"$sum": "$amount"}}},
+        ]).to_list(1)
+        total_revenue = float(agg[0]["total_revenue"]) if agg else 0.0
+        invoices_issued = await db.vendor_invoices.count_documents({"vendor_id": vendor_id})
+        invoices_paid = await db.vendor_invoices.count_documents({"vendor_id": vendor_id, "status": "paid"})
+        return {
+            "vendor": {
+                "id": vendor["id"], "business_name": vendor.get("business_name"),
+                "email": vendor.get("email"), "city": vendor.get("city"),
+                "offline_mode": vendor.get("offline_mode", False),
+                "offline_subscription_expires_at": vendor.get("offline_subscription_expires_at"),
+            },
+            "totals": {
+                "customers": total_customers,
+                "bookings": total_bookings,
+                "active_bookings": active_bookings,
+                "completed_bookings": completed_bookings,
+                "invoices_issued": invoices_issued,
+                "invoices_paid": invoices_paid,
+                "total_revenue": total_revenue,
+            },
+            "calendar": month_bookings,
+            "generated_at": now_iso,
+        }

@@ -18,6 +18,7 @@ import VenueScheduleEditor from "@/components/VenueScheduleEditor";
 import { VendorReviewsInbox } from "@/components/Reviews";
 import VendorMembershipsPanel from "@/components/vendor/VendorMembershipsPanel";
 import OfflineModeCard from "@/components/vendor/OfflineModeCard";
+import InvoiceSettingsPanel from "@/components/vendor/InvoiceSettingsPanel";
 import PrivateBookingsPanel from "@/components/vendor/PrivateBookingsPanel";
 
 const SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
@@ -200,6 +201,7 @@ export default function VendorDashboard() {
 
       <div className="max-w-7xl mx-auto px-6">
         <OfflineModeCard vendor={vendor} onChange={load} />
+        <InvoiceSettingsPanel vendor={vendor} onSaved={load} />
         <PrivateBookingsPanel vendor={vendor} listings={listings} />
       </div>
 

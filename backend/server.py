@@ -647,6 +647,15 @@ class Vendor(BaseModel):
     # ---- Phase 5C: paid "offline mode" unlock ----
     offline_mode: bool = False
     offline_subscription_expires_at: Optional[str] = None
+    # ---- Phase 5D: invoice settings (only used when vendor generates invoices) ----
+    gstin: Optional[str] = ""
+    invoice_business_name: Optional[str] = ""
+    invoice_address: Optional[str] = ""
+    invoice_phone: Optional[str] = ""
+    invoice_email: Optional[str] = ""
+    invoice_tax_percent: Optional[float] = 18.0
+    invoice_logo_url: Optional[str] = ""
+    invoice_footer_note: Optional[str] = ""
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 

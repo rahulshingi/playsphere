@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, XCircle, Clock, Sparkles, MapPin, Phone, Mail, FileText, Store } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, Sparkles, MapPin, Phone, Mail, FileText, Store, PauseCircle, PlayCircle } from "lucide-react";
 import { fmtPrice } from "@/lib/currency";
 
 const SUB_STATUS = {
   pending_payment: { label: "Pending", color: "bg-amber-500 text-black", icon: Clock },
   active: { label: "Active", color: "bg-[#84CC16] text-black", icon: CheckCircle2 },
+  paused: { label: "Paused", color: "bg-[#FACC15] text-black", icon: PauseCircle },
   expired: { label: "Expired", color: "bg-neutral-500 text-white", icon: XCircle },
   cancelled: { label: "Cancelled", color: "bg-[#FF3B30] text-white", icon: XCircle },
 };
@@ -52,6 +53,30 @@ export default function BusinessTab({ onQueueChange }) {
     } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
   };
 
+  const pauseSub = async (s) => {
+    const reason = window.prompt(
+      `Pause ${s.vendor_email || s.vendor_id}'s ${s.plan_type} subscription?\nReason (shown to vendor):`,
+      "Discrepancy under review",
+    );
+    if (reason === null) return;
+    try {
+      await api.post(`/admin/offline-subscriptions/${s.id}/pause`, { reason });
+      toast.success("Subscription paused — vendor's offline mode is now disabled");
+      loadSubs();
+      onQueueChange?.();
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
+  };
+
+  const resumeSub = async (s) => {
+    if (!window.confirm(`Resume ${s.vendor_email || s.vendor_id}'s ${s.plan_type} subscription?`)) return;
+    try {
+      await api.post(`/admin/offline-subscriptions/${s.id}/resume`);
+      toast.success("Subscription resumed — vendor's offline mode is back");
+      loadSubs();
+      onQueueChange?.();
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
+  };
+
   const updateLead = async (l, patch) => {
     try {
       await api.patch(`/admin/venue-leads/${l.id}`, patch);
@@ -62,7 +87,8 @@ export default function BusinessTab({ onQueueChange }) {
   };
 
   const pendingSubs = subs.filter((s) => s.status === "pending_payment");
-  const otherSubs = subs.filter((s) => s.status !== "pending_payment");
+  const activeSubs = subs.filter((s) => s.status === "active" || s.status === "paused");
+  const historySubs = subs.filter((s) => !["pending_payment", "active", "paused"].includes(s.status));
   const openLeads = leads.filter((l) => l.status === "open");
   const otherLeads = leads.filter((l) => l.status !== "open");
 
@@ -88,11 +114,28 @@ export default function BusinessTab({ onQueueChange }) {
           </div>
         )}
 
-        {otherSubs.length > 0 && (
-          <details data-testid="pa-business-subs-history">
-            <summary className="text-xs text-neutral-500 cursor-pointer font-mono uppercase tracking-widest mb-2">/ History ({otherSubs.length})</summary>
+        {activeSubs.length > 0 && (
+          <div data-testid="pa-business-active-subs" className="mt-6">
+            <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-2">
+              / Active subscribers <span className="text-[#84CC16]">· {activeSubs.filter((s) => s.status === "active").length} active</span>
+              {activeSubs.filter((s) => s.status === "paused").length > 0 && <span className="text-[#FACC15] ml-1">· {activeSubs.filter((s) => s.status === "paused").length} paused</span>}
+            </div>
+            <div className="space-y-2">
+              {activeSubs.map((s) => (
+                <SubRow key={s.id} s={s}
+                  onPause={s.status === "active" ? () => pauseSub(s) : undefined}
+                  onResume={s.status === "paused" ? () => resumeSub(s) : undefined}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {historySubs.length > 0 && (
+          <details data-testid="pa-business-subs-history" className="mt-6">
+            <summary className="text-xs text-neutral-500 cursor-pointer font-mono uppercase tracking-widest mb-2">/ History ({historySubs.length})</summary>
             <div className="space-y-2 mt-2">
-              {otherSubs.map((s) => <SubRow key={s.id} s={s} />)}
+              {historySubs.map((s) => <SubRow key={s.id} s={s} />)}
             </div>
           </details>
         )}
@@ -140,9 +183,12 @@ function EmptyState({ icon: Icon, text }) {
   );
 }
 
-function SubRow({ s, onActivate, onReject }) {
+function SubRow({ s, onActivate, onReject, onPause, onResume }) {
   const meta = SUB_STATUS[s.status] || SUB_STATUS.pending_payment;
   const Icon = meta.icon;
+  const daysLeft = s.expires_at
+    ? Math.ceil((new Date(s.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
   return (
     <div data-testid={`pa-sub-${s.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-4">
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -153,8 +199,11 @@ function SubRow({ s, onActivate, onReject }) {
           </div>
           <div className="font-mono text-[10px] text-neutral-500 uppercase mt-1">
             {s.plan_type} · {fmtPrice(s.amount, s.currency)} · {s.payment_method}
+            {s.started_at && ` · started ${s.started_at.slice(0, 10)}`}
             {s.expires_at && ` · expires ${s.expires_at.slice(0, 10)}`}
+            {daysLeft != null && daysLeft >= 0 && s.status !== "cancelled" && <span className="ml-1 text-[#84CC16]">· {daysLeft}d left</span>}
           </div>
+          {s.paused_reason && <div className="text-xs text-[#FACC15]/90 mt-1">Paused: {s.paused_reason}{s.paused_at && ` · ${s.paused_at.slice(0, 10)}`}</div>}
           {s.cancelled_reason && <div className="text-xs text-[#FF3B30]/90 mt-1">Cancelled: {s.cancelled_reason}</div>}
         </div>
         <Badge className={`${meta.color} text-[10px] font-mono uppercase tracking-widest rounded-sm shrink-0`}>
@@ -169,6 +218,22 @@ function SubRow({ s, onActivate, onReject }) {
           </Button>
           <Button data-testid={`pa-sub-reject-${s.id}`} size="sm" variant="ghost" onClick={onReject} className="text-[#FF3B30]">
             <XCircle className="w-3.5 h-3.5 mr-1" /> Reject
+          </Button>
+        </div>
+      )}
+      {s.status === "active" && onPause && (
+        <div className="flex gap-2 mt-3">
+          <Button data-testid={`pa-sub-pause-${s.id}`} size="sm" onClick={onPause}
+            className="bg-[#FACC15] hover:bg-[#eab308] text-black font-semibold rounded-sm">
+            <PauseCircle className="w-3.5 h-3.5 mr-1" /> Pause subscription
+          </Button>
+        </div>
+      )}
+      {s.status === "paused" && onResume && (
+        <div className="flex gap-2 mt-3">
+          <Button data-testid={`pa-sub-resume-${s.id}`} size="sm" onClick={onResume}
+            className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
+            <PlayCircle className="w-3.5 h-3.5 mr-1" /> Resume subscription
           </Button>
         </div>
       )}

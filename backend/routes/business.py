@@ -65,12 +65,15 @@ class OfflineSubscription(BaseModel):
     plan_type: str  # "monthly" | "yearly"
     amount: float
     currency: str = "INR"
-    status: str = "pending_payment"  # pending_payment | active | expired | cancelled
+    status: str = "pending_payment"  # pending_payment | active | paused | expired | cancelled
     started_at: Optional[str] = None
     expires_at: Optional[str] = None
     payment_method: str = "offline"
     activated_by_admin_id: Optional[str] = None
     cancelled_reason: Optional[str] = None
+    paused_reason: Optional[str] = None
+    paused_at: Optional[str] = None
+    paused_by_admin_id: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -264,6 +267,53 @@ def register(api, db, deps):
         await db.offline_subscriptions.update_one(
             {"id": sub_id},
             {"$set": {"status": "cancelled", "cancelled_reason": reason}},
+        )
+        return OfflineSubscription(**(await db.offline_subscriptions.find_one({"id": sub_id}, {"_id": 0})))
+
+    @api.post("/admin/offline-subscriptions/{sub_id}/pause", response_model=OfflineSubscription)
+    async def admin_pause_subscription(sub_id: str, body: dict = None, user: dict = Depends(require_platform_admin)):
+        """Pause an active subscription — vendor immediately loses offline_mode access.
+        Use for discrepancies (payment bounced, ToS breach, dispute in progress)."""
+        doc = await db.offline_subscriptions.find_one({"id": sub_id}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Subscription not found")
+        if doc["status"] != "active":
+            raise HTTPException(400, f"Cannot pause from status '{doc['status']}'")
+        reason = (body or {}).get("reason", "Paused by admin")
+        now = datetime.now(timezone.utc).isoformat()
+        await db.offline_subscriptions.update_one(
+            {"id": sub_id},
+            {"$set": {
+                "status": "paused", "paused_reason": reason, "paused_at": now,
+                "paused_by_admin_id": user["id"],
+            }},
+        )
+        # Revoke offline_mode immediately so the vendor can't add new private bookings.
+        await db.vendors.update_one(
+            {"id": doc["vendor_id"]},
+            {"$set": {"offline_mode": False}},
+        )
+        return OfflineSubscription(**(await db.offline_subscriptions.find_one({"id": sub_id}, {"_id": 0})))
+
+    @api.post("/admin/offline-subscriptions/{sub_id}/resume", response_model=OfflineSubscription)
+    async def admin_resume_subscription(sub_id: str, _: dict = Depends(require_platform_admin)):
+        """Resume a paused subscription — restores offline_mode, keeps original expiry."""
+        doc = await db.offline_subscriptions.find_one({"id": sub_id}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Subscription not found")
+        if doc["status"] != "paused":
+            raise HTTPException(400, f"Cannot resume from status '{doc['status']}'")
+        # Guard against resuming after expiry.
+        if doc.get("expires_at") and doc["expires_at"] < datetime.now(timezone.utc).isoformat():
+            raise HTTPException(400, "Subscription has expired — vendor must renew")
+        await db.offline_subscriptions.update_one(
+            {"id": sub_id},
+            {"$set": {"status": "active"},
+             "$unset": {"paused_reason": "", "paused_at": "", "paused_by_admin_id": ""}},
+        )
+        await db.vendors.update_one(
+            {"id": doc["vendor_id"]},
+            {"$set": {"offline_mode": True, "offline_subscription_expires_at": doc.get("expires_at")}},
         )
         return OfflineSubscription(**(await db.offline_subscriptions.find_one({"id": sub_id}, {"_id": 0})))
 

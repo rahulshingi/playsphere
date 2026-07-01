@@ -23,7 +23,7 @@ const LEAD_STATUS_OPTIONS = ["open", "contacted", "converted", "archived"];
  *   2. Venue leads submitted by HR / organiser / admin during event create —
  *      admin follows up + updates status + notes.
  */
-export default function BusinessTab() {
+export default function BusinessTab({ onQueueChange }) {
   const [subs, setSubs] = useState([]);
   const [leads, setLeads] = useState([]);
 
@@ -37,6 +37,7 @@ export default function BusinessTab() {
       await api.post(`/admin/offline-subscriptions/${s.id}/activate`);
       toast.success("Subscription activated — vendor's offline mode is now unlocked");
       loadSubs();
+      onQueueChange?.();
     } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
   };
 
@@ -47,6 +48,7 @@ export default function BusinessTab() {
       await api.post(`/admin/offline-subscriptions/${s.id}/reject`, { reason });
       toast.success("Request rejected");
       loadSubs();
+      onQueueChange?.();
     } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
   };
 
@@ -55,6 +57,7 @@ export default function BusinessTab() {
       await api.patch(`/admin/venue-leads/${l.id}`, patch);
       toast.success("Lead updated");
       loadLeads();
+      onQueueChange?.();
     } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
   };
 

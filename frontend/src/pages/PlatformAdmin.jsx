@@ -65,6 +65,7 @@ export default function PlatformAdmin() {
   const [about, setAbout] = useState(ABOUT_DEFAULTS);
   const [editing, setEditing] = useState(null);
   const [pendingApprovals, setPendingApprovals] = useState([]);
+  const [businessQueueCount, setBusinessQueueCount] = useState(0);
 
   const load = () => Promise.all([
     api.get("/services?include_inactive=true"),
@@ -76,11 +77,14 @@ export default function PlatformAdmin() {
     api.get("/settings"),
     api.get("/about"),
     api.get("/events/pending-approval"),
-  ]).then(([s, c, ev, b, v, l, st, ab, pa]) => {
+    api.get("/admin/offline-subscriptions?status=pending_payment").catch(() => ({ data: [] })),
+    api.get("/admin/venue-leads?status=open").catch(() => ({ data: [] })),
+  ]).then(([s, c, ev, b, v, l, st, ab, pa, os, vl]) => {
     setServices(s.data); setCompanies(c.data); setEvents(ev.data); setBookings(b.data);
     setVendors(v.data); setListings(l.data); setSettings(st.data);
     setAbout({ ...ABOUT_DEFAULTS, ...ab.data });
     setPendingApprovals(pa.data || []);
+    setBusinessQueueCount((os.data?.length || 0) + (vl.data?.length || 0));
   });
 
   useEffect(() => {
@@ -138,7 +142,7 @@ export default function PlatformAdmin() {
             <TabsTrigger value="bookings" data-testid="pa-tab-bookings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bookings ({bookings.length})</TabsTrigger>
             <TabsTrigger value="vendors" data-testid="pa-tab-vendors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Vendors ({vendors.length})</TabsTrigger>
             <TabsTrigger value="listings" data-testid="pa-tab-listings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Listings ({listings.length})</TabsTrigger>
-            <TabsTrigger value="business" data-testid="pa-tab-business" className="data-[state=active]:bg-[#EC4899] data-[state=active]:text-white rounded-sm">Business</TabsTrigger>
+            <TabsTrigger value="business" data-testid="pa-tab-business" className={`data-[state=active]:bg-[#EC4899] data-[state=active]:text-white rounded-sm ${businessQueueCount > 0 ? "text-[#EC4899]" : ""}`}>Business{businessQueueCount > 0 ? ` (${businessQueueCount})` : ""}</TabsTrigger>
             <TabsTrigger value="settings" data-testid="pa-tab-settings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Settings</TabsTrigger>
             <TabsTrigger value="about" data-testid="pa-tab-about" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">About page</TabsTrigger>
             <TabsTrigger value="reviews" data-testid="pa-tab-reviews" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Reviews</TabsTrigger>
@@ -233,7 +237,7 @@ export default function PlatformAdmin() {
           </TabsContent>
 
           <TabsContent value="business" className="mt-6">
-            <BusinessTab />
+            <BusinessTab onQueueChange={load} />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">

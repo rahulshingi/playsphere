@@ -23,6 +23,7 @@ import VendorsTab from "@/components/admin/VendorsTab";
 import ListingsTab from "@/components/admin/ListingsTab";
 import SettingsTab from "@/components/admin/SettingsTab";
 import AboutTab from "@/components/admin/AboutTab";
+import BusinessTab from "@/components/admin/BusinessTab";
 
 const BLANK_SERVICE = {
   name: "",
@@ -137,6 +138,7 @@ export default function PlatformAdmin() {
             <TabsTrigger value="bookings" data-testid="pa-tab-bookings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bookings ({bookings.length})</TabsTrigger>
             <TabsTrigger value="vendors" data-testid="pa-tab-vendors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Vendors ({vendors.length})</TabsTrigger>
             <TabsTrigger value="listings" data-testid="pa-tab-listings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Listings ({listings.length})</TabsTrigger>
+            <TabsTrigger value="business" data-testid="pa-tab-business" className="data-[state=active]:bg-[#EC4899] data-[state=active]:text-white rounded-sm">Business</TabsTrigger>
             <TabsTrigger value="settings" data-testid="pa-tab-settings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Settings</TabsTrigger>
             <TabsTrigger value="about" data-testid="pa-tab-about" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">About page</TabsTrigger>
             <TabsTrigger value="reviews" data-testid="pa-tab-reviews" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Reviews</TabsTrigger>
@@ -228,6 +230,10 @@ export default function PlatformAdmin() {
 
           <TabsContent value="listings" className="mt-6">
             <ListingsTab listings={listings} reload={load} canManage={hasPermission("manage_listings")} />
+          </TabsContent>
+
+          <TabsContent value="business" className="mt-6">
+            <BusinessTab />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">

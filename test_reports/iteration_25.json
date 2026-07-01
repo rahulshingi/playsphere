@@ -1,0 +1,38 @@
+{
+  "summary": "Verified new Platform Admin > Business tab (BusinessTab.jsx) end-to-end. Frontend surfaces the previously-hidden offline-mode subscription queue and venue-leads queue, wiring correctly to /api/admin/offline-subscriptions and /api/admin/venue-leads. All 7 acceptance criteria pass. Test used direct-Mongo seed for a synthetic vendor + 2 pending subs + 1 open lead, then drove admin UI through Playwright.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "acceptance_results": {
+    "PA-BUSINESS-TAB-EXISTS": "PASS — pa-tab-business present, pink accent (bg-[#EC4899] on active), at index 11 immediately after pa-tab-listings (index 10). Clicking renders BusinessTab.",
+    "PA-BUSINESS-SUBS-LOAD": "PASS — pa-business-subs section calls GET /api/admin/offline-subscriptions. Seeded row (pa-sub-{id}) shows vendor_email, plan_type='monthly', ₹99, badge 'Pending'.",
+    "PA-BUSINESS-SUB-ACTIVATE": "PASS — pa-sub-activate-{id} triggers POST /activate. Toast 'Subscription activated — vendor's offline mode is now unlocked' fires. Row moves into History details, badge flips to 'Active', expires_at ~30 days out (2026-07-31). db.vendors row now has offline_mode=true and offline_subscription_expires_at set (verified via /api/vendors).",
+    "PA-BUSINESS-SUB-REJECT": "PASS — pa-sub-reject-{id} opens window.prompt (handled via Playwright dialog handler with 'No payment received'). POST /reject fired, sub.status='cancelled', cancelled_reason persisted. Vendor.offline_mode remained true only for the *activated* sub (correct — different sub).",
+    "PA-BUSINESS-LEADS-LOAD": "PASS — pa-business-leads section calls GET /api/admin/venue-leads. Seeded lead (pa-lead-{id}) shows venue_name 'Test Court BLR', full address, contact_name/phone/email, and 'Submitted by admin@kreedanation.com (platform_admin)'.",
+    "PA-BUSINESS-LEAD-STATUS-UPDATE": "PASS — pa-lead-status-{id} Select opened, 'contacted' clicked, PATCH /api/admin/venue-leads/{id} sent with {status:'contacted'}, toast 'Lead updated' shown, row moved into leads-history details. API returns status='contacted'.",
+    "PA-BUSINESS-LEAD-NOTES": "PASS — pa-lead-notes-{id} textarea filled 'Called owner, meeting scheduled'; pa-lead-save-{id} fires PATCH with admin_notes; toast 'Lead updated'; GET returns admin_notes back."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase5_business.py (existing backend regression from iteration 23 — unchanged backend, no need to re-run)",
+    "/app/test_reports/seed_business_tab.py (seed script used for UI test)",
+    "/app/test_reports/business_tab.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "BusinessTab loadSubs/loadLeads swallow errors silently via .catch(() => setSubs([])) — a real network failure will look identical to 'no data'. Consider showing a toast/error banner so admins know if the backend is down.",
+    "SubRow shows s.vendor_email OR s.vendor_id as the header — fine, but no link/CTA to view the vendor's full profile. Minor UX gap for triage.",
+    "Reject reason is captured via window.prompt() which is browser-native and cannot be styled/i18n-ed; a shadcn Dialog would match the rest of the app.",
+    "activate button label 'Activate (payment received)' is long; on narrow viewports it might wrap. Non-blocking."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (regression, unchanged code)", "frontend": "100% (7/7 acceptance criteria)"},
+  "test_credentials": "admin@kreedanation.com / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Inserted synthetic vendor + 2 pending offline_subscriptions + 1 venue_lead via /app/test_reports/seed_business_tab.py directly into Mongo (SendGrid throttling fallback). Cleaned up after test — vendors/id starts with 'vendor_bt_', offline_subscriptions/id 'sub_bt_', venue_leads/id 'lead_bt_' — all deleted.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Business tab is now discoverable at /platform-admin?tab=business (URL-persisted via useSearchParams). Feature is fully working; no follow-up needed. If future iterations touch this tab, reuse /app/test_reports/seed_business_tab.py for deterministic UI seeding (synthetic vendor + pending subs + venue leads).",
+  "rca of the issue": "Original prod bug: vendor submitted /api/offline-subscriptions/request → backend created the row correctly (verified in iter 23), but /platform-admin had NO tab surfacing the /api/admin/offline-subscriptions or /api/admin/venue-leads endpoints, so admins had no way to see or activate the request. Fix landed: added TabsTrigger data-testid='pa-tab-business' + TabsContent value='business' in PlatformAdmin.jsx and a new BusinessTab.jsx that consumes both endpoints and provides Activate / Reject / status Select / notes controls. Verified end-to-end in this iteration."
+}

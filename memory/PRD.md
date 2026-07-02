@@ -453,6 +453,18 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
 - **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
+## Implemented (Mar 01, 2026 — Phase 5b: Vendor Offline Business complete)
+- **New endpoint `PATCH /api/vendors/me`** (`routes/vendors.py`) — vendor self-updates an allow-listed field set: `business_name, contact_name, mobile, email, city, gstin, invoice_business_name, invoice_address, invoice_phone, invoice_email, invoice_tax_percent, invoice_logo_url, invoice_footer_note`. Rejects disallowed fields (`approved`, `offline_mode`, `id`) with 400. Rejects `invoice_tax_percent` outside `[0, 100]` with 400. Requires `role=vendor` (403 otherwise). This unblocks the vendor's Invoice Settings UI (GSTIN / tax % / footer / logo) which is now fully wired end-to-end.
+- **Vendor Dashboard — `InvoiceSettingsPanel.jsx`** (mounted below `OfflineModeCard` for `offline_mode=true` vendors) — GSTIN, business name override, phone, email, tax %, billing address, footer note. Save → toast → persists across reload. Verified via network trace: `PATCH /api/vendors/me` returns 200 and values round-trip on GET.
+- **`PrivateBookingsPanel.jsx`** — Tabs: Active / Completed / Customers / Invoices (with counts). New-booking dialog supports (a) linking to a customer from the directory OR walk-in name, (b) rate-type toggle: flat total OR rate/hour with auto-multiply, (c) weekly recurrence with end-date DatePicker + day-of-week chip toggles (`pb-recur-dow-0..6`). New-customer dialog captures GSTIN + address for invoice population. "Generate invoice" on any booking creates a KN-YYYY-##### invoice with a print-ready preview (vendor snapshot from invoice settings, customer snapshot from directory or booking inline fields, subtotal + tax + total). "Mark paid" flips status → `paid`.
+- **Backend — Customers + Invoices + Admin stats endpoints** already existed in `routes/business.py`; verified end-to-end:
+  - `GET/POST/PATCH/DELETE /api/vendor/customers` — dedupes soft; PII vendor-only.
+  - `POST /api/vendor/invoices` snapshots vendor + customer at issue time; per-vendor auto-increment invoice numbers.
+  - `POST /api/vendor/invoices/{id}/mark-paid` idempotent.
+  - `GET /api/admin/vendors/{id}/offline-stats` returns customer/booking/invoice counts + revenue + month calendar.
+- **KN member as offline customer** — vendor can add an existing Kreeda Nation user (by matching email or mobile) as an offline customer without any uniqueness block. Verified via `TestVendorCustomersAndInvoices.test_kreeda_member_email_not_blocked_from_customer`.
+- **Tests**: 30/30 pass in `/app/backend/tests/test_phase5_business.py` (added 8 new tests in `TestVendorInvoiceSettings` + `TestVendorCustomersAndInvoices` + `TestAdminVendorOfflineStats`). Testing agent iter_26 verified backend + core frontend flows.
+
 ## Implemented (Feb 28, 2026 — Phase 5A + 5C: Vendor profile + business model)
 - **Phase 5A — vendor profile upgrades**:
   - VendorType literal extended to include `gym`, `studio`. Vendor signup now uses a **multi-select chip grid** (`/vendor/signup` data-testid `vendor-signup-types`); the primary `vendor_type` falls out as the first selected chip, full list lives in `vendor_types[]`. Server-side normalises empty → `[vendor_type]` for backwards compat.

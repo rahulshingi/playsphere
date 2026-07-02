@@ -487,3 +487,174 @@ class TestVendorPIIMask:
         assert arow, "admin cannot see booking"
         assert arow.get("hr_email"), "admin should see hr_email"
         assert arow.get("notes") == "HR-only secret notes"
+
+
+# =========================================================================
+# 8. Phase 5b — Vendor invoice settings + Customers + Invoices
+# =========================================================================
+class TestVendorInvoiceSettings:
+    def test_patch_invoice_settings_persists(self):
+        # VENDOR2 has offline_mode=true after TestOfflineSubscription.
+        sess = _sess()
+        r = sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        assert r.status_code == 200, r.text
+        payload = {
+            "gstin": "29ABCDE1234F1Z5",
+            "invoice_business_name": "Whitefield Sports Pvt Ltd",
+            "invoice_address": "12, MG Road\nBangalore 560001",
+            "invoice_phone": "+91 99000 12345",
+            "invoice_email": "billing@whitefield.example",
+            "invoice_tax_percent": 18,
+            "invoice_footer_note": "Thank you for your business!",
+        }
+        r = sess.patch(f"{API}/vendors/me", json=payload)
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d.get("gstin") == "29ABCDE1234F1Z5"
+        assert d.get("invoice_business_name") == "Whitefield Sports Pvt Ltd"
+        assert d.get("invoice_tax_percent") == 18
+        # Round-trip via GET
+        r = sess.get(f"{API}/vendors/me")
+        assert r.status_code == 200
+        assert r.json().get("gstin") == "29ABCDE1234F1Z5"
+
+    def test_patch_rejects_disallowed_fields(self):
+        sess = _sess()
+        sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        # Try to sneak an approval flip
+        r = sess.patch(f"{API}/vendors/me", json={"approved": False, "offline_mode": False, "id": "fake"})
+        # No allowed fields → 400
+        assert r.status_code == 400, r.text
+        # Vendor should still be offline_mode=True
+        r = sess.get(f"{API}/vendors/me")
+        assert r.json().get("offline_mode") is True
+
+    def test_patch_tax_percent_out_of_range(self):
+        sess = _sess()
+        sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        r = sess.patch(f"{API}/vendors/me", json={"invoice_tax_percent": 150})
+        assert r.status_code == 400, r.text
+        r = sess.patch(f"{API}/vendors/me", json={"invoice_tax_percent": -1})
+        assert r.status_code == 400, r.text
+
+    def test_patch_requires_vendor_role(self, hr):
+        r = hr["sess"].patch(f"{API}/vendors/me", json={"gstin": "x"})
+        assert r.status_code == 403, r.text
+
+
+class TestVendorCustomersAndInvoices:
+    @pytest.fixture(scope="class")
+    def sess(self):
+        s = _sess()
+        r = s.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        assert r.status_code == 200, r.text
+        return s
+
+    @pytest.fixture(scope="class")
+    def listing_id(self, sess, admin_sess):
+        r = sess.get(f"{API}/vendors/me/listings")
+        assert r.status_code == 200, r.text
+        rows = r.json()
+        assert rows, "vendor2 has no listings"
+        return rows[0]["id"]
+
+    def test_create_and_list_customer(self, sess):
+        r = sess.post(f"{API}/vendor/customers", json={
+            "name": f"P5_Cust_{RUN}", "phone": "+919876543210",
+            "email": "walkin@example.com", "gstin": "29ZZZZZ0000A1Z9",
+            "address": "10, Church St, Bangalore",
+        })
+        assert r.status_code == 200, r.text
+        c = r.json()
+        assert c["name"] == f"P5_Cust_{RUN}"
+        TestVendorCustomersAndInvoices.customer_id = c["id"]
+        r = sess.get(f"{API}/vendor/customers")
+        assert r.status_code == 200, r.text
+        assert any(x["id"] == c["id"] for x in r.json())
+
+    def test_kreeda_member_email_not_blocked_from_customer(self, sess):
+        """A vendor should be able to add an existing Kreeda Nation user as an offline customer."""
+        r = sess.post(f"{API}/vendor/customers", json={
+            "name": f"P5_KNMember_{RUN}", "phone": "+91" + PLAYER_MOBILE.lstrip("+91"),
+            "email": PLAYER_EMAIL,
+        })
+        assert r.status_code == 200, r.text
+
+    def test_create_invoice_from_booking(self, sess, listing_id):
+        future = (datetime.now(timezone.utc) + timedelta(days=15)).strftime("%Y-%m-%d")
+        # Create a private booking (linked to the customer)
+        r = sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": listing_id,
+            "customer_id": TestVendorCustomersAndInvoices.customer_id,
+            "client_name": f"P5_Cust_{RUN}",
+            "requested_date": future, "start_time": "18:00", "end_time": "19:00",
+            "hours": 1, "amount": 1000, "rate_type": "total",
+        })
+        assert r.status_code == 200, r.text
+        booking = r.json()
+        assert booking.get("customer_id") == TestVendorCustomersAndInvoices.customer_id
+        TestVendorCustomersAndInvoices.booking_id = booking["id"]
+
+        r = sess.post(f"{API}/vendor/invoices", json={"booking_id": booking["id"], "tax_percent": 18})
+        assert r.status_code == 200, r.text
+        inv = r.json()
+        assert inv["invoice_number"].startswith("KN-")
+        assert inv["subtotal"] == 1000
+        assert inv["tax_amount"] == 180
+        assert inv["total"] == 1180
+        # Customer snapshot from directory
+        assert inv["customer_snapshot"]["name"] == f"P5_Cust_{RUN}"
+        assert inv["customer_snapshot"]["gstin"] == "29ZZZZZ0000A1Z9"
+        # Vendor snapshot from invoice settings
+        assert inv["vendor_snapshot"]["gstin"] == "29ABCDE1234F1Z5"
+        assert inv["vendor_snapshot"]["business_name"] == "Whitefield Sports Pvt Ltd"
+        TestVendorCustomersAndInvoices.invoice_id = inv["id"]
+
+    def test_duplicate_invoice_rejected(self, sess):
+        r = sess.post(f"{API}/vendor/invoices", json={
+            "booking_id": TestVendorCustomersAndInvoices.booking_id
+        })
+        assert r.status_code == 400, r.text
+        assert "already" in r.text.lower()
+
+    def test_mark_paid(self, sess):
+        r = sess.post(f"{API}/vendor/invoices/{TestVendorCustomersAndInvoices.invoice_id}/mark-paid")
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == "paid"
+
+    def test_recurring_weekly_booking_persists_days(self, sess, listing_id):
+        start = (datetime.now(timezone.utc) + timedelta(days=30)).strftime("%Y-%m-%d")
+        until = (datetime.now(timezone.utc) + timedelta(days=60)).strftime("%Y-%m-%d")
+        r = sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": listing_id,
+            "client_name": f"P5_Weekly_{RUN}",
+            "requested_date": start, "start_time": "06:00", "end_time": "07:00",
+            "hours": 1, "amount": 500,
+            "recurrence": "weekly", "recurrence_until": until,
+            "recurrence_days_of_week": [0, 2, 4],
+        })
+        assert r.status_code == 200, r.text
+        pb = r.json()
+        assert pb["recurrence"] == "weekly"
+        assert pb["recurrence_until"] == until
+        assert pb["recurrence_days_of_week"] == [0, 2, 4]
+
+
+# =========================================================================
+# 9. Phase 5b — Admin vendor offline stats
+# =========================================================================
+class TestAdminVendorOfflineStats:
+    def test_stats_endpoint(self, admin_sess):
+        # VENDOR2 has offline_mode=true + a customer + at least one booking + one invoice
+        vdoc = _run(AsyncIOMotorClient(MONGO_URL)[DB_NAME].vendors.find_one({"email": VENDOR2_EMAIL.lower()}, {"_id": 0}))
+        assert vdoc, "vendor2 doc missing"
+        r = admin_sess.get(f"{API}/admin/vendors/{vdoc['id']}/offline-stats")
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["vendor"]["id"] == vdoc["id"]
+        assert d["vendor"]["offline_mode"] is True
+        assert d["totals"]["customers"] >= 1
+        assert d["totals"]["bookings"] >= 1
+        assert d["totals"]["invoices_issued"] >= 1
+        assert d["totals"]["invoices_paid"] >= 1
+        assert isinstance(d["calendar"], list)

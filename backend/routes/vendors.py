@@ -153,6 +153,36 @@ def register(api, db, deps):
             raise HTTPException(404, "Vendor not found")
         return doc
 
+    # Fields the vendor is allowed to self-update. Approval/offline_mode/id are
+    # deliberately excluded — those are admin-controlled.
+    _VENDOR_ME_PATCH_FIELDS = {
+        "business_name", "contact_name", "mobile", "email", "city",
+        # Invoice settings (Phase 5b)
+        "gstin", "invoice_business_name", "invoice_address",
+        "invoice_phone", "invoice_email", "invoice_tax_percent",
+        "invoice_logo_url", "invoice_footer_note",
+    }
+
+    @api.patch("/vendors/me")
+    async def update_my_vendor(body: dict, user: dict = Depends(get_current_user)):
+        if user.get("role") != "vendor":
+            raise HTTPException(403, "Vendor only")
+        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0, "id": 1})
+        if not vendor:
+            raise HTTPException(404, "Vendor not found")
+        upd = {k: v for k, v in (body or {}).items() if k in _VENDOR_ME_PATCH_FIELDS}
+        if "invoice_tax_percent" in upd:
+            try:
+                upd["invoice_tax_percent"] = float(upd["invoice_tax_percent"])
+            except (TypeError, ValueError):
+                raise HTTPException(400, "invoice_tax_percent must be a number")
+            if upd["invoice_tax_percent"] < 0 or upd["invoice_tax_percent"] > 100:
+                raise HTTPException(400, "invoice_tax_percent must be between 0 and 100")
+        if not upd:
+            raise HTTPException(400, "No allowed fields to update")
+        await db.vendors.update_one({"id": vendor["id"]}, {"$set": upd})
+        return await db.vendors.find_one({"id": vendor["id"]}, {"_id": 0})
+
     # ---------- Platform admin vendor management ----------
     @api.get("/vendors")
     async def list_vendors(approved: Optional[bool] = None, _: dict = Depends(require_platform_admin)):

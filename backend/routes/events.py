@@ -88,8 +88,10 @@ def register(api, db, deps):
     Player = deps.Player
     PlayerCreate = deps.PlayerCreate
     get_current_user_optional = deps.get_current_user_optional
+    get_current_user = deps.get_current_user
     require_admin = deps.require_admin
     require_company_admin = deps.require_company_admin
+    _can_manage_event = deps.can_manage_event
 
     # ---------- Events ----------
     @api.get("/events", response_model=List[Event])
@@ -306,8 +308,50 @@ def register(api, db, deps):
 
     # ---------- Teams ----------
     @api.get("/teams", response_model=List[Team])
-    async def list_teams(event_id: Optional[str] = None):
-        q = {"event_id": event_id} if event_id else {}
+    async def list_teams(event_id: Optional[str] = None, user: Optional[dict] = Depends(get_current_user_optional)):
+        """Teams are scoped to the caller:
+        * anonymous users may only read the roster for a specific `event_id`;
+        * platform_admin sees all teams;
+        * company_admin/organiser sees teams on events they can manage + teams they created;
+        * players see only teams they captain or belong to.
+        * When `event_id` is passed and it's not one they own, the public roster
+          of that event is still returned (needed for public event pages).
+        """
+        if not user:
+            if not event_id:
+                raise HTTPException(401, "Login required to list teams")
+            docs = await db.teams.find({"event_id": event_id}, {"_id": 0}).sort("created_at", -1).to_list(500)
+            return [Team(**d) for d in docs]
+        role = user.get("role")
+        if role in ("platform_admin", "admin"):
+            q = {"event_id": event_id} if event_id else {}
+        else:
+            cid = user.get("company_id")
+            # Events the user can manage
+            owned_or = []
+            if cid:
+                owned_or.append({"company_id": cid})
+                owned_or.append({"companies": cid})
+            owned_event_ids = []
+            if owned_or:
+                events = await db.events.find({"$or": owned_or}, {"_id": 0, "id": 1}).to_list(1000)
+                owned_event_ids = [e["id"] for e in events]
+            or_clauses = [{"created_by": user["id"]}]
+            if role == "player":
+                # Include teams the player is captain of or a member of.
+                pl = await db.players.find_one({"user_id": user["id"]}, {"_id": 0, "id": 1})
+                if pl:
+                    or_clauses.append({"captain_player_id": pl["id"]})
+                    or_clauses.append({"members": pl["id"]})
+            if owned_event_ids:
+                or_clauses.append({"event_id": {"$in": owned_event_ids}})
+            if event_id and event_id not in owned_event_ids:
+                # Public read of a specific event's roster is always allowed.
+                q = {"event_id": event_id}
+            else:
+                q = {"$or": or_clauses}
+                if event_id:
+                    q = {"$and": [q, {"event_id": event_id}]}
         docs = await db.teams.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
         return [Team(**d) for d in docs]
 
@@ -319,14 +363,29 @@ def register(api, db, deps):
         return Team(**doc)
 
     @api.post("/teams", response_model=Team)
-    async def create_team(body: TeamCreate):
-        t = Team(**body.model_dump())
+    async def create_team(body: TeamCreate, user: dict = Depends(require_admin)):
+        t = Team(**body.model_dump(), created_by=user["id"])
         await db.teams.insert_one(t.model_dump())
         return t
 
+    async def _require_own_team(team_id: str, user: dict) -> dict:
+        doc = await db.teams.find_one({"id": team_id}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Team not found")
+        if user.get("role") in ("platform_admin", "admin"):
+            return doc
+        if doc.get("created_by") == user["id"]:
+            return doc
+        if doc.get("event_id"):
+            ev = await db.events.find_one({"id": doc["event_id"]}, {"_id": 0})
+            if ev and await _can_manage_event(user, ev):
+                return doc
+        raise HTTPException(403, "You can only manage teams you created")
+
     @api.patch("/teams/{team_id}", response_model=Team)
-    async def update_team(team_id: str, body: dict, _: dict = Depends(require_admin)):
-        body.pop("id", None)
+    async def update_team(team_id: str, body: dict, user: dict = Depends(require_admin)):
+        await _require_own_team(team_id, user)
+        body.pop("id", None); body.pop("created_by", None)
         await db.teams.update_one({"id": team_id}, {"$set": body})
         doc = await db.teams.find_one({"id": team_id}, {"_id": 0})
         if not doc:
@@ -334,7 +393,8 @@ def register(api, db, deps):
         return Team(**doc)
 
     @api.delete("/teams/{team_id}")
-    async def delete_team(team_id: str, _: dict = Depends(require_admin)):
+    async def delete_team(team_id: str, user: dict = Depends(require_admin)):
+        await _require_own_team(team_id, user)
         await db.teams.delete_one({"id": team_id})
         await db.players.delete_many({"team_id": team_id})
         return {"ok": True}

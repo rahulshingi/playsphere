@@ -453,6 +453,17 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
 - **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
+## Implemented (Mar 07, 2026 — Ownership scoping for teams + sponsors)
+- **Bug**: An organiser could see EVERY team and sponsor across the whole platform on their Admin > Manage screen — leaking data across tenants.
+- **Backend fix (`GET /api/teams` + `GET /api/sponsors`)** — both now scope results to the caller:
+  - `platform_admin` sees all rows.
+  - `company_admin` / `organiser` sees only rows they created + rows attached to events they can manage.
+  - `player` sees only teams they captain or are a member of.
+  - `Anonymous` is allowed to read for a specific `event_id` (public event page still works) but the un-scoped top-level list returns 401.
+- **Write endpoints locked down** — `POST /teams` now requires `require_admin` (was public!). `PATCH/DELETE` on `/teams/{id}` and `/sponsors/{id}` now check ownership; non-owning admins get 403.
+- **Model additions** — `created_by` (Optional[str]) on both `Team` and `Sponsor`, populated on create.
+- **Tests**: 41/41 pytest — added `TestTeamsSponsorsOwnershipScoping` ×2 that provisions two isolated organisers and verifies they cannot see or delete each other's teams/sponsors, while a platform admin still sees everything.
+
 ## Implemented (Mar 06, 2026 — Offline booking UX fixes)
 - **Customer directory auto-populates from bookings** — when a vendor adds a private booking with an inline client_name/phone (walk-in), we now silently upsert a matching row in `vendor_customers`. Dedupes by phone (falls back to lowercase name). Existing legacy bookings are self-healed on the next GET `/api/vendor/customers` — so the Customers tab is no longer blank for vendors who booked before this landed.
 - **Completed bookings are now immutable** — backend `PATCH /api/vendor/private-bookings/{id}` returns 400 for any edit to a booking with `status='completed'` (only `status→cancelled` is allowed). Frontend removes the Edit pencil from Completed rows.

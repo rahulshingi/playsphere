@@ -273,6 +273,7 @@ class Team(BaseModel):
     logo_url: Optional[str] = ""
     event_id: Optional[str] = None
     company_id: Optional[str] = None
+    created_by: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -444,6 +445,7 @@ class Sponsor(BaseModel):
     description: Optional[str] = ""
     show_in_banner: bool = True
     event_id: Optional[str] = None
+    created_by: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -1231,22 +1233,72 @@ async def get_standings(event_id: str):
 
 # ---------- Sponsors ----------
 @api.get("/sponsors", response_model=List[Sponsor])
-async def list_sponsors(event_id: Optional[str] = None):
-    flt = {"event_id": event_id} if event_id else {}
+async def list_sponsors(event_id: Optional[str] = None, user: Optional[dict] = Depends(get_current_user_optional)):
+    """Sponsors are scoped to the caller:
+    * anonymous users may only read the sponsor banner for a specific `event_id`;
+    * platform_admin sees everything;
+    * company_admin/organiser sees sponsors on their own events + sponsors they created;
+    * when `event_id` is passed and the user cannot manage that event, only sponsors of
+      that public event are returned (public read of the event's sponsor banner).
+    """
+    if not user:
+        if not event_id:
+            raise HTTPException(401, "Login required to list sponsors")
+        docs = await db.sponsors.find({"event_id": event_id}, {"_id": 0}).sort("created_at", -1).to_list(200)
+        return [Sponsor(**d) for d in docs]
+    role = user.get("role")
+    if role in ("platform_admin", "admin"):
+        flt = {"event_id": event_id} if event_id else {}
+    else:
+        # Compute the set of event ids this user can manage.
+        cid = user.get("company_id")
+        owned_flt = {"$or": []}
+        if cid:
+            owned_flt["$or"].append({"company_id": cid})
+            owned_flt["$or"].append({"companies": cid})
+        events = await db.events.find(owned_flt, {"_id": 0, "id": 1}).to_list(1000) if owned_flt["$or"] else []
+        owned_event_ids = [e["id"] for e in events]
+        or_clauses = [{"created_by": user["id"]}]
+        if owned_event_ids:
+            or_clauses.append({"event_id": {"$in": owned_event_ids}})
+        # If event_id is explicitly requested and it's NOT one they own, still return
+        # the public sponsor banner for that event (read-only).
+        if event_id and event_id not in owned_event_ids:
+            flt = {"event_id": event_id}
+        else:
+            flt = {"$or": or_clauses}
+            if event_id:
+                flt = {"$and": [flt, {"event_id": event_id}]}
     docs = await db.sponsors.find(flt, {"_id": 0}).sort("created_at", -1).to_list(200)
     return [Sponsor(**d) for d in docs]
 
 
 @api.post("/sponsors", response_model=Sponsor)
-async def create_sponsor(body: SponsorCreate, _: dict = Depends(require_admin)):
-    s = Sponsor(**body.model_dump())
+async def create_sponsor(body: SponsorCreate, user: dict = Depends(require_admin)):
+    s = Sponsor(**body.model_dump(), created_by=user["id"])
     await db.sponsors.insert_one(s.model_dump())
     return s
 
 
+async def _require_own_sponsor(sponsor_id: str, user: dict) -> dict:
+    doc = await db.sponsors.find_one({"id": sponsor_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Sponsor not found")
+    if user.get("role") in ("platform_admin", "admin"):
+        return doc
+    if doc.get("created_by") == user["id"]:
+        return doc
+    if doc.get("event_id"):
+        ev = await db.events.find_one({"id": doc["event_id"]}, {"_id": 0})
+        if ev and await _can_manage_event(user, ev):
+            return doc
+    raise HTTPException(403, "You can only manage sponsors you created")
+
+
 @api.patch("/sponsors/{sponsor_id}", response_model=Sponsor)
-async def update_sponsor(sponsor_id: str, body: dict, _: dict = Depends(require_admin)):
-    body.pop("id", None)
+async def update_sponsor(sponsor_id: str, body: dict, user: dict = Depends(require_admin)):
+    await _require_own_sponsor(sponsor_id, user)
+    body.pop("id", None); body.pop("created_by", None)
     await db.sponsors.update_one({"id": sponsor_id}, {"$set": body})
     doc = await db.sponsors.find_one({"id": sponsor_id}, {"_id": 0})
     if not doc:
@@ -1255,7 +1307,8 @@ async def update_sponsor(sponsor_id: str, body: dict, _: dict = Depends(require_
 
 
 @api.delete("/sponsors/{sponsor_id}")
-async def delete_sponsor(sponsor_id: str, _: dict = Depends(require_admin)):
+async def delete_sponsor(sponsor_id: str, user: dict = Depends(require_admin)):
+    await _require_own_sponsor(sponsor_id, user)
     await db.sponsors.delete_one({"id": sponsor_id})
     return {"ok": True}
 
@@ -4013,8 +4066,10 @@ events_routes.register(api, db, SimpleNamespace(
     Player=Player,
     PlayerCreate=PlayerCreate,
     get_current_user_optional=get_current_user_optional,
+    get_current_user=get_current_user,
     require_admin=require_admin,
     require_company_admin=require_company_admin,
+    can_manage_event=_can_manage_event,
 ))
 
 # Fixtures + WebSocket (extracted into routes/fixtures.py)

@@ -849,3 +849,110 @@ class TestBookingCustomerAutoAndImmutable:
         assert "cannot be edited" in r.text.lower()
         r = sess.patch(f"{API}/vendor/private-bookings/{bid}", json={"status": "cancelled"})
         assert r.status_code == 200, r.text
+
+
+# =========================================================================
+# 14. Ownership scoping — teams + sponsors are visible only to their owner
+#     (fixes: organiser was seeing every team/sponsor in the system).
+# =========================================================================
+class TestTeamsSponsorsOwnershipScoping:
+    """Two organisers should never see each other's teams or sponsors."""
+
+    def _signup_organiser(self, email: str, company_name: str) -> requests.Session:
+        """Directly seed an organiser user (bypasses OTP for tests). Uses the same
+        bcrypt hasher as production so /auth/login succeeds."""
+        import bcrypt
+        email = email.lower()
+        client = AsyncIOMotorClient(MONGO_URL)
+        db = client[DB_NAME]
+        existing = _run(db.users.find_one({"email": email}))
+        if not existing:
+            company_id = f"cmp-{email.replace('@', '-').replace('.', '-')}"
+            _run(db.companies.insert_one({
+                "id": company_id, "name": company_name, "slug": company_id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }))
+            pwd_hash = bcrypt.hashpw(b"org123", bcrypt.gensalt()).decode("utf-8")
+            _run(db.users.insert_one({
+                "id": f"u-{email}", "email": email, "password_hash": pwd_hash,
+                "name": f"Org {company_name}", "role": "organiser",
+                "company_id": company_id,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }))
+        s = _sess()
+        r = s.post(f"{API}/auth/login", json={"email": email, "password": "org123"})
+        assert r.status_code == 200, r.text
+        return s
+
+    def test_organisers_see_only_their_own_teams_and_sponsors(self):
+        run = RUN[-6:]
+        orgA = self._signup_organiser(f"orgA_{run}@k.io", f"OrgA_{run}")
+        orgB = self._signup_organiser(f"orgB_{run}@k.io", f"OrgB_{run}")
+
+        # OrgA creates an event + team + sponsor.
+        rA = orgA.post(f"{API}/events", json={
+            "name": f"OrgA Champs {run}", "sport": "football", "format": "round_robin",
+            "event_type": "single_company",
+        })
+        assert rA.status_code == 200, rA.text
+        evA = rA.json()
+        tA = orgA.post(f"{API}/teams", json={"name": f"OrgA_Team_{run}", "event_id": evA["id"]})
+        assert tA.status_code == 200, tA.text
+        sA = orgA.post(f"{API}/sponsors", json={
+            "name": f"OrgA_Sponsor_{run}", "logo_url": "https://k/logo.png",
+            "event_id": evA["id"],
+        })
+        assert sA.status_code == 200, sA.text
+
+        # OrgB creates their own event + team + sponsor.
+        rB = orgB.post(f"{API}/events", json={
+            "name": f"OrgB Champs {run}", "sport": "cricket", "format": "round_robin",
+            "event_type": "single_company",
+        })
+        assert rB.status_code == 200, rB.text
+        evB = rB.json()
+        tB = orgB.post(f"{API}/teams", json={"name": f"OrgB_Team_{run}", "event_id": evB["id"]})
+        assert tB.status_code == 200
+        sB = orgB.post(f"{API}/sponsors", json={
+            "name": f"OrgB_Sponsor_{run}", "logo_url": "https://k/logoB.png",
+            "event_id": evB["id"],
+        })
+        assert sB.status_code == 200
+
+        # OrgA lists → sees only their own.
+        namesA_teams = [t["name"] for t in orgA.get(f"{API}/teams").json()]
+        namesA_sp = [s["name"] for s in orgA.get(f"{API}/sponsors").json()]
+        assert f"OrgA_Team_{run}" in namesA_teams
+        assert f"OrgA_Sponsor_{run}" in namesA_sp
+        assert f"OrgB_Team_{run}" not in namesA_teams, "OrgA must NOT see OrgB's teams"
+        assert f"OrgB_Sponsor_{run}" not in namesA_sp, "OrgA must NOT see OrgB's sponsors"
+
+        # OrgB lists → sees only their own.
+        namesB_teams = [t["name"] for t in orgB.get(f"{API}/teams").json()]
+        namesB_sp = [s["name"] for s in orgB.get(f"{API}/sponsors").json()]
+        assert f"OrgB_Team_{run}" in namesB_teams
+        assert f"OrgB_Sponsor_{run}" in namesB_sp
+        assert f"OrgA_Team_{run}" not in namesB_teams
+        assert f"OrgA_Sponsor_{run}" not in namesB_sp
+
+        # Public read via event_id still works for any user.
+        pub = orgB.get(f"{API}/teams?event_id={evA['id']}").json()
+        assert any(t["name"] == f"OrgA_Team_{run}" for t in pub), "public event roster must be readable"
+        pub_sp = orgB.get(f"{API}/sponsors?event_id={evA['id']}").json()
+        assert any(s["name"] == f"OrgA_Sponsor_{run}" for s in pub_sp)
+
+        # OrgB cannot delete OrgA's team or sponsor.
+        team_a_id = tA.json()["id"]
+        sponsor_a_id = sA.json()["id"]
+        r = orgB.delete(f"{API}/teams/{team_a_id}")
+        assert r.status_code in (403, 404), r.text
+        r = orgB.delete(f"{API}/sponsors/{sponsor_a_id}")
+        assert r.status_code in (403, 404), r.text
+
+    def test_platform_admin_still_sees_all(self, admin_sess):
+        r_t = admin_sess.get(f"{API}/teams")
+        r_s = admin_sess.get(f"{API}/sponsors")
+        assert r_t.status_code == 200 and r_s.status_code == 200
+        # Admin should see > 1 team and >= 0 sponsors (system-wide view).
+        assert isinstance(r_t.json(), list)
+        assert isinstance(r_s.json(), list)

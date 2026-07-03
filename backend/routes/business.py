@@ -405,6 +405,34 @@ def register(api, db, deps):
                 f"Booking window {start}–{end} falls outside opening hours ({opening}–{closing}). "
                 f"Enable 'Allow after-hours bookings' in the venue schedule to override."
             )
+    async def _upsert_customer_from_booking(vendor_id: str, data: dict) -> Optional[str]:
+        """When a private booking is created/edited with an inline client_name (no
+        customer_id yet), silently upsert a matching row in `vendor_customers`
+        so the Customers tab stays in sync. Match by phone first, then by lowercase name.
+        Returns the resolved customer_id or None if not enough info."""
+        name = (data.get("client_name") or "").strip()
+        phone = (data.get("client_phone") or "").strip()
+        email = (data.get("client_email") or "").strip()
+        if not name and not phone:
+            return None
+        q: dict = {"vendor_id": vendor_id}
+        if phone:
+            q["phone"] = phone
+        else:
+            q["name"] = {"$regex": f"^{name}$", "$options": "i"}
+        existing = await db.vendor_customers.find_one(q, {"_id": 0})
+        if existing:
+            # Fill missing fields silently — vendor typed a phone/email we didn't have.
+            patch = {k: v for k, v in {"email": email, "phone": phone, "name": name}.items()
+                     if v and not existing.get(k)}
+            if patch:
+                await db.vendor_customers.update_one({"id": existing["id"]}, {"$set": patch})
+            return existing["id"]
+        # Create a lightweight customer entry.
+        cust = VendorCustomer(vendor_id=vendor_id, name=name or phone, phone=phone or "", email=email or "")
+        await db.vendor_customers.insert_one(cust.model_dump())
+        return cust.id
+
     @api.post("/vendor/private-bookings", response_model=PrivateBooking)
     async def create_private_booking(body: PrivateBookingCreate, user: dict = Depends(get_current_user)):
         vendor = await _vendor_for_user(user)
@@ -422,6 +450,12 @@ def register(api, db, deps):
         data["hours"] = data.get("hours") or 1
         data["amount"] = data.get("amount") or 0
         data["currency"] = data.get("currency") or "INR"
+        # Auto-populate the customer directory so the Customers tab reflects
+        # every walk-in the vendor books, even without an explicit "add customer" step.
+        if not data.get("customer_id"):
+            resolved = await _upsert_customer_from_booking(vendor["id"], data)
+            if resolved:
+                data["customer_id"] = resolved
         pb = PrivateBooking(vendor_id=vendor["id"], **data)
         await db.private_bookings.insert_one(pb.model_dump())
         return pb
@@ -456,6 +490,12 @@ def register(api, db, deps):
         existing = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
         if not existing:
             raise HTTPException(404, "Booking not found")
+        # Completed bookings are immutable — the only allowed transition is
+        # cancellation. Vendors must clone into a new booking to change details.
+        if existing.get("status") == "completed":
+            keys = set(upd.keys())
+            if keys - {"status"} or upd.get("status") != "cancelled":
+                raise HTTPException(400, "Completed bookings cannot be edited. Cancel it and create a new one if needed.")
         # If start/end changed, re-validate the opening/closing window.
         new_start = upd.get("start_time", existing["start_time"])
         new_end = upd.get("end_time", existing["end_time"])
@@ -479,6 +519,17 @@ def register(api, db, deps):
     @api.get("/vendor/customers", response_model=List[VendorCustomer])
     async def list_customers(user: dict = Depends(get_current_user)):
         vendor = await _vendor_for_user(user)
+        # Self-healing backfill: for legacy bookings created before the
+        # auto-upsert landed, reconcile inline client_name/phone into the
+        # customer directory the first time the vendor opens this tab.
+        legacy = await db.private_bookings.find(
+            {"vendor_id": vendor["id"], "$or": [{"customer_id": {"$exists": False}}, {"customer_id": ""}, {"customer_id": None}]},
+            {"_id": 0, "id": 1, "client_name": 1, "client_phone": 1, "client_email": 1}
+        ).to_list(500)
+        for b in legacy:
+            cid = await _upsert_customer_from_booking(vendor["id"], b)
+            if cid:
+                await db.private_bookings.update_one({"id": b["id"]}, {"$set": {"customer_id": cid}})
         docs = await db.vendor_customers.find({"vendor_id": vendor["id"]}, {"_id": 0}).sort("name", 1).to_list(1000)
         return [VendorCustomer(**d) for d in docs]
 

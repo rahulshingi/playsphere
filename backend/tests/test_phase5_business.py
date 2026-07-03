@@ -784,3 +784,68 @@ class TestSponsorshipMyActivity:
         d = r.json()
         assert "sent" in d and "received" in d
         assert isinstance(d["sent"], list) and isinstance(d["received"], list)
+
+
+# =========================================================================
+# 13. Phase 5b+ — Customer directory auto-populates from bookings
+#     + Completed bookings are immutable
+# =========================================================================
+class TestBookingCustomerAutoAndImmutable:
+    @pytest.fixture(scope="class")
+    def sess(self):
+        s = _sess()
+        r = s.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        assert r.status_code == 200, r.text
+        return s
+
+    @pytest.fixture(scope="class")
+    def listing_id(self, sess):
+        rows = sess.get(f"{API}/vendors/me/listings").json()
+        return rows[0]["id"]
+
+    def test_booking_auto_creates_customer(self, sess, listing_id):
+        sess.patch(f"{API}/vendor-listings/{listing_id}/schedule", json={"opening_time": "06:00", "closing_time": "22:00", "allow_after_hours": False})
+        future = (datetime.now(timezone.utc) + timedelta(days=61)).strftime("%Y-%m-%d")
+        unique = f"AutoCust_{RUN}"
+        r = sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": listing_id, "client_name": unique,
+            "client_phone": f"+91987654{RUN[-4:]}",
+            "requested_date": future, "start_time": "10:00", "end_time": "11:00",
+            "hours": 1, "amount": 700,
+        })
+        assert r.status_code == 200, r.text
+        booking = r.json()
+        assert booking.get("customer_id"), "booking should get an auto customer_id"
+        rows = sess.get(f"{API}/vendor/customers").json()
+        assert any(c.get("name") == unique for c in rows), "customer directory should surface the walk-in"
+
+    def test_second_booking_same_phone_reuses_customer(self, sess, listing_id):
+        future = (datetime.now(timezone.utc) + timedelta(days=62)).strftime("%Y-%m-%d")
+        phone = f"+91987654{RUN[-4:]}"
+        r = sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": listing_id, "client_name": f"AutoCust_{RUN}",
+            "client_phone": phone,
+            "requested_date": future, "start_time": "11:00", "end_time": "12:00",
+            "hours": 1, "amount": 700,
+        })
+        assert r.status_code == 200
+        rows = sess.get(f"{API}/vendor/customers").json()
+        matches = [c for c in rows if c.get("phone") == phone]
+        assert len(matches) == 1, f"expected 1 customer row for phone {phone}, got {len(matches)}"
+
+    def test_completed_booking_cannot_be_edited(self, sess, listing_id):
+        future = (datetime.now(timezone.utc) + timedelta(days=63)).strftime("%Y-%m-%d")
+        r = sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": listing_id, "client_name": f"Immutable_{RUN}",
+            "requested_date": future, "start_time": "10:00", "end_time": "11:00",
+            "hours": 1, "amount": 500,
+        })
+        assert r.status_code == 200
+        bid = r.json()["id"]
+        r = sess.patch(f"{API}/vendor/private-bookings/{bid}", json={"status": "completed"})
+        assert r.status_code == 200, r.text
+        r = sess.patch(f"{API}/vendor/private-bookings/{bid}", json={"amount": 999})
+        assert r.status_code == 400, r.text
+        assert "cannot be edited" in r.text.lower()
+        r = sess.patch(f"{API}/vendor/private-bookings/{bid}", json={"status": "cancelled"})
+        assert r.status_code == 200, r.text

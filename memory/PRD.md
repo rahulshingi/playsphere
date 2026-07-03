@@ -453,6 +453,11 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
 - **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
+## Implemented (Mar 06, 2026 — Offline booking UX fixes)
+- **Customer directory auto-populates from bookings** — when a vendor adds a private booking with an inline client_name/phone (walk-in), we now silently upsert a matching row in `vendor_customers`. Dedupes by phone (falls back to lowercase name). Existing legacy bookings are self-healed on the next GET `/api/vendor/customers` — so the Customers tab is no longer blank for vendors who booked before this landed.
+- **Completed bookings are now immutable** — backend `PATCH /api/vendor/private-bookings/{id}` returns 400 for any edit to a booking with `status='completed'` (only `status→cancelled` is allowed). Frontend removes the Edit pencil from Completed rows.
+- **Tests**: 39/39 pytest (added TestBookingCustomerAutoAndImmutable ×3).
+
 ## Implemented (Mar 05, 2026 — WhatsApp booking + invoice sharing)
 - **WhatsApp share buttons** on the vendor Offline business panel:
   - Every private-booking row shows a green "WhatsApp" pill (data-testid `pb-whatsapp-{id}`) when the client has a phone on file. Opens `wa.me/<phone>?text=...` with a pre-formatted booking confirmation (date, time, hours, amount, weekly recurrence badge, notes, business name).

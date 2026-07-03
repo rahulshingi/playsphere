@@ -213,7 +213,7 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
         </TabsContent>
 
         <TabsContent value="completed" className="mt-4">
-          <BookingList items={completed} vendor={vendor} onEdit={openEdit} onInvoice={generateInvoice} onDelete={deleteBooking} />
+          <BookingList items={completed} vendor={vendor} onInvoice={generateInvoice} onDelete={deleteBooking} />
         </TabsContent>
 
         <TabsContent value="calendar" className="mt-4">

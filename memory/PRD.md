@@ -453,6 +453,13 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
 - **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
+## Implemented (Mar 05, 2026 — WhatsApp booking + invoice sharing)
+- **WhatsApp share buttons** on the vendor Offline business panel:
+  - Every private-booking row shows a green "WhatsApp" pill (data-testid `pb-whatsapp-{id}`) when the client has a phone on file. Opens `wa.me/<phone>?text=...` with a pre-formatted booking confirmation (date, time, hours, amount, weekly recurrence badge, notes, business name).
+  - Every generated invoice preview shows a "WhatsApp" button (data-testid `pb-invoice-whatsapp`) that ships an itemised invoice message with subtotal / tax / total to the customer's number.
+- Client-side only (uses `wa.me` deep-link). No new API keys, no Twilio/Meta cost. Ten-digit Indian numbers are auto-prefixed with `91` for the URL.
+- Zero-cost UX win for vendors who currently confirm bookings manually over calls.
+
 ## Implemented (Mar 03, 2026 — Phase 5b+: vendor UX polish, player marketplace access, sponsorship inbox)
 - **Vendor Dashboard — dedicated tabs** (`VendorDashboard.jsx`): "Marketplace" (listings, bookings table, memberships, reviews) + "Offline business" (OfflineModeCard, InvoiceSettings, PrivateBookings). Clean separation of the two revenue rails.
 - **Edit private booking** — `PATCH /api/vendor/private-bookings/{id}` allowlist expanded to cover every editable field (times, hours, client, customer link, recurrence, notes). Pencil "Edit" button on every row in Active/Completed opens the same dialog pre-filled → hits PATCH.

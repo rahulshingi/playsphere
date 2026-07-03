@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Trash2, Lock, Receipt, CheckCircle2, User, Pencil, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Trash2, Lock, Receipt, CheckCircle2, User, Pencil, CalendarDays, ChevronLeft, ChevronRight, MessageCircle } from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
 import { fmtPrice } from "@/lib/currency";
 
@@ -209,11 +209,11 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
           <Button data-testid="pb-new-booking" onClick={openNew} className="mb-3 bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold rounded-sm">
             <Plus className="w-4 h-4 mr-1" /> New booking
           </Button>
-          <BookingList items={active} onEdit={openEdit} onComplete={markCompleted} onInvoice={generateInvoice} onDelete={deleteBooking} />
+          <BookingList items={active} vendor={vendor} onEdit={openEdit} onComplete={markCompleted} onInvoice={generateInvoice} onDelete={deleteBooking} />
         </TabsContent>
 
         <TabsContent value="completed" className="mt-4">
-          <BookingList items={completed} onEdit={openEdit} onInvoice={generateInvoice} onDelete={deleteBooking} />
+          <BookingList items={completed} vendor={vendor} onEdit={openEdit} onInvoice={generateInvoice} onDelete={deleteBooking} />
         </TabsContent>
 
         <TabsContent value="calendar" className="mt-4">
@@ -376,7 +376,7 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
   );
 }
 
-function BookingList({ items, onEdit, onComplete, onInvoice, onDelete }) {
+function BookingList({ items, onEdit, onComplete, onInvoice, onDelete, vendor }) {
   if (items.length === 0) return <div className="text-neutral-500 text-sm text-center py-8 border border-dashed border-white/10 rounded-sm">No bookings here yet.</div>;
   return (
     <div className="space-y-2">
@@ -395,6 +395,14 @@ function BookingList({ items, onEdit, onComplete, onInvoice, onDelete }) {
           </div>
           <div className="flex gap-1.5 flex-wrap">
             {onEdit && <Button size="sm" variant="outline" data-testid={`pb-edit-${b.id}`} onClick={() => onEdit(b)} className="border-white/10 text-white bg-transparent rounded-sm"><Pencil className="w-3.5 h-3.5 mr-1" /> Edit</Button>}
+            {b.client_phone && (
+              <Button size="sm" data-testid={`pb-whatsapp-${b.id}`}
+                onClick={() => shareBookingOnWhatsApp(b, vendor)}
+                title="Send booking confirmation on WhatsApp"
+                className="bg-[#25D366] hover:bg-[#1EBE5D] text-black rounded-sm">
+                <MessageCircle className="w-3.5 h-3.5 mr-1" /> WhatsApp
+              </Button>
+            )}
             {onComplete && <Button size="sm" data-testid={`pb-complete-${b.id}`} onClick={() => onComplete(b)} className="bg-[#84CC16] hover:bg-[#65A30D] text-black rounded-sm"><CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Complete</Button>}
             <Button size="sm" data-testid={`pb-invoice-${b.id}`} onClick={() => onInvoice(b)} className="bg-[#FACC15] hover:bg-[#eab308] text-black rounded-sm"><Receipt className="w-3.5 h-3.5 mr-1" /> {b.invoice_id ? "View invoice" : "Generate invoice"}</Button>
             <Button size="sm" variant="ghost" data-testid={`pb-del-${b.id}`} onClick={() => onDelete(b.id)} className="text-[#FF3B30]"><Trash2 className="w-3.5 h-3.5" /></Button>
@@ -403,6 +411,56 @@ function BookingList({ items, onEdit, onComplete, onInvoice, onDelete }) {
       ))}
     </div>
   );
+}
+
+// -------------------------------------------------------------------------
+// WhatsApp share helpers — client-only wa.me deep-links, no keys needed.
+// Strips non-digits from the phone (wa.me requires country code + digits only).
+// If phone is blank we still return a wa.me link with no recipient — WhatsApp
+// Web will then open the "New chat" picker.
+// -------------------------------------------------------------------------
+function normalisePhoneForWa(phone) {
+  const digits = (phone || "").replace(/\D+/g, "");
+  // If it looks like a 10-digit Indian number, prepend country code 91.
+  if (digits.length === 10 && !digits.startsWith("91")) return `91${digits}`;
+  return digits;
+}
+
+function shareBookingOnWhatsApp(b, vendor) {
+  const biz = vendor?.invoice_business_name || vendor?.business_name || "our venue";
+  const lines = [
+    `Hi ${b.client_name}, this is a booking confirmation from ${biz}.`,
+    ``,
+    `📅 Date: ${b.requested_date}`,
+    `⏰ Time: ${b.start_time}–${b.end_time} (${b.hours || 1}h)`,
+    b.amount ? `💰 Amount: ${fmtPrice(b.amount, b.currency)}` : null,
+    b.recurrence === "weekly" && b.recurrence_until ? `🔁 Recurs weekly till ${b.recurrence_until}` : null,
+    b.notes ? `📝 ${b.notes}` : null,
+    ``,
+    `See you then! — ${biz}`,
+  ].filter(Boolean).join("\n");
+  const url = `https://wa.me/${normalisePhoneForWa(b.client_phone)}?text=${encodeURIComponent(lines)}`;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function shareInvoiceOnWhatsApp(inv) {
+  const bizName = inv.vendor_snapshot?.business_name || "our venue";
+  const to = inv.customer_snapshot?.name || "there";
+  const phone = inv.customer_snapshot?.phone || "";
+  const lines = [
+    `Hi ${to}, invoice ${inv.invoice_number} from ${bizName}.`,
+    ``,
+    ...(inv.line_items || []).map((li) => `• ${li.description} — ${fmtPrice(li.amount, inv.currency)}`),
+    ``,
+    `Subtotal: ${fmtPrice(inv.subtotal, inv.currency)}`,
+    `Tax (${inv.tax_percent}%): ${fmtPrice(inv.tax_amount, inv.currency)}`,
+    `Total: ${fmtPrice(inv.total, inv.currency)}`,
+    `Status: ${(inv.status || "").toUpperCase()}`,
+    ``,
+    inv.vendor_snapshot?.footer_note || `Thanks for your business — ${bizName}`,
+  ].join("\n");
+  const url = `https://wa.me/${normalisePhoneForWa(phone)}?text=${encodeURIComponent(lines)}`;
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 // -------------------------------------------------------------------------
@@ -579,6 +637,12 @@ function InvoicePreview({ inv, onClose, onMarkPaid }) {
           {inv.vendor_snapshot?.footer_note && <div className="mt-4 text-[10px] text-gray-500 border-t pt-2">{inv.vendor_snapshot.footer_note}</div>}
         </div>
         <div className="flex gap-2 justify-end p-3 print:hidden">
+          {inv.customer_snapshot?.phone && (
+            <Button data-testid="pb-invoice-whatsapp" onClick={() => shareInvoiceOnWhatsApp(inv)}
+              className="bg-[#25D366] hover:bg-[#1EBE5D] text-black rounded-sm">
+              <MessageCircle className="w-4 h-4 mr-1" /> WhatsApp
+            </Button>
+          )}
           {inv.status !== "paid" && <Button data-testid="pb-invoice-mark-paid" onClick={onMarkPaid} className="bg-[#84CC16] text-black rounded-sm">Mark paid</Button>}
           <Button data-testid="pb-invoice-print" onClick={() => window.print()} className="bg-black text-white rounded-sm">Print / PDF</Button>
           <Button variant="ghost" onClick={onClose} className="text-neutral-700">Close</Button>

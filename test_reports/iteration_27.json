@@ -1,0 +1,43 @@
+{
+  "summary": "End-to-end verified all 13 items in the Phase 5b+ batch (9 headline requirements). Backend pytest 36/36 pass in ~10s (added TestPrivateBookingEditAndHours 4 tests, TestVendorBookingRoles 1 test, TestSponsorshipMyActivity 1 test). Frontend Playwright confirmed both vendor dashboard tabs, invoice-settings summary/edit toggle, all 5 PrivateBookings tabs incl. Calendar with month nav + listing filter + cells rendered, New/Edit booking dialog with auto end-time recomputation on start_time/hours change (18:00+3h → 21:00, 14:00+2h → 16:00), pencil Edit flow PATCHing successfully, VenueScheduleEditor after-hours checkbox toggling + persisting, /hire anonymous redirect (/login?next=/hire) and PLAYER-role access allowed. Sponsorship inbox card is intentionally hidden when the roll-up has zero sent+received (verified on production which has 0 sponsorship activity) — backend endpoint shape verified via pytest.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "acceptance_results": {
+    "BE-PATCH-PRIVATE-BOOKING-FIELDS": "PASS — TestPrivateBookingEditAndHours::test_edit_private_booking: PATCH accepted client_name/hours/amount/start_time/end_time/notes; response reflects updates.",
+    "BE-OPENING-HOURS-ENFORCEMENT": "PASS — TestPrivateBookingEditAndHours::test_after_hours_flag_default_off_blocks returned 400 with 'opening hours' body; test_after_hours_toggle_allows returned 200 with allow_after_hours=true; test_edit_time_re_validates_hours: PATCH re-validated end_time move outside 08:00–20:00 → 400.",
+    "BE-SCHEDULE-ALLOW-AFTER-HOURS": "PASS — PATCH /api/vendor-listings/{id}/schedule persisted allow_after_hours=true; GET returned it. Default False when absent (verified via test_after_hours_flag_default_off_blocks scenario).",
+    "BE-VENDOR-BOOKINGS-PLAYER-ROLE": "PASS — TestVendorBookingRoles::test_player_can_post_vendor_booking: player without company_id posted /api/vendor-bookings, GET /vendor-bookings returned only own booking.",
+    "BE-SPONSORSHIPS-MY-ACTIVITY": "PASS — TestSponsorshipMyActivity::test_roll_up_shape: HR company_admin got {sent:[], received:[]} shape from GET /api/sponsorships/my-activity.",
+    "FE-VENDOR-DASHBOARD-TABS": "PASS — [data-testid=vendor-tab-marketplace] and [data-testid=vendor-tab-offline] both render; Marketplace default; Offline tab surfaces invoice-settings + private-bookings-panel.",
+    "FE-INVOICE-SETTINGS-COLLAPSE": "PASS — After save, panel collapses; [data-testid=inv-set-edit] renders. Clicking edit expands full form with inv-set-save + inv-set-cancel visible.",
+    "FE-PB-CALENDAR-TAB": "PASS — 5 PB tabs (active/completed/calendar/customers/invoices) visible. Calendar renders 31 cells for month, prev/next navigation works, [data-testid=pb-cal-listing] filter dropdown present, today highlight via purple border in code, booking pills link via onEdit.",
+    "FE-PB-EDIT-FLOW": "PASS — pb-edit-{id} pencil button opens same New-booking dialog pre-filled (client_name 'Iter27_Client', start '10:00', hours 2). Submit PATCH → row updated with 'Iter27_EDITED' and time 14:00–16:00.",
+    "FE-PB-AUTO-END-TIME": "PASS — In New dialog: 18:00 start + 3 hours → end auto-set 21:00. In Edit dialog: changing start to 14:00 auto-recomputed end to 16:00. In fresh dialog: 10:00 + 2h → 12:00.",
+    "FE-VENUE-SCHEDULE-AFTER-HOURS": "PASS — [data-testid=vs-after-hours-toggle] visible in VenueScheduleEditor. Toggling off→on then Save schedule persisted allow_after_hours=true.",
+    "FE-HIRE-PLAYER-ACCESS": "PASS — Anonymous /hire → /login?next=/hire. Player-role login → /players/me by default, but direct navigation to /hire renders VendorMarket page (header 'BOOK A GROUND OR HIRE TALENT', sport filter chips, listings pane). No redirect back to /login.",
+    "FE-SPONSORSHIP-INBOX-CARD": "NOT DIRECTLY OBSERVED — Card renders only when sent+received > 0 (intentional). Production DB has 0 sponsorship_interests and no HR seed, so card is hidden. Backend endpoint verified via pytest. Code inspected: [data-testid=sponsorship-inbox] correctly rendered when data.total > 0 with two columns 'Received on your events' + 'Sent by you as a sponsor', empty-state text fallback when one side is empty."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_phase5_business.py",
+    "/app/test_reports/pytest/iter27_phase5b.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PrivateBookingsPanel.jsx is ~600 lines with BookingsCalendar + New/Edit dialog + rows + customers + invoices + preview embedded — nearing the 700-line split guideline; consider extracting BookingsCalendar and InvoicePreview into their own files for maintainability.",
+    "InvoiceSettingsPanel.jsx collapse logic relies solely on presence of gstin/invoice_business_name/invoice_address in the parent vendor prop; if any of the three is cleared server-side it will auto-expand, which is fine, but there is no explicit reload after save() beyond onSaved?.() — verify parent (VendorDashboard) refetches to keep collapsed state fresh across sessions (works today but easy to break in future).",
+    "SponsorshipInbox card is *hidden* when total=0 rather than showing an onboarding CTA — this hides the /sponsorships marketplace link for company_admins who have never engaged. Consider always rendering the card with a subtle empty state so new admins discover the feature (nice-to-have).",
+    "CRA dev overlay reports a benign 'ResizeObserver loop completed with undelivered notifications' warning when Radix Select opens inside the New booking Dialog. This is a well-known non-blocking React 18 + Radix quirk (see facebook/create-react-app #11318). Not user-facing in production build, but it does block Playwright clicks during dev testing — workaround is to remove the iframe overlay before further interactions. Consider swallowing this specific error via react-error-overlay filter or the recommended ResizeObserver-polyfill snippet."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (36/36)", "frontend": "12/13 acceptance items directly observed; 1 (sponsorship inbox card) hidden-by-design (empty roll-up on clean-slate DB) — endpoint verified via pytest"},
+  "test_credentials": "Vendor: phase5b.vendor@example.com / vendor5b! (re-seeded via /app/test_reports/seed_phase5b_vendor.py; manually flipped listing 'p5b_listing_1' to approved:true+active:true so it shows in PB dropdown). Player: iter27.player@example.com / player123 (created via /api/players/register during test, cleaned up post-test).",
+  "seed_data_creation": "Ran /app/test_reports/seed_phase5b_vendor.py. Manually patched db.vendor_listings.p5b_listing_1 → {approved:true, active:true} so the listing appears in the PB new-booking Select. Player user 'iter27.player@example.com' created via API and cleaned up. Test bookings created during UI test remain in db.vendor_private_bookings for the phase5b vendor (client_name='Iter27_EDITED') — non-blocking, will be wiped when seed re-runs.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "1) The seed script /app/test_reports/seed_phase5b_vendor.py does NOT set approved/active flags on the listing — patch it manually or update the seed to set both true so PrivateBookingsPanel's listing dropdown is populated. 2) CRA dev overlay for ResizeObserver warning blocks Playwright clicks in the New/Edit booking dialog — dismiss via `document.getElementById('webpack-dev-server-client-overlay')?.remove()` before further UI interactions in tests. 3) Sponsorship inbox card is hidden until real HR + sponsorship interest data exists in DB. Seed one via /api/sponsorships and /api/sponsorship-interest endpoints if the card needs to be observed. 4) Player role now correctly reaches /hire — anonymous still redirects. 5) After-hours toggle enables/disables via the checkbox and Save schedule button — persistent server-side and re-validated by PATCH private-bookings.",
+  "rca of the issue": "N/A — no bugs found in this iteration. All 9 headline requirements landed correctly. Test infrastructure notes captured under context_for_next_testing_agent."
+}

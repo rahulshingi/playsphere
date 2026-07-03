@@ -5,7 +5,7 @@ import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
-import { CalendarDays, Users, Activity, Package, Plus, ChevronRight } from "lucide-react";
+import { CalendarDays, Users, Activity, Package, Plus, ChevronRight, Handshake } from "lucide-react";
 import { fmtPrice } from "@/lib/currency";
 import DashboardPanel from "@/components/DashboardPanel";
 import UpcomingBookingsWidget from "@/components/UpcomingBookingsWidget";
@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [stats, setStats] = useState({});
   const [events, setEvents] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [sponsorship, setSponsorship] = useState({ sent: [], received: [] });
 
   useEffect(() => {
     if (ready && !isCompanyAdmin) { nav("/login"); return; }
@@ -25,8 +26,10 @@ export default function Dashboard() {
         api.get("/stats/company"),
         api.get(`/events?company_id=${user.company_id}`),
         api.get("/bookings"),
-      ]).then(([s, e, b]) => {
+        api.get("/sponsorships/my-activity").catch(() => ({ data: { sent: [], received: [] } })),
+      ]).then(([s, e, b, sp]) => {
         setStats(s.data); setEvents(e.data); setBookings(b.data);
+        setSponsorship(sp.data || { sent: [], received: [] });
       });
     }
   }, [ready, isCompanyAdmin, user?.company_id]);
@@ -59,6 +62,8 @@ export default function Dashboard() {
         <div className="mt-6">
           <CompanyAddressCard />
         </div>
+
+        <SponsorshipInbox data={sponsorship} />
 
         <div className="grid md:grid-cols-2 gap-6 mt-12">
           <Panel title="YOUR TOURNAMENTS" cta={{ label: "New", to: "/admin" }}>
@@ -114,6 +119,70 @@ function StatusPill({ status }) {
     approved:  "text-[#84CC16] border-[#84CC16]/40",
     fulfilled: "text-emerald-400 border-emerald-500/40",
     cancelled: "text-neutral-500 border-white/10",
+    accepted:  "text-[#84CC16] border-[#84CC16]/40",
+    rejected:  "text-[#FF3B30] border-[#FF3B30]/40",
   }[status] || "text-neutral-500 border-white/10";
   return <span className={`text-[10px] font-mono uppercase border rounded-sm px-1.5 py-0.5 mt-1 inline-block ${m}`}>{status}</span>;
+}
+
+// Two-column sponsorship inbox — shows both interests THIS company has
+// received on its own events, AND interests this company has expressed on
+// other people's events (when the company_admin is also acting as a sponsor).
+function SponsorshipInbox({ data }) {
+  const sent = data?.sent || [];
+  const received = data?.received || [];
+  const total = sent.length + received.length;
+  if (total === 0) return null;
+
+  return (
+    <div data-testid="sponsorship-inbox" className="mt-8 border border-[#FACC15]/30 rounded-sm bg-gradient-to-br from-[#FACC15]/5 to-transparent p-5">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-[#FACC15] flex items-center gap-1.5">
+            <Handshake className="w-3.5 h-3.5" /> / Sponsorship activity
+          </div>
+          <div className="text-sm text-neutral-300 mt-1">
+            {received.length > 0 && <span>{received.length} interest{received.length === 1 ? "" : "s"} on your events. </span>}
+            {sent.length > 0 && <span>{sent.length} you&apos;ve sent as a sponsor.</span>}
+          </div>
+        </div>
+        <Link to="/sponsorships" data-testid="sponsorship-inbox-browse" className="text-xs font-mono uppercase tracking-widest text-[#FACC15] hover:underline">Browse marketplace →</Link>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-4 mt-4">
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-2">Received on your events</div>
+          {received.length === 0 ? (
+            <div className="text-xs text-neutral-500 border border-dashed border-white/10 rounded-sm py-4 px-3 text-center">
+              No sponsorship interest received yet. <Link to="/admin" className="text-[#FACC15] underline">Enable sponsorships</Link> on your next event.
+            </div>
+          ) : received.slice(0, 4).map((r) => (
+            <Link to={`/events/${r.event_id}`} key={r.id} data-testid={`si-received-${r.id}`} className="flex items-start justify-between border-t border-white/5 py-2 px-1 hover:bg-white/[0.02]">
+              <div className="min-w-0">
+                <div className="text-sm truncate">{r.sponsor_company_name || "A sponsor"}</div>
+                <div className="text-[10px] font-mono uppercase text-neutral-500">{r.event_name || r.event_id?.slice(0, 8)} · {r.tier_name || r.opportunity_id?.slice(0, 8)}</div>
+              </div>
+              <StatusPill status={r.status} />
+            </Link>
+          ))}
+        </div>
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-2">Sent by you as a sponsor</div>
+          {sent.length === 0 ? (
+            <div className="text-xs text-neutral-500 border border-dashed border-white/10 rounded-sm py-4 px-3 text-center">
+              You haven&apos;t expressed interest in any sponsorship yet. <Link to="/sponsorships" className="text-[#FACC15] underline">Browse the marketplace</Link>.
+            </div>
+          ) : sent.slice(0, 4).map((s) => (
+            <Link to={`/events/${s.event_id}`} key={s.id} data-testid={`si-sent-${s.id}`} className="flex items-start justify-between border-t border-white/5 py-2 px-1 hover:bg-white/[0.02]">
+              <div className="min-w-0">
+                <div className="text-sm truncate">{s.event_name || s.event_id?.slice(0, 8)}</div>
+                <div className="text-[10px] font-mono uppercase text-neutral-500">{s.tier_name || s.opportunity_id?.slice(0, 8)}</div>
+              </div>
+              <StatusPill status={s.status} />
+            </Link>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }

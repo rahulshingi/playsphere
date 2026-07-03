@@ -119,6 +119,22 @@ export default function VenueScheduleEditor({ listing, onClose }) {
             <div className="mt-4"><Label className="text-xs uppercase font-mono text-neutral-500">Amenities</Label>
               <Input data-testid="vs-amenities" value={(schedule.amenities || []).join(", ")} onChange={(e) => setSchedule({ ...schedule, amenities: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} className="mt-1 bg-black/40 border-white/10 text-white" placeholder="parking, washroom, lights, equipment, changing room" /></div>
 
+            <label data-testid="vs-after-hours" className="mt-4 flex items-start gap-2 border border-amber-500/30 bg-amber-500/5 rounded-sm p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                data-testid="vs-after-hours-toggle"
+                checked={!!schedule.allow_after_hours}
+                onChange={(e) => setSchedule({ ...schedule, allow_after_hours: e.target.checked })}
+                className="mt-0.5 accent-amber-500"
+              />
+              <div>
+                <div className="text-xs font-semibold text-amber-300">Allow bookings outside opening &amp; closing hours</div>
+                <div className="text-[10px] text-neutral-400 mt-0.5">
+                  When enabled, private bookings can be added at any time — useful for late-night matches, early-morning sessions, or private tournaments. Marketplace slots still respect the opening window.
+                </div>
+              </div>
+            </label>
+
             <HappyHoursEditor schedule={schedule} setSchedule={setSchedule} />
 
             <Button data-testid="vs-save" onClick={saveSchedule} className="mt-4 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Save schedule</Button>

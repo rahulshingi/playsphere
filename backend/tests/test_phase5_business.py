@@ -658,3 +658,129 @@ class TestAdminVendorOfflineStats:
         assert d["totals"]["invoices_issued"] >= 1
         assert d["totals"]["invoices_paid"] >= 1
         assert isinstance(d["calendar"], list)
+
+
+# =========================================================================
+# 10. Phase 5b+ — Edit booking, opening/closing hours, after-hours override
+# =========================================================================
+class TestPrivateBookingEditAndHours:
+    @pytest.fixture(scope="class")
+    def sess(self):
+        s = _sess()
+        r = s.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        assert r.status_code == 200, r.text
+        return s
+
+    @pytest.fixture(scope="class")
+    def listing_id(self, sess):
+        rows = sess.get(f"{API}/vendors/me/listings").json()
+        assert rows, "vendor2 has no listings"
+        return rows[0]["id"]
+
+    def _set_schedule(self, sess, listing_id, **fields):
+        return sess.patch(f"{API}/vendor-listings/{listing_id}/schedule", json=fields)
+
+    def test_edit_private_booking(self, sess, listing_id):
+        future = (datetime.now(timezone.utc) + timedelta(days=45)).strftime("%Y-%m-%d")
+        # First set an easy opening window so this booking passes
+        r = self._set_schedule(sess, listing_id, opening_time="06:00", closing_time="23:00", allow_after_hours=False)
+        assert r.status_code == 200, r.text
+        r = sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": listing_id, "client_name": "Edit_Me",
+            "requested_date": future, "start_time": "10:00", "end_time": "11:00",
+            "hours": 1, "amount": 700,
+        })
+        assert r.status_code == 200, r.text
+        bid = r.json()["id"]
+        # Edit — bump hours, change amount, tweak time (still inside window)
+        r = sess.patch(f"{API}/vendor/private-bookings/{bid}", json={
+            "hours": 2, "amount": 1400, "client_name": "Edit_Me_2",
+            "start_time": "10:00", "end_time": "12:00",
+            "notes": "corrected",
+        })
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["hours"] == 2 and d["amount"] == 1400 and d["client_name"] == "Edit_Me_2"
+        assert d["notes"] == "corrected"
+
+    def test_after_hours_flag_default_off_blocks(self, sess, listing_id):
+        # Ensure allow_after_hours is off + 06-22 window
+        r = self._set_schedule(sess, listing_id, opening_time="06:00", closing_time="22:00", allow_after_hours=False)
+        assert r.status_code == 200, r.text
+        future = (datetime.now(timezone.utc) + timedelta(days=50)).strftime("%Y-%m-%d")
+        r = sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": listing_id, "client_name": "LateNight",
+            "requested_date": future, "start_time": "23:00", "end_time": "24:00",
+            "hours": 1, "amount": 500,
+        })
+        assert r.status_code == 400, r.text
+        assert "opening hours" in r.text.lower() or "outside" in r.text.lower()
+
+    def test_after_hours_toggle_allows(self, sess, listing_id):
+        r = self._set_schedule(sess, listing_id, allow_after_hours=True)
+        assert r.status_code == 200, r.text
+        assert r.json().get("allow_after_hours") is True
+        future = (datetime.now(timezone.utc) + timedelta(days=51)).strftime("%Y-%m-%d")
+        r = sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": listing_id, "client_name": "LateNightOK",
+            "requested_date": future, "start_time": "23:00", "end_time": "23:59",
+            "hours": 1, "amount": 500,
+        })
+        assert r.status_code == 200, r.text
+
+    def test_edit_time_re_validates_hours(self, sess, listing_id):
+        # Toggle allow_after_hours OFF again
+        self._set_schedule(sess, listing_id, opening_time="08:00", closing_time="20:00", allow_after_hours=False)
+        future = (datetime.now(timezone.utc) + timedelta(days=52)).strftime("%Y-%m-%d")
+        r = sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": listing_id, "client_name": "InsideWindow",
+            "requested_date": future, "start_time": "10:00", "end_time": "11:00",
+            "hours": 1, "amount": 500,
+        })
+        assert r.status_code == 200, r.text
+        bid = r.json()["id"]
+        # Attempt to move end_time outside window
+        r = sess.patch(f"{API}/vendor/private-bookings/{bid}", json={"start_time": "10:00", "end_time": "22:30"})
+        assert r.status_code == 400, r.text
+
+
+# =========================================================================
+# 11. Phase 5b+ — Player + organiser can hire vendors
+# =========================================================================
+class TestVendorBookingRoles:
+    def test_player_can_post_vendor_booking(self, db):
+        # Ensure PLAYER exists with a listing to book against (VENDOR2's listing)
+        s = _sess()
+        r = s.post(f"{API}/auth/login", json={"email": PLAYER_EMAIL, "password": "player123"})
+        # If player wasn't created earlier in this run, skip — test suite dependency.
+        if r.status_code != 200:
+            pytest.skip("player fixture missing in this test session")
+        rows = requests.get(f"{API}/vendor-listings?vendor_type=ground").json()
+        # Pick any approved+active listing
+        listing = next((L for L in rows if L.get("approved") and L.get("active")), None)
+        if not listing:
+            pytest.skip("no approved listing to book")
+        future = (datetime.now(timezone.utc) + timedelta(days=25)).strftime("%Y-%m-%d")
+        r = s.post(f"{API}/vendor-bookings", json={
+            "listing_id": listing["id"], "requested_date": future,
+            "start_time": "10:00", "hours": 1, "notes": "player booking test",
+        })
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["created_by"], "booking must record who created it"
+        # Player then lists own bookings
+        r = s.get(f"{API}/vendor-bookings")
+        assert r.status_code == 200, r.text
+        assert any(x["id"] == d["id"] for x in r.json())
+
+
+# =========================================================================
+# 12. Phase 5b+ — Sponsorship activity roll-up
+# =========================================================================
+class TestSponsorshipMyActivity:
+    def test_roll_up_shape(self, hr):
+        r = hr["sess"].get(f"{API}/sponsorships/my-activity")
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert "sent" in d and "received" in d
+        assert isinstance(d["sent"], list) and isinstance(d["received"], list)

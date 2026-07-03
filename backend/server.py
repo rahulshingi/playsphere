@@ -1849,13 +1849,22 @@ def _resolve_booking_sport(body_sport: Optional[str], listing_sports: list) -> O
     return listing_sports[0] if listing_sports else None
 
 
+async def _require_vendor_buyer(user: dict = Depends(get_current_user)) -> dict:
+    """Anyone who can send a vendor booking request: company_admin, player, organiser."""
+    if user.get("role") not in ("company_admin", "player", "organiser"):
+        raise HTTPException(403, "Only company admins, players or organisers can book vendors")
+    return user
+
+
 @api.post("/vendor-bookings", response_model=VendorBooking)
-async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depends(require_company_admin)):
+async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depends(_require_vendor_buyer)):
     listing = await db.vendor_listings.find_one({"id": body.listing_id, "approved": True, "active": True}, {"_id": 0})
     if not listing:
         raise HTTPException(404, "Listing not available")
     _reject_past_slot(body.requested_date, body.start_time)
-    company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
+    company = None
+    if user.get("company_id"):
+        company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
 
     end_time, hours = _normalize_booking_time(body.start_time, body.end_time, body.hours)
     price = float(listing["price"])
@@ -1894,7 +1903,8 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
     booking = VendorBooking(
         listing_id=listing["id"], listing_title=listing["title"],
         vendor_id=listing["vendor_id"], vendor_type=listing["vendor_type"],
-        company_id=user["company_id"], company_name=(company or {}).get("name", ""),
+        company_id=user.get("company_id") or "",
+        company_name=(company or {}).get("name") or user.get("name") or user.get("email") or "Player",
         requested_date=body.requested_date, start_time=body.start_time, end_time=end_time,
         hours=hours, sport=sport, city=listing.get("city"), sub_unit_id=body.sub_unit_id,
         price=price, currency=listing.get("currency", "INR"), total=total_price,
@@ -1944,6 +1954,9 @@ async def list_vendor_bookings(user: dict = Depends(get_current_user)):
         flt = {"vendor_id": vendor["id"]} if vendor else {"vendor_id": "__none__"}
     elif role == "company_admin":
         flt = {"company_id": user.get("company_id")}
+    elif role in ("player", "organiser"):
+        # Players + organisers see the bookings they themselves created.
+        flt = {"created_by": user["id"]}
     elif role in ("platform_admin", "admin"):
         flt = {}
     else:
@@ -2825,6 +2838,44 @@ async def list_my_sponsorship_interests(user: dict = Depends(_require_sponsor_or
     if not sponsor_profile:
         return []
     return await db.sponsorship_interests.find({"sponsor_id": sponsor_profile["id"]}, {"_id": 0}).sort("created_at", -1).to_list(500)
+
+
+@api.get("/sponsorships/my-activity")
+async def sponsorship_my_activity(user: dict = Depends(get_current_user)):
+    """Unified sponsorship inbox — returns both:
+    * `sent`: interests THIS user (as a sponsor OR company_admin) has expressed on events run by others.
+    * `received`: interests received on events THIS user's company (or events they own) is organising.
+    Used by the CompanyDashboard sidebar card so a company that is *also* a sponsor sees both sides.
+    """
+    role = user.get("role")
+    sent: list = []
+    received: list = []
+
+    # SENT — anyone who has a sponsor profile (dedicated sponsor OR company_admin).
+    if role in ("sponsor", "company_admin"):
+        sp = await _resolve_sponsor_profile(user)
+        if sp:
+            sent = await db.sponsorship_interests.find(
+                {"sponsor_id": sp["id"]}, {"_id": 0}
+            ).sort("created_at", -1).to_list(500)
+
+    # RECEIVED — events owned by this user (company owner or organiser).
+    q_events = None
+    if role == "company_admin" and user.get("company_id"):
+        q_events = {"company_id": user["company_id"]}
+    elif role in ("organiser", "platform_admin"):
+        q_events = {"organiser_id": user["id"]} if role == "organiser" else {}
+    if q_events is not None:
+        events = await db.events.find(q_events, {"_id": 0, "id": 1, "name": 1}).to_list(500)
+        event_ids = [e["id"] for e in events]
+        event_map = {e["id"]: e.get("name") for e in events}
+        if event_ids:
+            received = await db.sponsorship_interests.find(
+                {"event_id": {"$in": event_ids}}, {"_id": 0}
+            ).sort("created_at", -1).to_list(500)
+            for r in received:
+                r.setdefault("event_name", event_map.get(r.get("event_id")))
+    return {"sent": sent, "received": received}
 
 
 @api.get("/events/{event_id}/sponsorships/interests")
@@ -3728,8 +3779,10 @@ async def get_schedule(listing_id: str):
             "weekend_price_factor": 1.2,
             "happy_hours": [],
             "amenities": [],
+            "allow_after_hours": False,
         }
     doc.setdefault("happy_hours", [])
+    doc.setdefault("allow_after_hours", False)
     return doc
 
 
@@ -3737,9 +3790,12 @@ async def get_schedule(listing_id: str):
 async def update_schedule(listing_id: str, body: dict, user: dict = Depends(get_current_user)):
     await _require_vendor_owner(listing_id, user)
     allowed = {k: body[k] for k in ("opening_time", "closing_time", "slot_minutes", "peak_hours",
-                                     "peak_price_factor", "weekend_price_factor", "happy_hours", "amenities") if k in body}
+                                     "peak_price_factor", "weekend_price_factor", "happy_hours", "amenities",
+                                     "allow_after_hours") if k in body}
     if not allowed:
         raise HTTPException(400, "no allowed fields")
+    if "allow_after_hours" in allowed:
+        allowed["allow_after_hours"] = bool(allowed["allow_after_hours"])
     # Sanitize happy_hours entries
     if "happy_hours" in allowed:
         cleaned = []

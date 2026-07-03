@@ -389,6 +389,22 @@ def register(api, db, deps):
             raise HTTPException(404, "Listing not found in your catalogue")
         return listing
 
+    async def _check_within_hours(listing_id: str, start: str, end: str):
+        """Enforce the listing's opening/closing window on private bookings unless
+        the vendor has explicitly enabled after-hours bookings on that listing's
+        schedule (`allow_after_hours=True`)."""
+        sched = await db.venue_schedules.find_one({"listing_id": listing_id}, {"_id": 0}) or {}
+        if sched.get("allow_after_hours"):
+            return
+        opening = sched.get("opening_time") or "06:00"
+        closing = sched.get("closing_time") or "22:00"
+        # Time strings are always HH:MM so lexicographic comparison works.
+        if start < opening or end > closing:
+            raise HTTPException(
+                400,
+                f"Booking window {start}–{end} falls outside opening hours ({opening}–{closing}). "
+                f"Enable 'Allow after-hours bookings' in the venue schedule to override."
+            )
     @api.post("/vendor/private-bookings", response_model=PrivateBooking)
     async def create_private_booking(body: PrivateBookingCreate, user: dict = Depends(get_current_user)):
         vendor = await _vendor_for_user(user)
@@ -396,6 +412,9 @@ def register(api, db, deps):
         await _own_listing(vendor["id"], body.listing_id)
         if body.recurrence and body.recurrence not in ("weekly",):
             raise HTTPException(400, "recurrence must be 'weekly' or omitted")
+        # Enforce venue opening/closing window unless the vendor has explicitly
+        # enabled after-hours bookings for this listing.
+        await _check_within_hours(body.listing_id, body.start_time, body.end_time)
         # Normalise the payload BEFORE constructing PrivateBooking to avoid the
         # "got multiple values for keyword argument" TypeError when defaults
         # collide with explicit kwargs.
@@ -421,15 +440,28 @@ def register(api, db, deps):
     @api.patch("/vendor/private-bookings/{booking_id}", response_model=PrivateBooking)
     async def update_private_booking(booking_id: str, body: dict, user: dict = Depends(get_current_user)):
         vendor = await _vendor_for_user(user)
-        allowed = {"status", "notes", "amount", "rate_per_hour", "rate_type"}
+        allowed = {
+            "status", "notes", "amount", "rate_per_hour", "rate_type",
+            "requested_date", "start_time", "end_time", "hours",
+            "client_name", "client_phone", "client_email", "customer_id",
+            "recurrence", "recurrence_until", "recurrence_days_of_week",
+        }
         upd = {k: v for k, v in body.items() if k in allowed}
         if upd.get("status") and upd["status"] not in ("active", "completed", "cancelled"):
             raise HTTPException(400, "Invalid status")
+        if upd.get("recurrence") and upd["recurrence"] not in ("weekly", "", None):
+            raise HTTPException(400, "recurrence must be 'weekly' or omitted")
         if not upd:
             raise HTTPException(400, "Nothing to update")
-        res = await db.private_bookings.update_one({"id": booking_id, "vendor_id": vendor["id"]}, {"$set": upd})
-        if not res.matched_count:
+        existing = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not existing:
             raise HTTPException(404, "Booking not found")
+        # If start/end changed, re-validate the opening/closing window.
+        new_start = upd.get("start_time", existing["start_time"])
+        new_end = upd.get("end_time", existing["end_time"])
+        if "start_time" in upd or "end_time" in upd:
+            await _check_within_hours(existing["listing_id"], new_start, new_end)
+        await db.private_bookings.update_one({"id": booking_id, "vendor_id": vendor["id"]}, {"$set": upd})
         doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
         return PrivateBooking(**doc)
 

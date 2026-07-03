@@ -27,7 +27,7 @@ const VENDOR_TYPE_LABEL = {
 const VENUE_TYPES = ["ground", "court"];
 
 export default function VendorMarket() {
-  const { ready, isCompanyAdmin } = useAuth();
+  const { ready, user } = useAuth();
   const nav = useNavigate();
 
   // Wizard state
@@ -39,9 +39,13 @@ export default function VendorMarket() {
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState({ requested_date: "", start_time: "18:00", hours: 2, notes: "", apply_membership_id: "" });
 
+  // Anyone can browse, but booking requires an authenticated buyer role.
+  // Players + organisers + company admins are all allowed to send a booking request.
+  const canBook = !!user && ["player", "organiser", "company_admin"].includes(user.role);
+
   useEffect(() => {
-    if (ready && !isCompanyAdmin) nav("/login");
-  }, [ready, isCompanyAdmin, nav]);
+    if (ready && !user) nav("/login?next=/hire");
+  }, [ready, user, nav]);
 
   // When sport is picked, fetch cities
   useEffect(() => {

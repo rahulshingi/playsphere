@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Briefcase, Store } from "lucide-react";
 import { CURRENCIES, fmtPrice } from "@/lib/currency";
 import ImageUpload from "@/components/ImageUpload";
 import DashboardPanel from "@/components/DashboardPanel";
@@ -129,81 +130,94 @@ export default function VendorDashboard() {
           </Button>
         </div>
 
-        <div className="mt-10">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Dashboard</div>
-          <DashboardPanel role="vendor" />
-        </div>
+        <Tabs defaultValue="marketplace" className="mt-8">
+          <TabsList data-testid="vendor-tabs" className="bg-black/40 border border-white/10 rounded-sm">
+            <TabsTrigger data-testid="vendor-tab-marketplace" value="marketplace" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">
+              <Store className="w-4 h-4 mr-1.5" /> Marketplace
+            </TabsTrigger>
+            <TabsTrigger data-testid="vendor-tab-offline" value="offline" className="data-[state=active]:bg-[#FACC15] data-[state=active]:text-black rounded-sm">
+              <Briefcase className="w-4 h-4 mr-1.5" /> Offline business
+            </TabsTrigger>
+          </TabsList>
 
-        <div className="mt-10">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Your listings ({listings.length})</div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {listings.map((l) => (
-              <div key={l.id} className="border border-white/10 rounded-sm bg-[#141414] overflow-hidden">
-                <div className="h-32 bg-black/40 relative">
-                  {l.images?.[0] && <img src={l.images[0]} alt="" className="w-full h-full object-cover opacity-90" />}
-                  <span className={`absolute top-2 right-2 text-[10px] font-mono uppercase px-2 py-0.5 rounded-sm ${l.approved ? "bg-[#84CC16] text-black" : "bg-amber-500/30 text-amber-300 border border-amber-500/40"}`}>
-                    {l.approved ? "LIVE" : "PENDING"}
-                  </span>
-                </div>
-                <div className="p-4">
-                  <div className="font-semibold">{l.title}</div>
-                  <div className="text-xs font-mono text-neutral-500 mt-1 uppercase">{l.vendor_type} · {l.city} · {fmtPrice(l.price, l.currency)} {l.price_unit}</div>
-                  <div className="flex gap-2 mt-3">
-                    <Button size="sm" variant="ghost" onClick={() => setEditing({ ...l, images: l.images?.length ? l.images : [""] })} className="text-[#84CC16]">Edit</Button>
-                    <Button size="sm" variant="ghost" data-testid={`vl-schedule-${l.id}`} onClick={() => setScheduling(l)} className="text-[#06B6D4]">Schedule</Button>
-                    <Button size="sm" variant="ghost" onClick={() => remove(l.id)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
+          <TabsContent value="marketplace" className="mt-6">
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Dashboard</div>
+              <DashboardPanel role="vendor" />
+            </div>
+
+            <div className="mt-10">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Your listings ({listings.length})</div>
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {listings.map((l) => (
+                  <div key={l.id} className="border border-white/10 rounded-sm bg-[#141414] overflow-hidden">
+                    <div className="h-32 bg-black/40 relative">
+                      {l.images?.[0] && <img src={l.images[0]} alt="" className="w-full h-full object-cover opacity-90" />}
+                      <span className={`absolute top-2 right-2 text-[10px] font-mono uppercase px-2 py-0.5 rounded-sm ${l.approved ? "bg-[#84CC16] text-black" : "bg-amber-500/30 text-amber-300 border border-amber-500/40"}`}>
+                        {l.approved ? "LIVE" : "PENDING"}
+                      </span>
+                    </div>
+                    <div className="p-4">
+                      <div className="font-semibold">{l.title}</div>
+                      <div className="text-xs font-mono text-neutral-500 mt-1 uppercase">{l.vendor_type} · {l.city} · {fmtPrice(l.price, l.currency)} {l.price_unit}</div>
+                      <div className="flex gap-2 mt-3">
+                        <Button size="sm" variant="ghost" onClick={() => setEditing({ ...l, images: l.images?.length ? l.images : [""] })} className="text-[#84CC16]">Edit</Button>
+                        <Button size="sm" variant="ghost" data-testid={`vl-schedule-${l.id}`} onClick={() => setScheduling(l)} className="text-[#06B6D4]">Schedule</Button>
+                        <Button size="sm" variant="ghost" onClick={() => remove(l.id)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            ))}
-            {listings.length === 0 && <div className="col-span-full text-neutral-500 text-sm">No listings yet. Click &ldquo;New listing&rdquo;.</div>}
-          </div>
-        </div>
-
-        <VendorMembershipsPanel listings={listings} />
-
-        <div className="mt-12">
-          <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Booking requests ({bookings.length})</div>
-          <div className="border border-white/10 rounded-sm overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-[#141414] font-mono text-[10px] uppercase tracking-widest text-neutral-500">
-                <tr><th className="text-left px-4 py-3">Listing</th><th className="text-left px-3 py-3">Company</th><th className="text-left px-3 py-3">Date / Time</th><th className="text-right px-3 py-3">Price</th><th className="text-left px-3 py-3">Status</th><th></th></tr>
-              </thead>
-              <tbody>
-                {bookings.map((b) => (
-                  <tr key={b.id} className="border-t border-white/5">
-                    <td className="px-4 py-3">{b.listing_title}</td>
-                    <td className="px-3 py-3 font-mono text-neutral-300">{b.company_name}</td>
-                    <td className="px-3 py-3 font-mono text-neutral-300">{b.requested_date} · {b.start_time}–{b.end_time}</td>
-                    <td className="px-3 py-3 text-right font-mono">{fmtPrice(b.price, b.currency)}</td>
-                    <td className="px-3 py-3"><span className={`text-[10px] font-mono uppercase border rounded-sm px-2 py-0.5 ${b.status === "confirmed" ? "text-[#84CC16] border-[#84CC16]/40" : b.status === "declined" ? "text-[#FF3B30] border-[#FF3B30]/40" : b.status === "cancelled" ? "text-neutral-500 border-white/10" : "text-amber-400 border-amber-500/40"}`}>{b.status}</span></td>
-                    <td className="px-3 py-3 text-right">
-                      {b.status === "pending" && (
-                        <div className="flex gap-1 justify-end">
-                          <Button size="sm" data-testid={`vb-confirm-${b.id}`} onClick={() => respondBooking(b.id, "confirmed")} className="bg-[#84CC16] hover:bg-[#65A30D] text-black h-7 rounded-sm">Confirm</Button>
-                          <Button size="sm" variant="outline" data-testid={`vb-decline-${b.id}`} onClick={() => respondBooking(b.id, "declined")} className="border-white/10 bg-transparent text-[#FF3B30] h-7 rounded-sm">Decline</Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
                 ))}
-                {bookings.length === 0 && <tr><td colSpan={6} className="text-center py-10 text-neutral-500">No booking requests yet.</td></tr>}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                {listings.length === 0 && <div className="col-span-full text-neutral-500 text-sm">No listings yet. Click &ldquo;New listing&rdquo;.</div>}
+              </div>
+            </div>
+
+            <VendorMembershipsPanel listings={listings} />
+
+            <div className="mt-12">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Booking requests ({bookings.length})</div>
+              <div className="border border-white/10 rounded-sm overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-[#141414] font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+                    <tr><th className="text-left px-4 py-3">Listing</th><th className="text-left px-3 py-3">Company</th><th className="text-left px-3 py-3">Date / Time</th><th className="text-right px-3 py-3">Price</th><th className="text-left px-3 py-3">Status</th><th></th></tr>
+                  </thead>
+                  <tbody>
+                    {bookings.map((b) => (
+                      <tr key={b.id} className="border-t border-white/5">
+                        <td className="px-4 py-3">{b.listing_title}</td>
+                        <td className="px-3 py-3 font-mono text-neutral-300">{b.company_name}</td>
+                        <td className="px-3 py-3 font-mono text-neutral-300">{b.requested_date} · {b.start_time}–{b.end_time}</td>
+                        <td className="px-3 py-3 text-right font-mono">{fmtPrice(b.price, b.currency)}</td>
+                        <td className="px-3 py-3"><span className={`text-[10px] font-mono uppercase border rounded-sm px-2 py-0.5 ${b.status === "confirmed" ? "text-[#84CC16] border-[#84CC16]/40" : b.status === "declined" ? "text-[#FF3B30] border-[#FF3B30]/40" : b.status === "cancelled" ? "text-neutral-500 border-white/10" : "text-amber-400 border-amber-500/40"}`}>{b.status}</span></td>
+                        <td className="px-3 py-3 text-right">
+                          {b.status === "pending" && (
+                            <div className="flex gap-1 justify-end">
+                              <Button size="sm" data-testid={`vb-confirm-${b.id}`} onClick={() => respondBooking(b.id, "confirmed")} className="bg-[#84CC16] hover:bg-[#65A30D] text-black h-7 rounded-sm">Confirm</Button>
+                              <Button size="sm" variant="outline" data-testid={`vb-decline-${b.id}`} onClick={() => respondBooking(b.id, "declined")} className="border-white/10 bg-transparent text-[#FF3B30] h-7 rounded-sm">Decline</Button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {bookings.length === 0 && <tr><td colSpan={6} className="text-center py-10 text-neutral-500">No booking requests yet.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <VendorReviewsInbox />
+          </TabsContent>
+
+          <TabsContent value="offline" className="mt-6" data-testid="vendor-offline-tab-content">
+            <OfflineModeCard vendor={vendor} onChange={load} />
+            <InvoiceSettingsPanel vendor={vendor} onSaved={load} />
+            <PrivateBookingsPanel vendor={vendor} listings={listings} />
+          </TabsContent>
+        </Tabs>
       </div>
 
       {editing && <ListingEditor listing={editing} setListing={setEditing} onSave={save} onClose={() => setEditing(null)} />}
       {scheduling && <VenueScheduleEditor listing={scheduling} onClose={() => setScheduling(null)} />}
-
-      <VendorReviewsInbox />
-
-      <div className="max-w-7xl mx-auto px-6">
-        <OfflineModeCard vendor={vendor} onChange={load} />
-        <InvoiceSettingsPanel vendor={vendor} onSaved={load} />
-        <PrivateBookingsPanel vendor={vendor} listings={listings} />
-      </div>
 
       <Footer />
     </div>

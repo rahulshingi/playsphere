@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, Trash2, Lock, Receipt, CheckCircle2, User } from "lucide-react";
+import { Plus, Trash2, Lock, Receipt, CheckCircle2, User, Pencil, CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
 import { fmtPrice } from "@/lib/currency";
 
@@ -20,6 +20,18 @@ const BLANK_BOOKING = {
 };
 const BLANK_CUSTOMER = { name: "", phone: "", email: "", address: "", gstin: "", notes: "" };
 
+// Add whole hours to a HH:MM string. Wraps at 24h (returns "24:00" as sentinel
+// so the caller can flag it if needed; we clamp to 23:59 for display).
+function addHours(hhmm, hours) {
+  if (!hhmm || !/^\d{2}:\d{2}$/.test(hhmm)) return hhmm;
+  const [h, m] = hhmm.split(":").map(Number);
+  let total = h * 60 + m + Number(hours || 0) * 60;
+  if (total >= 24 * 60) total = 24 * 60 - 1; // clamp to 23:59
+  const nh = Math.floor(total / 60);
+  const nm = total % 60;
+  return `${String(nh).padStart(2, "0")}:${String(nm).padStart(2, "0")}`;
+}
+
 export default function PrivateBookingsPanel({ vendor, listings = [] }) {
   const [bookings, setBookings] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -28,6 +40,7 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
   const [showCustomer, setShowCustomer] = useState(false);
   const [previewInvoice, setPreviewInvoice] = useState(null);
   const [form, setForm] = useState(BLANK_BOOKING);
+  const [editingId, setEditingId] = useState(null);
   const [custForm, setCustForm] = useState(BLANK_CUSTOMER);
   const [busy, setBusy] = useState(false);
 
@@ -44,11 +57,47 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
   const active = bookings.filter((b) => b.status === "active");
   const completed = bookings.filter((b) => b.status === "completed");
 
+  // Auto-adjust end_time whenever start_time OR hours change in the dialog.
+  useEffect(() => {
+    if (!showBooking) return;
+    const suggested = addHours(form.start_time, form.hours);
+    if (suggested && suggested !== form.end_time) {
+      setForm((f) => ({ ...f, end_time: suggested }));
+    }
+    // We deliberately only react to start_time + hours changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.start_time, form.hours, showBooking]);
+
   // Derive amount when rate_type=hourly
   const computedAmount = useMemo(() => {
     if (form.rate_type === "hourly") return Number(form.rate_per_hour || 0) * Number(form.hours || 0);
     return Number(form.amount || 0);
   }, [form.rate_type, form.rate_per_hour, form.hours, form.amount]);
+
+  const openNew = () => { setEditingId(null); setForm(BLANK_BOOKING); setShowBooking(true); };
+  const openEdit = (b) => {
+    setEditingId(b.id);
+    setForm({
+      listing_id: b.listing_id || "",
+      customer_id: b.customer_id || "",
+      client_name: b.client_name || "",
+      client_phone: b.client_phone || "",
+      client_email: b.client_email || "",
+      requested_date: b.requested_date || "",
+      start_time: b.start_time || "18:00",
+      end_time: b.end_time || "19:00",
+      hours: b.hours || 1,
+      rate_type: b.rate_type || "total",
+      rate_per_hour: b.rate_per_hour || 0,
+      amount: b.amount || 0,
+      currency: b.currency || "INR",
+      notes: b.notes || "",
+      recurrence: b.recurrence || "",
+      recurrence_until: b.recurrence_until || "",
+      recurrence_days_of_week: b.recurrence_days_of_week || [],
+    });
+    setShowBooking(true);
+  };
 
   const submitBooking = async () => {
     if (!form.listing_id) return toast.error("Pick a listing");
@@ -66,10 +115,15 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
         const c = customers.find((x) => x.id === form.customer_id);
         if (c) { payload.client_name = c.name; payload.client_phone = c.phone; payload.client_email = c.email; }
       }
-      if (!payload.recurrence) { delete payload.recurrence; delete payload.recurrence_until; payload.recurrence_days_of_week = []; }
-      await api.post("/vendor/private-bookings", payload);
-      toast.success("Booking added");
-      setShowBooking(false); setForm(BLANK_BOOKING); reload();
+      if (!payload.recurrence) { payload.recurrence = null; payload.recurrence_until = null; payload.recurrence_days_of_week = []; }
+      if (editingId) {
+        await api.patch(`/vendor/private-bookings/${editingId}`, payload);
+        toast.success("Booking updated");
+      } else {
+        await api.post("/vendor/private-bookings", payload);
+        toast.success("Booking added");
+      }
+      setShowBooking(false); setEditingId(null); setForm(BLANK_BOOKING); reload();
     } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
     finally { setBusy(false); }
   };
@@ -146,19 +200,24 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
         <TabsList data-testid="pb-tabs" className="bg-black/40 border border-white/10 rounded-sm">
           <TabsTrigger data-testid="pb-tab-active" value="active" className="data-[state=active]:bg-[#06B6D4] data-[state=active]:text-black rounded-sm">Active ({active.length})</TabsTrigger>
           <TabsTrigger data-testid="pb-tab-completed" value="completed" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Completed ({completed.length})</TabsTrigger>
+          <TabsTrigger data-testid="pb-tab-calendar" value="calendar" className="data-[state=active]:bg-[#A855F7] data-[state=active]:text-white rounded-sm">Calendar</TabsTrigger>
           <TabsTrigger data-testid="pb-tab-customers" value="customers" className="data-[state=active]:bg-[#EC4899] data-[state=active]:text-white rounded-sm">Customers ({customers.length})</TabsTrigger>
           <TabsTrigger data-testid="pb-tab-invoices" value="invoices" className="data-[state=active]:bg-[#FACC15] data-[state=active]:text-black rounded-sm">Invoices ({invoices.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="active" className="mt-4">
-          <Button data-testid="pb-new-booking" onClick={() => setShowBooking(true)} className="mb-3 bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold rounded-sm">
+          <Button data-testid="pb-new-booking" onClick={openNew} className="mb-3 bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold rounded-sm">
             <Plus className="w-4 h-4 mr-1" /> New booking
           </Button>
-          <BookingList items={active} onComplete={markCompleted} onInvoice={generateInvoice} onDelete={deleteBooking} />
+          <BookingList items={active} onEdit={openEdit} onComplete={markCompleted} onInvoice={generateInvoice} onDelete={deleteBooking} />
         </TabsContent>
 
         <TabsContent value="completed" className="mt-4">
-          <BookingList items={completed} onInvoice={generateInvoice} onDelete={deleteBooking} />
+          <BookingList items={completed} onEdit={openEdit} onInvoice={generateInvoice} onDelete={deleteBooking} />
+        </TabsContent>
+
+        <TabsContent value="calendar" className="mt-4">
+          <BookingsCalendar bookings={bookings} listings={listings} onEdit={openEdit} />
         </TabsContent>
 
         <TabsContent value="customers" className="mt-4">
@@ -207,9 +266,9 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
       </Tabs>
 
       {/* Booking form dialog */}
-      <Dialog open={showBooking} onOpenChange={setShowBooking}>
+      <Dialog open={showBooking} onOpenChange={(v) => { setShowBooking(v); if (!v) { setEditingId(null); } }}>
         <DialogContent data-testid="pb-booking-form" className="bg-[#0c0c0c] border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="font-display text-2xl tracking-wide">New offline booking</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="font-display text-2xl tracking-wide">{editingId ? "Edit offline booking" : "New offline booking"}</DialogTitle></DialogHeader>
           <div className="grid md:grid-cols-2 gap-3">
             <Fld label="Listing *">
               <Select value={form.listing_id} onValueChange={(v) => setForm({ ...form, listing_id: v })}>
@@ -287,8 +346,8 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
           )}
           <Fld label="Notes (vendor-only)"><Textarea data-testid="pb-notes" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="bg-black/40 border-white/10 text-white" /></Fld>
           <div className="flex gap-2 pt-2">
-            <Button data-testid="pb-submit" disabled={busy} onClick={submitBooking} className="bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold rounded-sm">{busy ? "Saving…" : "Save booking"}</Button>
-            <Button variant="ghost" onClick={() => setShowBooking(false)} className="text-neutral-300">Cancel</Button>
+            <Button data-testid="pb-submit" disabled={busy} onClick={submitBooking} className="bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold rounded-sm">{busy ? "Saving…" : editingId ? "Update booking" : "Save booking"}</Button>
+            <Button variant="ghost" onClick={() => { setShowBooking(false); setEditingId(null); }} className="text-neutral-300">Cancel</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -317,7 +376,7 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
   );
 }
 
-function BookingList({ items, onComplete, onInvoice, onDelete }) {
+function BookingList({ items, onEdit, onComplete, onInvoice, onDelete }) {
   if (items.length === 0) return <div className="text-neutral-500 text-sm text-center py-8 border border-dashed border-white/10 rounded-sm">No bookings here yet.</div>;
   return (
     <div className="space-y-2">
@@ -334,13 +393,145 @@ function BookingList({ items, onComplete, onInvoice, onDelete }) {
               {b.client_phone && <span className="ml-2 text-neutral-400">· {b.client_phone}</span>}
             </div>
           </div>
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 flex-wrap">
+            {onEdit && <Button size="sm" variant="outline" data-testid={`pb-edit-${b.id}`} onClick={() => onEdit(b)} className="border-white/10 text-white bg-transparent rounded-sm"><Pencil className="w-3.5 h-3.5 mr-1" /> Edit</Button>}
             {onComplete && <Button size="sm" data-testid={`pb-complete-${b.id}`} onClick={() => onComplete(b)} className="bg-[#84CC16] hover:bg-[#65A30D] text-black rounded-sm"><CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Complete</Button>}
             <Button size="sm" data-testid={`pb-invoice-${b.id}`} onClick={() => onInvoice(b)} className="bg-[#FACC15] hover:bg-[#eab308] text-black rounded-sm"><Receipt className="w-3.5 h-3.5 mr-1" /> {b.invoice_id ? "View invoice" : "Generate invoice"}</Button>
             <Button size="sm" variant="ghost" data-testid={`pb-del-${b.id}`} onClick={() => onDelete(b.id)} className="text-[#FF3B30]"><Trash2 className="w-3.5 h-3.5" /></Button>
           </div>
         </div>
       ))}
+    </div>
+  );
+}
+
+// -------------------------------------------------------------------------
+// Monthly calendar view — coloured cells for booked/available days.
+// Weekly recurrences are expanded on the fly for the visible month.
+// -------------------------------------------------------------------------
+function BookingsCalendar({ bookings, listings, onEdit }) {
+  const today = new Date();
+  const [cursor, setCursor] = useState({ y: today.getFullYear(), m: today.getMonth() });
+  const [listingId, setListingId] = useState(listings[0]?.id || "");
+
+  const year = cursor.y;
+  const month = cursor.m; // 0-based
+  const monthStart = new Date(year, month, 1);
+  const monthEnd = new Date(year, month + 1, 0);
+  const daysInMonth = monthEnd.getDate();
+  // Sunday-first grid → convert JS 0=Sun into Mon-first index
+  const firstWeekday = (monthStart.getDay() + 6) % 7; // 0=Mon
+
+  const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+  const inMonthBookings = useMemo(() => {
+    const startIso = iso(monthStart);
+    const endIso = iso(monthEnd);
+    const list = bookings.filter((b) => !listingId || b.listing_id === listingId);
+    // Map: date -> [bookings]
+    const map = {};
+    for (const b of list) {
+      if (!b.requested_date) continue;
+      if (b.recurrence === "weekly" && b.recurrence_until) {
+        // Expand into every matching day within the visible month.
+        const startDate = new Date(b.requested_date + "T00:00:00");
+        const endDate = new Date(b.recurrence_until + "T23:59:59");
+        const dows = new Set((b.recurrence_days_of_week || []).map((n) => Number(n)));
+        const from = new Date(Math.max(monthStart, startDate));
+        const to = new Date(Math.min(monthEnd, endDate));
+        for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
+          const dow = (d.getDay() + 6) % 7; // 0=Mon
+          if (dows.size === 0 || dows.has(dow)) {
+            const k = iso(d);
+            (map[k] ||= []).push(b);
+          }
+        }
+      } else if (b.requested_date >= startIso && b.requested_date <= endIso) {
+        (map[b.requested_date] ||= []).push(b);
+      }
+    }
+    return map;
+  }, [bookings, listingId, year, month]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const goto = (delta) => {
+    const m = month + delta;
+    if (m < 0) setCursor({ y: year - 1, m: 11 });
+    else if (m > 11) setCursor({ y: year + 1, m: 0 });
+    else setCursor({ y: year, m });
+  };
+
+  const cells = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push({ blank: true });
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateIso = iso(new Date(year, month, d));
+    cells.push({ d, dateIso, items: inMonthBookings[dateIso] || [] });
+  }
+  while (cells.length % 7 !== 0) cells.push({ blank: true });
+
+  const monthName = monthStart.toLocaleString("en-US", { month: "long", year: "numeric" });
+  const todayIso = iso(today);
+
+  return (
+    <div data-testid="pb-calendar" className="border border-white/10 rounded-sm bg-[#0c0c0c] p-4">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" data-testid="pb-cal-prev" onClick={() => goto(-1)} className="text-neutral-300"><ChevronLeft className="w-4 h-4" /></Button>
+          <div className="font-display text-lg tracking-wide flex items-center gap-2"><CalendarDays className="w-4 h-4 text-[#A855F7]" /> {monthName}</div>
+          <Button size="sm" variant="ghost" data-testid="pb-cal-next" onClick={() => goto(1)} className="text-neutral-300"><ChevronRight className="w-4 h-4" /></Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={listingId || "all"} onValueChange={(v) => setListingId(v === "all" ? "" : v)}>
+            <SelectTrigger data-testid="pb-cal-listing" className="bg-black/40 border-white/10 text-white h-8 text-xs w-56"><SelectValue /></SelectTrigger>
+            <SelectContent className="bg-[#141414] text-white border-white/10">
+              <SelectItem value="all">All listings</SelectItem>
+              {listings.map((L) => <SelectItem key={L.id} value={L.id}>{L.title}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-[10px] font-mono uppercase text-neutral-500 mb-1">
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => <div key={d} className="text-center py-1">{d}</div>)}
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {cells.map((c, i) => (
+          <div key={i} data-testid={c.dateIso ? `pb-cal-cell-${c.dateIso}` : undefined}
+            className={`min-h-[80px] rounded-sm p-1.5 border ${
+              c.blank ? "border-transparent" :
+              c.dateIso === todayIso ? "border-[#A855F7] bg-[#A855F7]/10" :
+              c.items.length ? "border-[#06B6D4]/40 bg-[#06B6D4]/5" : "border-white/5 bg-black/30"
+            }`}>
+            {!c.blank && (
+              <>
+                <div className="text-[11px] font-mono text-neutral-400 flex items-center justify-between">
+                  <span>{c.d}</span>
+                  {c.items.length > 0 && <span className="text-[9px] px-1 rounded bg-[#06B6D4] text-black">{c.items.length}</span>}
+                </div>
+                <div className="mt-1 space-y-0.5">
+                  {c.items.slice(0, 3).map((b, idx) => (
+                    <button key={`${b.id}-${idx}`}
+                      onClick={() => onEdit?.(b)}
+                      data-testid={`pb-cal-item-${c.dateIso}-${idx}`}
+                      title={`${b.start_time}–${b.end_time} · ${b.client_name}`}
+                      className={`w-full text-left truncate text-[10px] px-1 py-0.5 rounded-sm font-mono ${
+                        b.status === "completed" ? "bg-[#84CC16]/20 text-[#84CC16]" :
+                        b.status === "cancelled" ? "bg-neutral-800 text-neutral-500 line-through" :
+                        "bg-[#06B6D4]/25 text-[#67e8f9]"
+                      }`}
+                    >{b.start_time} {b.client_name.slice(0, 10)}</button>
+                  ))}
+                  {c.items.length > 3 && <div className="text-[9px] font-mono text-neutral-500">+{c.items.length - 3} more</div>}
+                </div>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="mt-3 flex items-center gap-3 text-[10px] font-mono uppercase text-neutral-500 flex-wrap">
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#06B6D4]/25 border border-[#06B6D4]/40"></span> Active</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#84CC16]/20"></span> Completed</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#A855F7]/20 border border-[#A855F7]"></span> Today</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-black border border-white/10"></span> Available</span>
+      </div>
     </div>
   );
 }

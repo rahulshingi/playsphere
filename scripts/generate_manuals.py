@@ -756,21 +756,115 @@ admin_sections = [
 ]
 
 
+# ─────────────────────────────────────────────────────────────────────
+# "What's new" cross-cutting sections — updated Mar 2026.
+# One tailored block per role is prepended right after the welcome
+# section so every reader immediately sees the latest capabilities.
+# ─────────────────────────────────────────────────────────────────────
+def whats_new(role: str) -> dict:
+    common_intro = "The platform ships new capabilities every few weeks. Here's the short-list you should be actively using right now."
+    role_blocks = {
+        "vendor": [
+            ("h3", "Turn on Offline business (Phase 5b)"),
+            ("p", "Open <b>Vendor dashboard → Offline business</b> tab. This unlocks a full mini-CRM for the customers who book you outside the marketplace — walk-ins, phone bookings, memberships you sell yourself. Everything stays on your books, invoiceable and searchable."),
+            ("bul", [
+                "<b>Private bookings</b> — record one-off or weekly-recurring bookings with rate-per-hour or flat totals. Weekly recurrence supports specific weekdays (e.g. Mon/Wed/Fri) with a clean calendar month view.",
+                "<b>Customer directory auto-populates</b> — every walk-in you type into a booking silently creates or reuses a customer row. No duplicate entry needed.",
+                "<b>Invoice generator with GSTIN</b> — save your GSTIN / tax % / footer once in Invoice settings; every generated invoice snapshots the vendor + customer details so future edits don't rewrite history. Print / PDF ready.",
+                "<b>Send booking confirmation on WhatsApp</b> — new green WhatsApp button on every booking row (and on the invoice preview). Opens <i>wa.me/&lt;phone&gt;</i> pre-filled with date, time, hours, amount and business name. Zero-cost, no keys needed.",
+                "<b>Opening / closing hours</b> — set the venue schedule; the system now blocks bookings outside your window unless you flip on <b>Allow after-hours bookings</b> for legitimate late-night sessions.",
+                "<b>Completed bookings are locked</b> — once you mark a booking Complete, edits are blocked (only Cancel is allowed). Prevents accidental history changes.",
+                "<b>Memberships you sell</b> — publish monthly / quarterly membership plans. Customers can auto-apply memberships at checkout — you see utilisation bars per member so you know who's using their pass.",
+            ]),
+            ("h3", "Pro tips"),
+            ("bul", [
+                "Fill Invoice settings <b>before</b> your first booking so every invoice ships with your GSTIN and business address baked in.",
+                "Use the WhatsApp confirmation immediately after saving a booking — customers see the message pop up on the vendor's business number, professional and no chase-up needed.",
+                "In the Calendar tab, dark blue cells are booked, purple ring is today, and dashed cells are free — click a booking pill to edit.",
+            ]),
+        ],
+        "player": [
+            ("h3", "You can now hire vendors too"),
+            ("p", "You no longer need a company account to book a ground or coach. Head to <b>/hire</b> and browse venues + coaches in your city. Bookings appear under <b>My bookings</b> on your dashboard."),
+            ("bul", [
+                "<b>Buy memberships</b> — venues sell monthly / quarterly passes. Apply them automatically at checkout to unlock discounted rates or bundled hours.",
+                "<b>Universal profile</b> — your stats travel with you across employers. Update it once, share the profile URL anywhere.",
+                "<b>Multi-sport tracking</b> — add football, cricket, badminton, chess and more to a single profile with per-sport stats and match history.",
+            ]),
+            ("tip", "If you're the captain of a team, ask your HR to add you as a captain on the event page — you'll unlock member management for that team."),
+        ],
+        "company": [
+            ("h3", "New this quarter"),
+            ("bul", [
+                "<b>Sponsorship activity inbox</b> — if your company is also sponsoring other events, the /dashboard now shows a two-column card: what you've expressed interest in (sent) and interest received on your own events. One place to track it all.",
+                "<b>Membership at checkout</b> — when you send a booking to a vendor who sells memberships, the checkout auto-detects any of your employees' memberships and applies the discount. See utilisation bars in the Vendor's marketplace page.",
+                "<b>Suggest venue not on Kreeda Nation</b> — from your Admin > New tournament form, click <b>Suggest new venue</b>. Fill the details and Kreeda Nation admin will reach out to onboard them. Faster future bookings for you.",
+                "<b>Ownership scoping</b> — you now only see teams and sponsors your company created (no more cross-tenant leaks). Platform admins still see all rows for support.",
+            ]),
+            ("h3", "Best practices"),
+            ("bul", [
+                "Fill your company address in <b>/dashboard → Company address</b> — powers invoicing and local-vendor suggestions.",
+                "Use the events dashboard's <b>Booking requests</b> list to track vendor responses without juggling emails.",
+                "Enable sponsorships on your inter-company events to let interested brands express interest through the Sponsorship marketplace.",
+            ]),
+        ],
+        "organiser": [
+            ("h3", "What's new for organisers"),
+            ("bul", [
+                "<b>Ownership scoping</b> — you now only see teams and sponsors you created + those on events you own. Cleaner Manage tab, safer data.",
+                "<b>Suggest new venue</b> — new button next to the venue picker on your Admin > New tournament form. If your venue isn't listed, submit its details and Kreeda Nation admin will reach out to onboard it.",
+                "<b>Sponsorship marketplace</b> — publish sponsorship tiers on your event; interested sponsors express interest directly. Manage responses from the event detail page.",
+                "<b>Dedicated organiser signup</b> at <b>/signup-organiser</b> with any email domain (Gmail / Outlook / etc.) — no corporate mandate.",
+            ]),
+        ],
+        "admin": [
+            ("h3", "Platform HQ — what's new"),
+            ("bul", [
+                "<b>Business tab</b> — one place to see vendor offline-mode subscription requests (activate / pause / reject) AND venue leads submitted by organisers / HR. Includes an at-a-glance count badge in the sidebar.",
+                "<b>Vendor offline stats</b> — per-vendor drill-down at <b>/platform-admin</b> → vendor row → View stats. Shows customers / bookings / invoices issued / paid + revenue and a monthly calendar heat map.",
+                "<b>Ownership scoping enforced</b> — GET /api/teams and /api/sponsors now filter per-caller. Only platform admins see the full firehose. If a support ticket needs cross-tenant view, use the admin console.",
+                "<b>Sponsorship activity roll-up</b> at <b>GET /api/sponsorships/my-activity</b> feeds the sent/received inbox on company dashboards.",
+            ]),
+        ],
+        "sponsor": [
+            ("h3", "Sponsorship marketplace — what's new"),
+            ("bul", [
+                "<b>Two-way marketplace</b> — organisers publish sponsorship tiers on their events; you browse at <b>/sponsorships</b> and click <b>Express interest</b>. The organiser sees your interest immediately and can accept, reject, or reach out.",
+                "<b>My activity page</b> — track every interest you've sent (and their status) from your dashboard. Sponsors who are also company_admins see BOTH sent and received under one panel.",
+                "<b>Auto-onboarded profile</b> — the first time you express interest, a lightweight sponsor profile is created for you. You can enrich it later with your logo, website and preferred tiers.",
+            ]),
+        ],
+        "scorer": [
+            ("h3", "Scorer workflow — what's new"),
+            ("bul", [
+                "<b>Multi-sport support</b> — the scoring interface now adapts to the sport of each match. Cricket has ball-by-ball, football has minute-based scoring, chess has PGN-friendly move logs.",
+                "<b>Invite by email</b> — organisers add you to their event scorer roster; you get an email with sign-in credentials + the exact events you can score.",
+                "<b>Auto-generated player stats</b> — every match you score updates the player universal profiles automatically. No manual reconciliation.",
+            ]),
+        ],
+    }
+    return {
+        "title": "1a. What's new — leverage these features",
+        "intro": common_intro,
+        "blocks": role_blocks.get(role, []),
+    }
+
+
 # Build all four
 build("kreeda-nation-vendor-manual.pdf", "VENDOR", PINK,
       "Vendor manual",
       "Everything you need to list grounds, courts, coaches and other on-ground services.",
-      vendor_sections)
+      [vendor_sections[0], whats_new("vendor"), *vendor_sections[1:]])
 
 build("kreeda-nation-player-manual.pdf", "PLAYER", CYAN,
       "Player manual",
       "Your portable corporate-sports profile — set it up once, carry it across employers.",
-      player_sections)
+      [player_sections[0], whats_new("player"), *player_sections[1:]])
 
 build("kreeda-nation-company-manual.pdf", "HR / COMPANY", LIME_D,
       "Company HR manual",
       "Run end-to-end internal tournaments and hire services from one dashboard.",
-      company_sections)
+      [company_sections[0], whats_new("company"), *company_sections[1:]])
 
 # Organisers share the company workflow but onboard as independent brands.
 # Build them a dedicated PDF that emphasises that distinction.
@@ -807,13 +901,13 @@ organiser_intro_sections = [
 build("kreeda-nation-organiser-manual.pdf", "ORGANISER", "#06B6D4",
       "Organiser manual",
       "Run open tournaments, book vendors, score matches live — without needing a company.",
-      organiser_intro_sections)
+      [organiser_intro_sections[0], whats_new("organiser"), *organiser_intro_sections[1:]])
 
 
 build("kreeda-nation-platform-admin-manual.pdf", "PLATFORM HQ", RED,
       "Platform admin manual",
       "Curate the marketplace, approve vendors, and oversee every company.",
-      admin_sections)
+      [admin_sections[0], whats_new("admin"), *admin_sections[1:]])
 
 # ---------- SPONSOR MANUAL ----------
 GOLD = HexColor("#FACC15")
@@ -920,7 +1014,7 @@ sponsor_sections = [
 build("kreeda-nation-sponsor-manual.pdf", "SPONSOR", GOLD,
       "Sponsor manual",
       "Discover sponsorship-ready tournaments, apply to slots in one click, get your brand on every public surface.",
-      sponsor_sections)
+      [sponsor_sections[0], whats_new("sponsor"), *sponsor_sections[1:]])
 
 # ---------- SCORER MANUAL ----------
 scorer_sections = [
@@ -990,6 +1084,6 @@ scorer_sections = [
 build("kreeda-nation-scorer-manual.pdf", "SCORER", CYAN,
       "Scorer manual",
       "Keep live scores for the matches you've been invited to — nothing more, nothing less.",
-      scorer_sections)
+      [scorer_sections[0], whats_new("scorer"), *scorer_sections[1:]])
 
 print("ALL DONE")

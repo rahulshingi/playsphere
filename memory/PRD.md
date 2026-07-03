@@ -453,6 +453,11 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
 - **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
+## Implemented (Mar 08, 2026 — Venue lead affordance + refreshed guides)
+- **Bug**: Organisers at `/admin` couldn't surface a venue lead when the venue wasn't already on the platform — the `SuggestVenueButton` component only existed on the platform-admin's EventsTab, not the shared `Admin.jsx` used by organisers/HR.
+- **Fix**: Added `<SuggestVenueButton>` next to the "Pick verified venue" button in `Admin.jsx`. Added a one-line helper text under it explaining the flow. Backend `POST /api/venue-leads` was already correct — this was purely a discoverability bug.
+- **Refreshed all 7 role manuals** — added a "1a. What's new — leverage these features" section at the top of every PDF (Vendor, Player, HR/Company, Organiser, Platform admin, Sponsor, Scorer). Highlights the latest capabilities the reader should be actively using: Offline business (invoice settings, private bookings, WhatsApp share), calendar view, membership auto-apply, sponsorship inbox, suggest-venue, ownership scoping, and role-specific power-tips. Regenerated all PDFs via `python scripts/generate_manuals.py` — each ~330 KB.
+
 ## Implemented (Mar 07, 2026 — Ownership scoping for teams + sponsors)
 - **Bug**: An organiser could see EVERY team and sponsor across the whole platform on their Admin > Manage screen — leaking data across tenants.
 - **Backend fix (`GET /api/teams` + `GET /api/sponsors`)** — both now scope results to the caller:

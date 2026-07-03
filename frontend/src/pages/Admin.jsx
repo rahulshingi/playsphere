@@ -15,6 +15,7 @@ import { SPORTS } from "@/lib/sports";
 import { toast } from "sonner";
 import { Trash2, Plus } from "lucide-react";
 import VenuePicker from "@/components/VenuePicker";
+import SuggestVenueButton from "@/components/event/SuggestVenueButton";
 
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
 const onSportChange = (current, value) => ({
@@ -122,10 +123,12 @@ export default function Admin() {
                     {newEvent.sport.charAt(0).toUpperCase() + newEvent.sport.slice(1)} is an individual sport — knockout selected by default. Switch to round-robin if you want everyone to play everyone.
                   </p>
                 )}
-                <div className="flex gap-2">
-                  <Input data-testid="admin-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                <div className="flex gap-2 flex-wrap">
+                  <Input data-testid="admin-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white flex-1 min-w-[200px]" />
                   <Button type="button" data-testid="admin-event-venue-pick" variant="outline" onClick={() => setVenuePickerOpen(true)} className="rounded-sm border-white/10 text-white whitespace-nowrap">Pick verified venue</Button>
+                  <SuggestVenueButton onPick={(label) => setNewEvent({ ...newEvent, venue: label })} />
                 </div>
+                <div className="text-[10px] font-mono text-neutral-500 -mt-1">Can&apos;t find your venue? Click <span className="text-[#84CC16]">Suggest new venue</span> — Kreeda Nation admin will reach out to onboard it.</div>
                 <Input data-testid="admin-event-banner" placeholder="Banner image URL" value={newEvent.banner_url} onChange={(e) => setNewEvent({ ...newEvent, banner_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 <Input data-testid="admin-event-stream" placeholder="Live stream URL (YouTube / Twitch / any)" value={newEvent.stream_url} onChange={(e) => setNewEvent({ ...newEvent, stream_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 {isPlatformAdmin && (

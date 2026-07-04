@@ -7,7 +7,7 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
-import { MapPin, BadgeCheck, Sparkles } from "lucide-react";
+import { MapPin, BadgeCheck, Sparkles, Share2, Copy } from "lucide-react";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { BookingModal } from "./VendorMarket";
 
@@ -182,6 +182,9 @@ export default function VendorListingDetail() {
             <Button data-testid="vld-book-cta" onClick={openBooking} className="w-full bg-[#84CC16] text-black hover:bg-[#65A30D] font-semibold h-11 rounded-sm">
               {ready && !user ? "Sign in to book" : "Book this venue"}
             </Button>
+
+            <ShareRow listing={listing} />
+
             <div className="text-[10px] font-mono uppercase text-neutral-500 text-center">Powered by Kreeda Nation</div>
           </div>
         </div>
@@ -198,6 +201,60 @@ export default function VendorListingDetail() {
       )}
 
       <Footer />
+    </div>
+  );
+}
+
+
+// One-tap share row. Uses the native Share API on mobile browsers that support
+// it (opens the OS share sheet — WhatsApp, Insta, Messages, Mail, etc.);
+// falls back to deep-links + clipboard-copy on desktop.
+function ShareRow({ listing }) {
+  const url = typeof window !== "undefined" ? window.location.href : "";
+  const msg = `${listing.title} on Kreeda Nation — ${listing.city}. Book here: ${url}`;
+
+  const nativeShare = async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: listing.title, text: msg, url });
+      } catch {
+        // user cancelled — no-op
+      }
+    } else {
+      window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(msg);
+      toast.success("Link copied — paste it anywhere");
+    } catch {
+      toast.error("Couldn't copy link");
+    }
+  };
+
+  return (
+    <div className="pt-2 border-t border-white/5 space-y-2">
+      <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">/ Share this venue</div>
+      <div className="grid grid-cols-3 gap-2">
+        <Button data-testid="vld-share-whatsapp" variant="outline" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank", "noopener,noreferrer")}
+          className="h-9 rounded-sm border-white/10 bg-black/40 text-neutral-200 hover:bg-[#25D366] hover:text-black hover:border-transparent text-xs">
+          WhatsApp
+        </Button>
+        <Button data-testid="vld-share-x" variant="outline" onClick={() => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(msg)}`, "_blank", "noopener,noreferrer")}
+          className="h-9 rounded-sm border-white/10 bg-black/40 text-neutral-200 hover:bg-white hover:text-black hover:border-transparent text-xs">
+          X / Twitter
+        </Button>
+        <Button data-testid="vld-share-copy" variant="outline" onClick={copy}
+          className="h-9 rounded-sm border-white/10 bg-black/40 text-neutral-200 hover:bg-[#06B6D4] hover:text-black hover:border-transparent text-xs inline-flex items-center gap-1">
+          <Copy className="w-3 h-3" /> Copy
+        </Button>
+      </div>
+      <Button data-testid="vld-share-more" variant="ghost" onClick={nativeShare}
+        className="w-full h-8 text-[11px] text-neutral-400 hover:text-white inline-flex items-center gap-1">
+        <Share2 className="w-3 h-3" /> More share options
+      </Button>
     </div>
   );
 }

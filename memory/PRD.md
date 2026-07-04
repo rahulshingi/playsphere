@@ -623,3 +623,9 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - **Book CTA** reuses the exported `BookingModal` from `VendorMarket.jsx`; unauth clicks bounce to `/login?next=/vendor-listing/{id}`.
 - Verified end-to-end (Playwright): `og:title=P5C Ground · Bangalore · Kreeda Nation`, `twitter:card=summary_large_image`, title & CTA rendered.
 - **Impact**: every QR poster now lands users on a real page, and every share on WhatsApp / Instagram / X / LinkedIn shows a rich preview card instead of a bare URL.
+
+## Feb 2026 — Share this venue (WhatsApp / X / Copy)
+- Added `ShareRow` to `pages/VendorListingDetail.jsx` — 3 primary buttons (WhatsApp deep-link, X / Twitter intent, Copy link) + a "More share options" button that invokes `navigator.share` on mobile (native share sheet), falls back to WhatsApp on desktop.
+- Testids: `vld-share-whatsapp`, `vld-share-x`, `vld-share-copy`, `vld-share-more`.
+- Manual updates (targeted only): vendor manual now documents the public listing page + rich share previews under Phase 5c bullet list; player manual clarifies /hire is browseable without sign-in.
+- 7 PDFs regenerated (Feb 2026).

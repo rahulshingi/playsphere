@@ -780,6 +780,7 @@ def whats_new(role: str) -> dict:
                 "<b>Staff logins</b> — invite a receptionist or coach with their own email + password. Receptionist can't see reports; coach can only manage batches + check-in.",
                 "<b>QR check-in</b> — scan or type booking-id or phone, checks in under 5 seconds.",
                 "<b>QR poster</b> — every listing has a printable QR poster. Print, laminate, mount at your venue — anyone scanning lands on your listing page ready to book.",
+                "<b>Public listing page with rich share previews</b> — each verified listing has its own public URL at <b>/vendor-listing/&lt;id&gt;</b> with OpenGraph + Twitter Card meta tags. WhatsApp / Instagram / X / LinkedIn now show a full preview card (title, photo, city) instead of a bare link. A <b>Share this venue</b> row on the page one-taps to WhatsApp, X, or Copy — turn every happy customer into a distribution channel.",
                 "<b>Memberships</b> — publish monthly/quarterly plans, customers auto-apply at checkout, you see utilisation bars per member.",
             ]),
             ("h3", "The offline→platform bridge (business-model KEY)"),
@@ -788,7 +789,7 @@ def whats_new(role: str) -> dict:
         ],
         "player": [
             ("h3", "You can now hire vendors too"),
-            ("p", "You no longer need a company account to book a ground or coach. Head to <b>/hire</b> and browse venues + coaches in your city. Bookings appear under <b>My bookings</b> on your dashboard."),
+            ("p", "You no longer need a company account to book a ground or coach. Head to <b>/hire</b> and browse venues + coaches in your city — <b>no sign-in required to browse</b>. You only sign in when you tap <b>Book this venue</b>. Bookings appear under <b>My bookings</b> on your dashboard."),
             ("bul", [
                 "<b>Buy memberships</b> — venues sell monthly / quarterly passes. Apply them automatically at checkout to unlock discounted rates or bundled hours.",
                 "<b>Universal profile</b> — your stats travel with you across employers. Update it once, share the profile URL anywhere.",

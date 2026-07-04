@@ -765,23 +765,26 @@ def whats_new(role: str) -> dict:
     common_intro = "The platform ships new capabilities every few weeks. Here's the short-list you should be actively using right now."
     role_blocks = {
         "vendor": [
-            ("h3", "Turn on Offline business (Phase 5b)"),
-            ("p", "Open <b>Vendor dashboard → Offline business</b> tab. This unlocks a full mini-CRM for the customers who book you outside the marketplace — walk-ins, phone bookings, memberships you sell yourself. Everything stays on your books, invoiceable and searchable."),
+            ("h3", "Turn on Offline business — the full suite (Phase 5c)"),
+            ("p", "Open <b>Vendor dashboard → Offline business</b> tab. This unlocks the full mini-CRM for the customers who book you outside the marketplace — walk-ins, phone bookings, memberships you sell yourself, coaches, batches, expenses and reports. Everything stays on your books, invoiceable and searchable."),
             ("bul", [
-                "<b>Private bookings</b> — record one-off or weekly-recurring bookings with rate-per-hour or flat totals. Weekly recurrence supports specific weekdays (e.g. Mon/Wed/Fri) with a clean calendar month view.",
-                "<b>Customer directory auto-populates</b> — every walk-in you type into a booking silently creates or reuses a customer row. No duplicate entry needed.",
-                "<b>Invoice generator with GSTIN</b> — save your GSTIN / tax % / footer once in Invoice settings; every generated invoice snapshots the vendor + customer details so future edits don't rewrite history. Print / PDF ready.",
-                "<b>Send booking confirmation on WhatsApp</b> — new green WhatsApp button on every booking row (and on the invoice preview). Opens <i>wa.me/&lt;phone&gt;</i> pre-filled with date, time, hours, amount and business name. Zero-cost, no keys needed.",
-                "<b>Opening / closing hours</b> — set the venue schedule; the system now blocks bookings outside your window unless you flip on <b>Allow after-hours bookings</b> for legitimate late-night sessions.",
-                "<b>Completed bookings are locked</b> — once you mark a booking Complete, edits are blocked (only Cancel is allowed). Prevents accidental history changes.",
-                "<b>Memberships you sell</b> — publish monthly / quarterly membership plans. Customers can auto-apply memberships at checkout — you see utilisation bars per member so you know who's using their pass.",
+                "<b>Business Dashboard</b> — today's revenue, bookings, walk-in vs online customers, court utilisation, pending payments, today's schedule and fresh venue leads.",
+                "<b>Bookings + calendar</b> — one-off or weekly-recurring private bookings with month-view calendar. Rate per hour or flat total. Auto-fills end time from start + hours. Completed bookings are locked (no accidental edits).",
+                "<b>Customer directory auto-populates</b> — every walk-in you type into a booking silently creates or reuses a customer row (dedup by phone). Legacy bookings are self-healed on first open.",
+                "<b>Invoice generator with GSTIN</b> — save your GSTIN + tax % + footer once; every invoice snapshots details so future edits don't rewrite history. Payment method (cash/UPI/card) captured on mark-paid.",
+                "<b>WhatsApp booking + invoice share</b> — green button on every booking + invoice preview. Opens <i>wa.me/&lt;phone&gt;</i> pre-filled with the details. Zero-cost.",
+                "<b>Slot blocks</b> — maintenance / tournament / private / staff practice. Overlapping bookings are rejected automatically.",
+                "<b>Coaches + batches</b> — coach hourly rate, batch capacity, days-of-week, monthly fee.",
+                "<b>Inventory</b> — shuttles, balls, jerseys with low-stock threshold and cost/sale price.",
+                "<b>Expenses + Reports</b> — categorised expenses (rent, electricity, salary, equipment) roll up into monthly revenue / expense / profit reports with a peak-hours histogram and top-5 customers.",
+                "<b>Staff logins</b> — invite a receptionist or coach with their own email + password. Receptionist can't see reports; coach can only manage batches + check-in.",
+                "<b>QR check-in</b> — scan or type booking-id or phone, checks in under 5 seconds.",
+                "<b>QR poster</b> — every listing has a printable QR poster. Print, laminate, mount at your venue — anyone scanning lands on your listing page ready to book.",
+                "<b>Memberships</b> — publish monthly/quarterly plans, customers auto-apply at checkout, you see utilisation bars per member.",
             ]),
-            ("h3", "Pro tips"),
-            ("bul", [
-                "Fill Invoice settings <b>before</b> your first booking so every invoice ships with your GSTIN and business address baked in.",
-                "Use the WhatsApp confirmation immediately after saving a booking — customers see the message pop up on the vendor's business number, professional and no chase-up needed.",
-                "In the Calendar tab, dark blue cells are booked, purple ring is today, and dashed cells are free — click a booking pill to edit.",
-            ]),
+            ("h3", "The offline→platform bridge (business-model KEY)"),
+            ("p", "Invite your existing offline customers via WhatsApp from the Customers tab. When they sign up through your link, they're stamped as your offline-source customer — <b>bookings they make with you via the platform skip the platform commission</b>. You keep 100%. Their bookings at other vendors still generate normal commission for the platform."),
+            ("tip", "Pro tip: bulk-invite regulars → get commission-free bookings AND you get eligible for the platform's <b>Top Referrer</b> promo (20% off your next subscription). Win-win."),
         ],
         "player": [
             ("h3", "You can now hire vendors too"),
@@ -797,6 +800,7 @@ def whats_new(role: str) -> dict:
             ("h3", "New this quarter"),
             ("bul", [
                 "<b>Sponsorship activity inbox</b> — if your company is also sponsoring other events, the /dashboard now shows a two-column card: what you've expressed interest in (sent) and interest received on your own events. One place to track it all.",
+                "<b>Venue services go straight to bookings</b> — clicking a <i>venue</i> service card on /services now drops you directly into the vendor marketplace at <b>/hire</b> filtered to grounds &amp; courts. No more filling an enquiry form when you can pick a slot yourself.",
                 "<b>Membership at checkout</b> — when you send a booking to a vendor who sells memberships, the checkout auto-detects any of your employees' memberships and applies the discount. See utilisation bars in the Vendor's marketplace page.",
                 "<b>Suggest venue not on Kreeda Nation</b> — from your Admin > New tournament form, click <b>Suggest new venue</b>. Fill the details and Kreeda Nation admin will reach out to onboard them. Faster future bookings for you.",
                 "<b>Ownership scoping</b> — you now only see teams and sponsors your company created (no more cross-tenant leaks). Platform admins still see all rows for support.",
@@ -820,10 +824,13 @@ def whats_new(role: str) -> dict:
         "admin": [
             ("h3", "Platform HQ — what's new"),
             ("bul", [
-                "<b>Business tab</b> — one place to see vendor offline-mode subscription requests (activate / pause / reject) AND venue leads submitted by organisers / HR. Includes an at-a-glance count badge in the sidebar.",
-                "<b>Vendor offline stats</b> — per-vendor drill-down at <b>/platform-admin</b> → vendor row → View stats. Shows customers / bookings / invoices issued / paid + revenue and a monthly calendar heat map.",
-                "<b>Ownership scoping enforced</b> — GET /api/teams and /api/sponsors now filter per-caller. Only platform admins see the full firehose. If a support ticket needs cross-tenant view, use the admin console.",
-                "<b>Sponsorship activity roll-up</b> at <b>GET /api/sponsorships/my-activity</b> feeds the sent/received inbox on company dashboards.",
+                "<b>Business tab</b> — one place for vendor offline-mode subscription requests, venue leads, custom Subscription packages, and the Vendor Referral Leaderboard.",
+                "<b>Subscription packages</b> — create custom offline-mode plans (quarterly, annual, promo). Vendors pick from these at request-time. Existing vendors auto-lock their last-paid price on renewals (togglable in Site settings).",
+                "<b>Vendor Referral Leaderboard</b> — see which vendors moved the most of their offline customers onto the platform. Click <b>🎁 Reward top 5</b> to issue 20%-off promo codes and send congratulatory emails in one click.",
+                "<b>Vendor offline stats</b> — per-vendor drill-down showing customers / bookings / invoices / revenue + monthly calendar.",
+                "<b>Enable/disable services</b> — every service row now has a Disable/Enable toggle. Deactivated services are hidden from the public catalog without deleting configuration.",
+                "<b>Ownership scoping enforced</b> — GET /api/teams and /api/sponsors filter per-caller. Only platform admins see the full firehose.",
+                "<b>Persistent admin password</b> — the seed no longer overwrites your password on every restart. Change once via forgot-password and it sticks.",
             ]),
         ],
         "sponsor": [

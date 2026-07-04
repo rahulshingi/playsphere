@@ -600,3 +600,10 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Player: player@acme.com / player123 (or +919000000001)
 - Viewer: viewer@kreedanation.com / viewer123
 - (Staff admins created on the fly via /platform-admin → Team or POST /api/admin/staff)
+
+## Feb 2026 — Venue direct-booking + Admin service enable/disable
+- **`/services/{id}` for `category=='venue'` services** now redirects (`useNavigate replace:true`) to `/hire?vendor_type=ground`, skipping the enquiry-form flow entirely. Non-venue categories keep the existing quote-request flow.
+- **Admin service enable/disable toggle** — every row on the Platform Admin → Services tab has a `data-testid="pa-toggle-<serviceId>"` Disable / Enable button that PATCHes `/api/services/{id}` with `{active: false|true}`. `GET /api/services` filters out inactive services from public listings; `GET /api/services?include_inactive=true` returns them for admins.
+- **PDFs regenerated** (Feb 2026, 7 manuals, ~325 KB each). Company manual now lists venue-direct-booking; Admin manual documents the enable/disable toggle. Script: `python3 /app/scripts/generate_manuals.py`.
+- Verified end-to-end via curl (login cookie, PATCH round-trip: disable → hidden → include_inactive shows → enable) and Playwright screenshot (17 toggle buttons rendered on Services tab).
+

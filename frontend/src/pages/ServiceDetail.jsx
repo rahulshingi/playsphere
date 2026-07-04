@@ -29,6 +29,14 @@ export default function ServiceDetail() {
 
   useEffect(() => {
     api.get(`/services/${id}`).then((r) => {
+      // For venue services we skip the enquiry form entirely and drop the user
+      // straight into the vendor marketplace so they can pick a listing and
+      // book it themselves. Other service categories (streaming, apparel,
+      // awards, training, etc.) still use the enquiry-form flow below.
+      if (r.data.category === "venue") {
+        nav("/hire?vendor_type=ground", { replace: true });
+        return;
+      }
       setService(r.data);
       const defaults = {};
       (r.data.config_fields || []).forEach((f) => {
@@ -40,7 +48,7 @@ export default function ServiceDetail() {
     if (isCompanyAdmin) {
       api.get(`/events?company_id=${user.company_id}`).then((r) => setEvents(r.data));
     }
-  }, [id, isCompanyAdmin]);
+  }, [id, isCompanyAdmin, nav, user?.company_id]);
 
   const selectedVariant = useMemo(
     () => service?.variants?.find((v) => v.id === variantId) || null,

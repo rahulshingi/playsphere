@@ -166,6 +166,13 @@ export default function PlatformAdmin() {
                   </div>
                 </div>
                 <div className="flex gap-2">
+                  {isSuperAdmin && (
+                    <Button size="sm" variant="ghost" data-testid={`pa-toggle-${s.id}`}
+                      onClick={async () => { await api.patch(`/services/${s.id}`, { active: !s.active }); load(); }}
+                      className={s.active ? "text-amber-400" : "text-[#84CC16]"}>
+                      {s.active ? "Disable" : "Enable"}
+                    </Button>
+                  )}
                   {isSuperAdmin && <Button size="sm" variant="ghost" data-testid={`pa-edit-${s.id}`} onClick={() => setEditing({ ...s, images: s.images?.length ? s.images : [""] })} className="text-[#84CC16]">Edit</Button>}
                   {isSuperAdmin && <Button size="sm" variant="ghost" data-testid={`pa-delete-${s.id}`} onClick={() => deleteService(s.id)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>}
                 </div>

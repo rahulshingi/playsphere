@@ -54,7 +54,7 @@ export default function Services() {
           {filtered.map((s) => {
             const meta = categoryMeta[s.category] || categoryMeta.other;
             return (
-              <Link key={s.id} to={`/services/${s.id}`} data-testid={`service-card-${s.id}`} className="group border border-white/10 rounded-sm bg-[#141414] overflow-hidden hover-lift">
+              <Link key={s.id} to={s.category === "venue" ? "/hire?vendor_type=ground" : `/services/${s.id}`} data-testid={`service-card-${s.id}`} className="group border border-white/10 rounded-sm bg-[#141414] overflow-hidden hover-lift">
                 <div className="h-44 relative overflow-hidden">
                   <img src={s.images?.[0] || "https://images.unsplash.com/photo-1517649763962-0c623066013b?w=900"} className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-700" alt="" />
                   <span className="absolute top-3 left-3 font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm border bg-black/60" style={{ borderColor: meta.color, color: meta.color }}>{meta.label}</span>

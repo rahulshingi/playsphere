@@ -845,6 +845,11 @@ class SiteSettings(BaseModel):
     offline_subscription_monthly_price: float = 99.0
     offline_subscription_yearly_price: float = 999.0
     offline_subscription_currency: str = "INR"
+    # Business-model toggle — when True, an existing vendor renewing their
+    # offline subscription pays the SAME price they paid last time (the last
+    # activated subscription's `amount`). New vendors always pay the current
+    # monthly/yearly price. Default True to keep long-term vendors happy.
+    offline_subscription_locks_existing_price: bool = True
 
 
 async def _user_with_company(user: dict) -> dict:

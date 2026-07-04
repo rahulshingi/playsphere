@@ -50,6 +50,31 @@ const LISTING_TYPES = [
 
 const NEEDS_SPORTS = new Set(["ground", "court", "coach", "referee", "umpire", "trainer", "gym", "studio"]);
 const NEEDS_CAPACITY = new Set(["ground", "court", "gym", "studio"]);
+
+// Opens a printable QR poster in a new tab. The QR image comes from the free
+// api.qrserver.com service — the encoded URL points at the vendor's public
+// listing page so anyone scanning it lands there instantly (book / view).
+function openQrPoster(listing, vendor) {
+  const base = window.location.origin;
+  const target = `${base}/vendor-listing/${listing.id}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(target)}`;
+  const html = `<!doctype html><html><head><title>QR poster · ${listing.title}</title>
+    <style>body{font-family:Poppins,system-ui,sans-serif;text-align:center;padding:32px;color:#111}
+    h1{margin:0 0 8px;font-size:34px;letter-spacing:1px}h2{margin:0 0 24px;font-weight:400;color:#666}
+    img{width:400px;height:400px}p{margin-top:16px;font-family:monospace;color:#666;font-size:12px}
+    .biz{margin-top:24px;font-weight:600}@media print{body{padding:0}}</style></head>
+    <body>
+    <h1>SCAN &amp; BOOK</h1>
+    <h2>${listing.title}</h2>
+    <img src="${qrSrc}" alt="QR" />
+    <p>${target}</p>
+    <div class="biz">${vendor?.business_name || ""} · ${listing.city || ""}</div>
+    <p>Powered by Kreeda Nation</p>
+    <script>window.onload=()=>setTimeout(()=>window.print(),400)<\/script>
+    </body></html>`;
+  const w = window.open("", "_blank", "noopener,noreferrer");
+  if (w) { w.document.write(html); w.document.close(); }
+}
 const LISTING_TITLE_LABEL = {
   ground: "Venue name", court: "Court / venue name",
   gym: "Gym name", studio: "Studio name",
@@ -163,6 +188,7 @@ export default function VendorDashboard() {
                       <div className="flex gap-2 mt-3">
                         <Button size="sm" variant="ghost" onClick={() => setEditing({ ...l, images: l.images?.length ? l.images : [""] })} className="text-[#84CC16]">Edit</Button>
                         <Button size="sm" variant="ghost" data-testid={`vl-schedule-${l.id}`} onClick={() => setScheduling(l)} className="text-[#06B6D4]">Schedule</Button>
+                        <Button size="sm" variant="ghost" data-testid={`vl-qr-${l.id}`} onClick={() => openQrPoster(l, vendor)} className="text-[#FACC15]">QR poster</Button>
                         <Button size="sm" variant="ghost" onClick={() => remove(l.id)} className="text-[#FF3B30]"><Trash2 className="w-4 h-4" /></Button>
                       </div>
                     </div>

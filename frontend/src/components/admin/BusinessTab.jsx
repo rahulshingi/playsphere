@@ -170,9 +170,105 @@ export default function BusinessTab({ onQueueChange }) {
           </details>
         )}
       </section>
+
+      <SubscriptionPackagesSection />
+      <ReferralLeaderboardSection />
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+// Subscription packages editor (admin creates monthly/quarterly/annual/etc.
+// plans that vendors pick from at subscription time).
+// ─────────────────────────────────────────────────────────────
+function SubscriptionPackagesSection() {
+  const [pkgs, setPkgs] = useState([]);
+  const [f, setF] = useState({ name: "", duration_days: 30, price: 99, description: "", active: true });
+  const load = () => api.get("/admin/subscription-packages").then((r) => setPkgs(r.data || [])).catch(() => setPkgs([]));
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const save = async () => {
+    if (!f.name || !f.duration_days || !f.price) return toast.error("Name, duration & price required");
+    try { await api.post("/admin/subscription-packages", { ...f, duration_days: Number(f.duration_days), price: Number(f.price) });
+      toast.success("Package added"); setF({ name: "", duration_days: 30, price: 99, description: "", active: true }); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+  };
+  const del = async (id) => { await api.delete(`/admin/subscription-packages/${id}`); load(); };
+  const toggle = async (p) => { await api.patch(`/admin/subscription-packages/${p.id}`, { active: !p.active }); load(); };
+  return (
+    <section data-testid="pa-subscription-packages" className="mt-8">
+      <div className="mb-3">
+        <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ Subscription packages</div>
+        <h2 className="font-display text-2xl tracking-wide mt-1">Offline-mode Plans</h2>
+        <div className="text-xs text-neutral-500 mt-1">Create custom plans (monthly / quarterly / annual / promo). Vendors pick from these at subscription time. Existing vendors auto-lock their last-paid price on renewals (togglable in Site settings).</div>
+      </div>
+      <div className="border border-white/10 rounded-sm bg-[#141414] p-3 grid md:grid-cols-6 gap-2 mb-3">
+        <input data-testid="pkg-name" placeholder="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} className="bg-black/40 border border-white/10 text-white rounded-sm px-2 py-1 text-sm" />
+        <input data-testid="pkg-days" type="number" placeholder="Duration (days)" value={f.duration_days} onChange={(e) => setF({ ...f, duration_days: e.target.value })} className="bg-black/40 border border-white/10 text-white rounded-sm px-2 py-1 text-sm" />
+        <input data-testid="pkg-price" type="number" placeholder="Price ₹" value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} className="bg-black/40 border border-white/10 text-white rounded-sm px-2 py-1 text-sm" />
+        <input data-testid="pkg-desc" placeholder="Description" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} className="md:col-span-2 bg-black/40 border border-white/10 text-white rounded-sm px-2 py-1 text-sm" />
+        <button data-testid="pkg-add" onClick={save} className="bg-[#84CC16] hover:bg-[#65A30D] text-black rounded-sm px-3 py-1 text-sm font-semibold">Add plan</button>
+      </div>
+      {pkgs.length === 0
+        ? <div className="text-neutral-500 text-xs italic">No custom plans yet. Vendors will see the default monthly/yearly prices from Site settings until you add one.</div>
+        : (
+          <div className="space-y-1">
+            {pkgs.map((p) => (
+              <div key={p.id} data-testid={`pkg-${p.id}`} className={`border rounded-sm p-2 flex items-center justify-between ${p.active ? "border-white/10 bg-[#141414]" : "border-white/5 bg-black/40 opacity-60"}`}>
+                <div>
+                  <div className="text-sm text-white">{p.name} <span className="font-mono text-[10px] text-neutral-500 ml-2">₹{p.price} · {p.duration_days}d</span></div>
+                  {p.description && <div className="text-[11px] text-neutral-500">{p.description}</div>}
+                </div>
+                <div className="flex gap-2 items-center">
+                  <button onClick={() => toggle(p)} className={`text-[10px] font-mono uppercase rounded-sm px-2 py-0.5 border ${p.active ? "text-[#84CC16] border-[#84CC16]/40" : "text-neutral-500 border-white/10"}`}>{p.active ? "active" : "inactive"}</button>
+                  <button onClick={() => del(p.id)} className="text-[#FF3B30] text-xs">Delete</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Vendor referral leaderboard
+// ─────────────────────────────────────────────────────────────
+function ReferralLeaderboardSection() {
+  const [rows, setRows] = useState([]);
+  useEffect(() => { api.get("/admin/vendor-referral-leaderboard").then((r) => setRows(r.data || [])).catch(() => setRows([])); }, []);
+  return (
+    <section data-testid="pa-vendor-referrals" className="mt-8">
+      <div className="mb-3">
+        <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ Vendor referral leaderboard</div>
+        <h2 className="font-display text-2xl tracking-wide mt-1">Top offline→platform Referrers</h2>
+        <div className="text-xs text-neutral-500 mt-1">Vendors who moved the most of their pre-existing offline customers onto Kreeda Nation. Consider rewarding the top rows with a subscription discount.</div>
+      </div>
+      {rows.length === 0
+        ? <div className="text-neutral-500 text-xs italic">No referrals yet. Vendors invite via their Customers tab → WhatsApp invite link.</div>
+        : (
+          <div className="border border-white/10 rounded-sm overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-[#141414] font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+                <tr><th className="text-left px-3 py-2">#</th><th className="text-left px-3 py-2">Vendor</th><th className="text-left px-3 py-2">City</th><th className="text-right px-3 py-2">Referred</th><th className="text-right px-3 py-2">Waived commission</th></tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={r.vendor_id} data-testid={`ref-row-${r.vendor_id}`} className="border-t border-white/5">
+                    <td className="px-3 py-2 text-neutral-500 font-mono">{i + 1}</td>
+                    <td className="px-3 py-2">{r.business_name}</td>
+                    <td className="px-3 py-2 text-neutral-400 font-mono text-xs">{r.city || ""}</td>
+                    <td className="px-3 py-2 text-right text-[#84CC16] font-mono">{r.referred_count}</td>
+                    <td className="px-3 py-2 text-right text-[#FACC15] font-mono">₹{r.estimated_commission_waived}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+    </section>
+  );
+}
+
 
 function EmptyState({ icon: Icon, text }) {
   return (

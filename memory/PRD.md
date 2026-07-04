@@ -453,6 +453,27 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
 - **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
+## Implemented (Mar 11, 2026 — Phase 5c+ P1: subscription packages, price lock, referrals, QR posters)
+
+**Admin subscription packages (CRUD)** — `POST/GET/PATCH/DELETE /api/admin/subscription-packages`. New model `SubscriptionPackage` (name, duration_days, price, currency, active, description). Vendors can now pick from custom plans (e.g. quarterly, annual, promo) instead of only the default monthly/yearly.
+
+**Price lock on renewal for existing vendors** — new `SiteSettings.offline_subscription_locks_existing_price` (default True). When enabled, an existing vendor renewing the same `plan_type` pays their last-activated subscription's `amount`. New vendors always pay the current site-setting price. Ships in `request_offline_subscription` — one query for the vendor's prior activated sub, one comparison, done.
+
+**Vendor referral leaderboard** — new `GET /api/admin/vendor-referral-leaderboard`. Aggregates `player_profiles.offline_source_vendor_id` per vendor, enriches with business name, city, and estimated commission WAIVED (= gross of offline-source bookings × site commission %). Powers the "reward top offline-→-platform referrers" dashboard card on the platform admin's Business tab.
+
+**QR poster** — new `openQrPoster()` helper on Vendor Dashboard listing rows. Client-side only — pops a printable HTML page with a QR pointing at `${origin}/vendor-listing/${id}` using the free `api.qrserver.com` service. No backend, no keys, auto-triggers `window.print()`. Print → laminate → mount at venue.
+
+**Frontend**
+- New `SubscriptionPackagesSection` and `ReferralLeaderboardSection` embedded in the Platform Admin Business tab (`BusinessTab.jsx`). Inline add-plan form + toggle-active + delete.
+- New "QR poster" button on every vendor listing row.
+- Fixed 5 `useEffect(load, [])` React-18 warnings that leaked promises (`destroy is not a function`) across the OfflineBusinessSuite + new admin sections.
+
+**Tests** — 4/4 pass in `TestSubscriptionPackagesAndReferrals`:
+- Admin CRUD for packages (create → list → patch → delete).
+- Vendor can subscribe with a `package_id`, price sourced from the package.
+- Existing vendor renewing the SAME plan_type pays their prior locked price, not the new one.
+- Referral leaderboard returns the expected shape with `estimated_commission_waived`.
+
 ## Implemented (Mar 10, 2026 — Phase 5c: Offline Business Suite + Business Model)
 
 **Backend (12 new endpoints + 8 new models in `routes/business.py`)**

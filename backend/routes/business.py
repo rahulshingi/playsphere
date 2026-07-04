@@ -80,6 +80,20 @@ class OfflineSubscription(BaseModel):
 
 class OfflineSubscriptionRequest(BaseModel):
     plan_type: str  # "monthly" | "yearly"
+    package_id: Optional[str] = None  # optional: pick a custom SubscriptionPackage
+
+
+class SubscriptionPackage(BaseModel):
+    """Admin-authored offline-mode plan. Vendors pick from these at request-time
+    if they don't want the default monthly/yearly."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    name: str
+    duration_days: int
+    price: float
+    currency: str = "INR"
+    active: bool = True
+    description: Optional[str] = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class PrivateBooking(BaseModel):
@@ -358,8 +372,8 @@ def register(api, db, deps):
     @api.post("/offline-subscriptions/request", response_model=OfflineSubscription)
     async def request_offline_subscription(body: OfflineSubscriptionRequest, user: dict = Depends(get_current_user)):
         vendor = await _vendor_for_user(user)
-        if body.plan_type not in ("monthly", "yearly"):
-            raise HTTPException(400, "plan_type must be 'monthly' or 'yearly'")
+        if body.plan_type not in ("monthly", "yearly", "custom"):
+            raise HTTPException(400, "plan_type must be 'monthly', 'yearly' or 'custom'")
         # Block duplicate pending requests
         dup = await db.offline_subscriptions.find_one({
             "vendor_id": vendor["id"], "status": "pending_payment"
@@ -367,17 +381,117 @@ def register(api, db, deps):
         if dup:
             raise HTTPException(400, "You already have a pending offline-mode subscription request.")
         settings = await _site_settings_doc()
-        price = float(settings.get(
-            "offline_subscription_yearly_price" if body.plan_type == "yearly" else "offline_subscription_monthly_price",
-            999.0 if body.plan_type == "yearly" else 99.0,
-        ))
-        currency = settings.get("offline_subscription_currency", "INR")
+
+        # (1) If a custom package is chosen, use its price/duration.
+        pkg = None
+        if body.package_id:
+            pkg = await db.subscription_packages.find_one({"id": body.package_id, "active": True}, {"_id": 0})
+            if not pkg:
+                raise HTTPException(400, "Selected subscription package is not available")
+
+        # (2) Determine base price from either the package or the default plan.
+        if pkg:
+            price = float(pkg["price"])
+            currency = pkg.get("currency", settings.get("offline_subscription_currency", "INR"))
+        else:
+            price = float(settings.get(
+                "offline_subscription_yearly_price" if body.plan_type == "yearly" else "offline_subscription_monthly_price",
+                999.0 if body.plan_type == "yearly" else 99.0,
+            ))
+            currency = settings.get("offline_subscription_currency", "INR")
+
+        # (3) Lock price for existing vendors on renewals if the site-setting says so.
+        # We look for the last *approved / activated* subscription for this vendor.
+        if settings.get("offline_subscription_locks_existing_price", True):
+            prior = await db.offline_subscriptions.find_one(
+                {"vendor_id": vendor["id"], "status": {"$in": ["active", "paid", "approved"]}},
+                {"_id": 0, "amount": 1, "currency": 1, "plan_type": 1},
+                sort=[("created_at", -1)],
+            )
+            # Only lock when the plan_type matches (so a monthly→yearly upgrade still uses new price).
+            if prior and prior.get("plan_type") == body.plan_type:
+                price = float(prior.get("amount") or price)
+                currency = prior.get("currency", currency)
+
         sub = OfflineSubscription(
             vendor_id=vendor["id"], vendor_email=vendor.get("email", ""),
             plan_type=body.plan_type, amount=price, currency=currency,
         )
         await db.offline_subscriptions.insert_one(sub.model_dump())
         return sub
+
+    # -------- Subscription packages (admin) --------
+    @api.post("/admin/subscription-packages", response_model=SubscriptionPackage)
+    async def admin_create_package(body: dict, _: dict = Depends(require_platform_admin)):
+        if not body.get("name") or not body.get("duration_days") or "price" not in body:
+            raise HTTPException(400, "name, duration_days, price are required")
+        pkg = SubscriptionPackage(**{k: body[k] for k in ("name", "duration_days", "price", "currency", "active", "description") if k in body})
+        await db.subscription_packages.insert_one(pkg.model_dump())
+        return pkg
+
+    @api.get("/admin/subscription-packages", response_model=List[SubscriptionPackage])
+    async def admin_list_packages(_: dict = Depends(require_platform_admin)):
+        docs = await db.subscription_packages.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
+        return [SubscriptionPackage(**d) for d in docs]
+
+    @api.patch("/admin/subscription-packages/{package_id}", response_model=SubscriptionPackage)
+    async def admin_update_package(package_id: str, body: dict, _: dict = Depends(require_platform_admin)):
+        body.pop("id", None); body.pop("created_at", None)
+        await db.subscription_packages.update_one({"id": package_id}, {"$set": body})
+        d = await db.subscription_packages.find_one({"id": package_id}, {"_id": 0})
+        if not d:
+            raise HTTPException(404, "Package not found")
+        return SubscriptionPackage(**d)
+
+    @api.delete("/admin/subscription-packages/{package_id}")
+    async def admin_delete_package(package_id: str, _: dict = Depends(require_platform_admin)):
+        await db.subscription_packages.delete_one({"id": package_id})
+        return {"ok": True}
+
+    @api.get("/offline-subscriptions/packages", response_model=List[SubscriptionPackage])
+    async def public_list_active_packages(user: dict = Depends(get_current_user)):
+        # Vendors and admins can list active packages when choosing a plan.
+        docs = await db.subscription_packages.find({"active": True}, {"_id": 0}).sort("price", 1).to_list(200)
+        return [SubscriptionPackage(**d) for d in docs]
+
+    # -------- Vendor referral leaderboard (admin) --------
+    @api.get("/admin/vendor-referral-leaderboard")
+    async def vendor_referral_leaderboard(_: dict = Depends(require_platform_admin)):
+        """Counts player signups per vendor via the offline-source bridge —
+        how many pre-existing offline customers each vendor has migrated onto
+        the platform. Helps platform HQ reward top-referring vendors."""
+        pipeline = [
+            {"$match": {"offline_source_vendor_id": {"$ne": None}}},
+            {"$group": {"_id": "$offline_source_vendor_id", "referred_count": {"$sum": 1}}},
+            {"$sort": {"referred_count": -1}},
+            {"$limit": 50},
+        ]
+        rows = await db.player_profiles.aggregate(pipeline).to_list(50)
+        # Enrich with vendor business names + commission earned/waived (approx)
+        out = []
+        for r in rows:
+            vid = r["_id"]
+            v = await db.vendors.find_one({"id": vid}, {"_id": 0, "business_name": 1, "city": 1, "email": 1})
+            if not v:
+                continue
+            # Waived commission = sum of commission_amount that would have been charged
+            waived = await db.vendor_bookings.aggregate([
+                {"$match": {"vendor_id": vid, "offline_source": True}},
+                {"$group": {"_id": None, "gross_total": {"$sum": "$total"}}},
+            ]).to_list(1)
+            gross = float(waived[0]["gross_total"]) if waived else 0.0
+            settings = await _site_settings_doc()
+            pct = float(settings.get("commission_percentage") or 0)
+            out.append({
+                "vendor_id": vid,
+                "business_name": v.get("business_name"),
+                "city": v.get("city"),
+                "email": v.get("email"),
+                "referred_count": r["referred_count"],
+                "offline_source_gross": gross,
+                "estimated_commission_waived": round(gross * pct / 100.0, 2),
+            })
+        return out
 
     @api.get("/offline-subscriptions/mine", response_model=List[OfflineSubscription])
     async def list_my_offline_subscriptions(user: dict = Depends(get_current_user)):

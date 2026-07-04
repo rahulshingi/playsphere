@@ -178,7 +178,7 @@ function SlotBlocks({ listings }) {
   const [blocks, setBlocks] = useState([]);
   const [f, setF] = useState({ listing_id: listings[0]?.id || "", date: "", start_time: "10:00", end_time: "11:00", reason: "maintenance", notes: "" });
   const load = () => api.get("/vendor/slot-blocks").then((r) => setBlocks(r.data || []));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const submit = async () => {
     if (!f.listing_id || !f.date) return toast.error("Listing + date required");
     try {
@@ -233,7 +233,7 @@ function SlotBlocks({ listings }) {
 function Inventory() {
   const [items, setItems] = useState([]);
   const load = () => api.get("/vendor/inventory").then((r) => setItems(r.data || []));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const add = async () => {
     const name = prompt("Item name?"); if (!name) return;
     await api.post("/vendor/inventory", { name, category: prompt("Category (shuttle/ball/jersey/equipment)?", "other") || "other", quantity: Number(prompt("Qty?", "0") || 0), low_stock_threshold: Number(prompt("Low-stock threshold?", "5") || 5), cost_price: Number(prompt("Cost price?", "0") || 0), sale_price: Number(prompt("Sale price?", "0") || 0) });
@@ -274,7 +274,7 @@ function Expenses() {
   const [rows, setRows] = useState([]);
   const [f, setF] = useState({ date: new Date().toISOString().slice(0, 10), category: "rent", amount: 0, notes: "" });
   const load = () => api.get("/vendor/expenses").then((r) => setRows(r.data || []));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const total = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
   const submit = async () => {
     if (!f.amount) return toast.error("Amount required");
@@ -372,7 +372,7 @@ function Staff() {
   const [showAdd, setShowAdd] = useState(false);
   const [f, setF] = useState({ name: "", email: "", password: "", role: "receptionist" });
   const load = () => api.get("/vendor/staff").then((r) => setRows(r.data || []));
-  useEffect(load, []);
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const submit = async () => {
     if (!f.email || !f.password) return toast.error("Email + password required");
     try { await api.post("/vendor/staff", f); toast.success("Staff added"); setShowAdd(false); setF({ name: "", email: "", password: "", role: "receptionist" }); load(); }

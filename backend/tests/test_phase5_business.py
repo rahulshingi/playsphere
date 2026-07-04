@@ -1173,3 +1173,108 @@ class TestOfflineBusinessSuiteP0:
         assert b.get("commission_amount") == 0
         assert b.get("commission_percent") == 0
 
+
+# =========================================================================
+# 16. Phase 5c+ — Subscription packages, price-lock on renewal,
+#     referral leaderboard.
+# =========================================================================
+class TestSubscriptionPackagesAndReferrals:
+    def test_admin_can_crud_packages(self, admin_sess):
+        r = admin_sess.post(f"{API}/admin/subscription-packages", json={
+            "name": f"Quarterly_{RUN[-4:]}", "duration_days": 90, "price": 249,
+            "description": "Best for medium venues",
+        })
+        assert r.status_code == 200, r.text
+        pkg = r.json()
+        r = admin_sess.get(f"{API}/admin/subscription-packages")
+        assert any(p["id"] == pkg["id"] for p in r.json())
+        r = admin_sess.patch(f"{API}/admin/subscription-packages/{pkg['id']}", json={"price": 299})
+        assert r.status_code == 200 and r.json()["price"] == 299
+        r = admin_sess.delete(f"{API}/admin/subscription-packages/{pkg['id']}")
+        assert r.status_code == 200
+
+    def test_vendor_can_use_custom_package(self, admin_sess):
+        # Seed a package
+        pkg = admin_sess.post(f"{API}/admin/subscription-packages", json={
+            "name": f"Annual_{RUN[-4:]}", "duration_days": 365, "price": 1499,
+        }).json()
+        # Seed a fresh vendor (DB-direct) that hasn't yet subscribed
+        import bcrypt
+        run = RUN[-5:]
+        vend_email = f"pkg.owner.{run}@k.io"
+        client = AsyncIOMotorClient(MONGO_URL); db = client[DB_NAME]
+        _run(db.users.delete_many({"email": vend_email}))
+        _run(db.users.insert_one({
+            "id": f"u-{vend_email}", "email": vend_email,
+            "password_hash": bcrypt.hashpw(b"pkg123", bcrypt.gensalt()).decode("utf-8"),
+            "role": "vendor", "name": "Pkg Owner",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }))
+        _run(db.vendors.insert_one({
+            "id": f"v-{vend_email}", "user_id": f"u-{vend_email}",
+            "business_name": "Pkg Turf", "vendor_type": "ground",
+            "city": "Bangalore", "email": vend_email,
+            "approved": True, "active": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }))
+        s = _sess()
+        assert s.post(f"{API}/auth/login", json={"email": vend_email, "password": "pkg123"}).status_code == 200
+        # Vendor picks the custom annual package
+        r = s.post(f"{API}/offline-subscriptions/request", json={
+            "plan_type": "yearly", "package_id": pkg["id"],
+        })
+        assert r.status_code == 200, r.text
+        sub = r.json()
+        assert sub["amount"] == 1499, "custom package price should apply"
+
+    def test_price_locked_on_renewal_for_existing_vendor(self, admin_sess):
+        """Existing vendor with an approved subscription should pay their prior
+        price when the lock-existing-price site-setting is True (default)."""
+        # Force the setting on
+        client = AsyncIOMotorClient(MONGO_URL); db = client[DB_NAME]
+        _run(db.settings.update_one({"id": "site"}, {"$set": {
+            "offline_subscription_locks_existing_price": True,
+            "offline_subscription_monthly_price": 199,  # NEW price for new vendors
+        }}, upsert=True))
+        # Seed a vendor + a prior "active" monthly sub at 99
+        import bcrypt
+        run = RUN[-5:]
+        vend_email = f"lock.owner.{run}@k.io"
+        _run(db.users.delete_many({"email": vend_email}))
+        _run(db.users.insert_one({
+            "id": f"u-{vend_email}", "email": vend_email,
+            "password_hash": bcrypt.hashpw(b"lock123", bcrypt.gensalt()).decode("utf-8"),
+            "role": "vendor", "name": "Lock Owner",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }))
+        _run(db.vendors.insert_one({
+            "id": f"v-{vend_email}", "user_id": f"u-{vend_email}",
+            "business_name": "Lock Turf", "vendor_type": "ground",
+            "city": "Bangalore", "email": vend_email,
+            "approved": True, "active": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }))
+        _run(db.offline_subscriptions.insert_one({
+            "id": f"os-{vend_email}", "vendor_id": f"v-{vend_email}",
+            "vendor_email": vend_email, "plan_type": "monthly",
+            "amount": 99, "currency": "INR", "status": "active",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }))
+        s = _sess()
+        assert s.post(f"{API}/auth/login", json={"email": vend_email, "password": "lock123"}).status_code == 200
+        r = s.post(f"{API}/offline-subscriptions/request", json={"plan_type": "monthly"})
+        assert r.status_code == 200, r.text
+        # Even though the NEW price is 199, this existing vendor should still pay 99.
+        assert r.json()["amount"] == 99, f"expected lock to 99, got {r.json()['amount']}"
+
+    def test_referral_leaderboard_returns_top_vendors(self, admin_sess):
+        r = admin_sess.get(f"{API}/admin/vendor-referral-leaderboard")
+        assert r.status_code == 200
+        rows = r.json()
+        assert isinstance(rows, list)
+        # If any rows exist they must have the right shape
+        for row in rows:
+            for k in ("vendor_id", "business_name", "referred_count",
+                      "estimated_commission_waived"):
+                assert k in row
+

@@ -217,8 +217,13 @@ function ShareRow({ listing }) {
     if (navigator.share) {
       try {
         await navigator.share({ title: listing.title, text: msg, url });
-      } catch {
-        // user cancelled — no-op
+      } catch (err) {
+        // AbortError = user dismissed the OS share sheet — safe to ignore.
+        // Anything else is a real bug we want visible in the console.
+        if (err?.name !== "AbortError") {
+          // eslint-disable-next-line no-console
+          console.error("navigator.share failed:", err);
+        }
       }
     } else {
       window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank", "noopener,noreferrer");

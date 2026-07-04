@@ -54,21 +54,33 @@ const NEEDS_CAPACITY = new Set(["ground", "court", "gym", "studio"]);
 // Opens a printable QR poster in a new tab. The QR image comes from the free
 // api.qrserver.com service — the encoded URL points at the vendor's public
 // listing page so anyone scanning it lands there instantly (book / view).
+//
+// SECURITY: every user-controlled field (listing.title, vendor.business_name,
+// listing.city) is HTML-escaped before interpolation. We deliberately keep
+// `document.write` here (it targets a freshly-opened blank window we own) but
+// the escape helper defends against a vendor putting `<script>` in their name.
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
 function openQrPoster(listing, vendor) {
   const base = window.location.origin;
   const target = `${base}/vendor-listing/${listing.id}`;
   const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=400x400&data=${encodeURIComponent(target)}`;
-  const html = `<!doctype html><html><head><title>QR poster · ${listing.title}</title>
+  const safeTitle = escapeHtml(listing.title);
+  const safeBiz = escapeHtml(vendor?.business_name || "");
+  const safeCity = escapeHtml(listing.city || "");
+  const safeUrl = escapeHtml(target);
+  const html = `<!doctype html><html><head><title>QR poster · ${safeTitle}</title>
     <style>body{font-family:Poppins,system-ui,sans-serif;text-align:center;padding:32px;color:#111}
     h1{margin:0 0 8px;font-size:34px;letter-spacing:1px}h2{margin:0 0 24px;font-weight:400;color:#666}
     img{width:400px;height:400px}p{margin-top:16px;font-family:monospace;color:#666;font-size:12px}
     .biz{margin-top:24px;font-weight:600}@media print{body{padding:0}}</style></head>
     <body>
     <h1>SCAN &amp; BOOK</h1>
-    <h2>${listing.title}</h2>
+    <h2>${safeTitle}</h2>
     <img src="${qrSrc}" alt="QR" />
-    <p>${target}</p>
-    <div class="biz">${vendor?.business_name || ""} · ${listing.city || ""}</div>
+    <p>${safeUrl}</p>
+    <div class="biz">${safeBiz} · ${safeCity}</div>
     <p>Powered by Kreeda Nation</p>
     <script>window.onload=()=>setTimeout(()=>window.print(),400)<\/script>
     </body></html>`;

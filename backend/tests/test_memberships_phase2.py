@@ -17,8 +17,12 @@ API = f"{BASE}/api"
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 
-ADMIN_EMAIL = "admin@kreedanation.com"
-ADMIN_PASSWORD = "admin123"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@kreedanation.com")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
+# Test-only passwords. Override via env in CI.
+TEST_VENDOR_PW = os.environ.get("TEST_VENDOR_PW", "vendor123")
+TEST_HR_PW = os.environ.get("TEST_HR_PW", "hrpass123")
+TEST_WALKIN_PW = os.environ.get("TEST_WALKIN_PW", "walkin123")
 
 RUN = uuid.uuid4().hex[:8]
 VENDOR_EMAIL = f"test_vendor_{RUN}@turf.in"
@@ -97,7 +101,7 @@ def vendor_ctx(db, admin_sess):
         "contact_name": "Test Vendor",
         "mobile": "+919999000111",
         "email": VENDOR_EMAIL,
-        "password": "vendor123",
+        "password": TEST_VENDOR_PW,
         "city": "Bangalore",
         "otp": otp,
     })
@@ -109,7 +113,7 @@ def vendor_ctx(db, admin_sess):
     r = admin_sess.patch(f"{API}/vendors/{vendor_id}/approve", json={"approved": True})
     assert r.status_code == 200, r.text
     # Re-login vendor to refresh cookie/role
-    r = s.post(f"{API}/auth/login", json={"email": VENDOR_EMAIL, "password": "vendor123"})
+    r = s.post(f"{API}/auth/login", json={"email": VENDOR_EMAIL, "password": TEST_VENDOR_PW})
     assert r.status_code == 200, r.text
 
     # Create listing
@@ -156,7 +160,7 @@ def hr_ctx(db):
         "company_name": f"TEST_Acme_{RUN}",
         "admin_name": "HR Tester",
         "admin_email": HR_EMAIL,
-        "admin_password": "hrpass123",
+        "admin_password": TEST_HR_PW,
         "city": "Bangalore",
         "otp": otp,
     })
@@ -176,7 +180,7 @@ def hr2_ctx(db):
         "company_name": f"TEST_Walkin_{RUN}",
         "admin_name": "Walkin HR",
         "admin_email": HR2_EMAIL,
-        "admin_password": "walkin123",
+        "admin_password": TEST_WALKIN_PW,
         "city": "Bangalore",
         "otp": otp,
     })

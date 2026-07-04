@@ -34,8 +34,12 @@ API = f"{BASE}/api"
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 
-ADMIN_EMAIL = "admin@kreedanation.com"
-ADMIN_PASSWORD = "admin123"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@kreedanation.com")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
+# Test-only passwords. Override via env in CI. Local dev defaults are documented
+# in /app/memory/test_credentials.md and are not treated as real secrets.
+TEST_VENDOR_PW = os.environ.get("TEST_VENDOR_PW", "vendor123")
+TEST_HR_PW = os.environ.get("TEST_HR_PW", "hrpass123")
 
 RUN = uuid.uuid4().hex[:8]
 VENDOR_EMAIL = f"p5_vendor_{RUN}@turf.in"
@@ -113,7 +117,7 @@ def _signup_vendor(db, admin_sess, email, label, types=None):
         "business_name": bn, "vendor_type": (types or ["ground"])[0],
         "contact_name": f"Vendor {label}",
         "mobile": "+91999900" + str(abs(hash(label + RUN)) % 10000).zfill(4),
-        "email": email, "password": "vendor123", "city": "Bangalore",
+        "email": email, "password": TEST_VENDOR_PW, "city": "Bangalore",
         "otp": otp,
     }
     if types is not None:
@@ -123,7 +127,7 @@ def _signup_vendor(db, admin_sess, email, label, types=None):
     vdoc = _run(db.vendors.find_one({"email": email.lower()}, {"_id": 0}))
     assert vdoc, f"vendor not found for {email}"
     admin_sess.patch(f"{API}/vendors/{vdoc['id']}/approve", json={"approved": True})
-    r = s.post(f"{API}/auth/login", json={"email": email, "password": "vendor123"})
+    r = s.post(f"{API}/auth/login", json={"email": email, "password": TEST_VENDOR_PW})
     assert r.status_code == 200, r.text
     return {"sess": s, "vendor_id": vdoc["id"], "vendor_doc": vdoc}
 
@@ -136,7 +140,7 @@ def _signup_hr(db, email, label):
     otp = _get_otp(db, "company_signup_otps", email)
     r = s.post(f"{API}/companies/signup", json={
         "company_name": f"P5_{label}_{RUN}", "admin_name": "HR Test",
-        "admin_email": email, "admin_password": "hrpass123",
+        "admin_email": email, "admin_password": TEST_HR_PW,
         "city": "Bangalore", "otp": otp,
     })
     assert r.status_code == 200, r.text
@@ -192,7 +196,7 @@ class TestListingDetailedAddress:
         # Reuse the VENDOR_EMAIL vendor created in TestVendorMultiType. If that test
         # hasn't run yet, create a fresh vendor.
         sess = _sess()
-        r = sess.post(f"{API}/auth/login", json={"email": VENDOR_EMAIL, "password": "vendor123"})
+        r = sess.post(f"{API}/auth/login", json={"email": VENDOR_EMAIL, "password": TEST_VENDOR_PW})
         if r.status_code != 200:
             ctx = _signup_vendor(db, admin_sess, VENDOR_EMAIL, "VMain", types=["gym", "studio"])
             sess = ctx["sess"]
@@ -374,7 +378,7 @@ class TestPrivateBookings:
     def listing_id(self, admin_sess):
         # Create a ground listing for VENDOR2 (who has offline_mode=true after activate test).
         sess = _sess()
-        r = sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        r = sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": TEST_VENDOR_PW})
         assert r.status_code == 200, r.text
         r = sess.post(f"{API}/vendors/me/listings", json={
             "title": f"P5_PBListing_{RUN}", "sports": ["cricket"], "city": "Bangalore",
@@ -390,7 +394,7 @@ class TestPrivateBookings:
     def test_locked_when_offline_mode_false(self, db, admin_sess):
         # Use the FIRST vendor (VENDOR_EMAIL) which never activated offline_mode.
         sess = _sess()
-        r = sess.post(f"{API}/auth/login", json={"email": VENDOR_EMAIL, "password": "vendor123"})
+        r = sess.post(f"{API}/auth/login", json={"email": VENDOR_EMAIL, "password": TEST_VENDOR_PW})
         assert r.status_code == 200, r.text
         # Try to POST a private booking → 403 with "Unlock offline mode"
         r = sess.post(f"{API}/vendor/private-bookings", json={
@@ -447,7 +451,7 @@ class TestVendorPIIMask:
     def test_vendor_sees_masked_hr_fields(self, db, admin_sess, hr):
         # Create a booking via HR on VENDOR2's ground listing.
         sess_v = _sess()
-        sess_v.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        sess_v.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": TEST_VENDOR_PW})
         # Get any approved listing of VENDOR2
         rl = sess_v.get(f"{API}/vendors/me/listings")
         assert rl.status_code == 200, rl.text
@@ -496,7 +500,7 @@ class TestVendorInvoiceSettings:
     def test_patch_invoice_settings_persists(self):
         # VENDOR2 has offline_mode=true after TestOfflineSubscription.
         sess = _sess()
-        r = sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        r = sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": TEST_VENDOR_PW})
         assert r.status_code == 200, r.text
         payload = {
             "gstin": "29ABCDE1234F1Z5",
@@ -520,7 +524,7 @@ class TestVendorInvoiceSettings:
 
     def test_patch_rejects_disallowed_fields(self):
         sess = _sess()
-        sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": TEST_VENDOR_PW})
         # Try to sneak an approval flip
         r = sess.patch(f"{API}/vendors/me", json={"approved": False, "offline_mode": False, "id": "fake"})
         # No allowed fields → 400
@@ -531,7 +535,7 @@ class TestVendorInvoiceSettings:
 
     def test_patch_tax_percent_out_of_range(self):
         sess = _sess()
-        sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        sess.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": TEST_VENDOR_PW})
         r = sess.patch(f"{API}/vendors/me", json={"invoice_tax_percent": 150})
         assert r.status_code == 400, r.text
         r = sess.patch(f"{API}/vendors/me", json={"invoice_tax_percent": -1})
@@ -546,7 +550,7 @@ class TestVendorCustomersAndInvoices:
     @pytest.fixture(scope="class")
     def sess(self):
         s = _sess()
-        r = s.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        r = s.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": TEST_VENDOR_PW})
         assert r.status_code == 200, r.text
         return s
 
@@ -667,7 +671,7 @@ class TestPrivateBookingEditAndHours:
     @pytest.fixture(scope="class")
     def sess(self):
         s = _sess()
-        r = s.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        r = s.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": TEST_VENDOR_PW})
         assert r.status_code == 200, r.text
         return s
 
@@ -794,7 +798,7 @@ class TestBookingCustomerAutoAndImmutable:
     @pytest.fixture(scope="class")
     def sess(self):
         s = _sess()
-        r = s.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": "vendor123"})
+        r = s.post(f"{API}/auth/login", json={"email": VENDOR2_EMAIL, "password": TEST_VENDOR_PW})
         assert r.status_code == 200, r.text
         return s
 

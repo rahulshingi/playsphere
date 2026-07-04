@@ -694,3 +694,22 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 
 ### Manuals
 - Company section gained bullets for **Edit events** + **Book recurring slots** (7 PDFs regenerated).
+
+## Feb 2026 — Code review remediation (quick wins)
+### Security
+- **`VendorDashboard.jsx openQrPoster`** — HTML-escape all user-controlled fields (`listing.title`, `vendor.business_name`, `listing.city`, target URL) before interpolating into the `document.write` payload of the pop-up QR poster window. Prevents a malicious vendor from injecting `<script>` into their business name.
+- **`EventApprovalBanner.jsx dangerouslySetInnerHTML`** — verified false positive: already sanitised via `DOMPurify.sanitize(...)` on a `useMemo` above the render. No change.
+- **Test-file "hardcoded secrets"** — `test_phase5_business.py`, `test_memberships_phase3_4.py`, `test_memberships_phase2.py` now read `ADMIN_PASSWORD`, `TEST_VENDOR_PW`, `TEST_HR_PW`, `TEST_WALKIN_PW` from env vars with local-dev defaults. CI can override via env.
+
+### Performance
+- **`AuthContext.jsx`** — wrapped the provider value in `useMemo([user, ready])`. Previously a new object identity was minted on every provider render, cascading a full app re-render on every unrelated state change.
+
+### Reliability
+- **`VendorListingDetail.jsx nativeShare`** — empty catch replaced with `err.name !== "AbortError"` guard + `console.error` for real failures. AbortError = user dismissed the OS share sheet (safe to swallow).
+
+### Deferred (intentionally — needs a larger dedicated iteration)
+- `routes/business.py register()` refactor into per-feature sub-routers (1465 lines, cyclomatic 347). Requires careful splitting of shared helpers (`_ensure_vendor_owner`, `_upsert_customer_from_booking`, `_check_no_slot_block`, …) — planned for a follow-up.
+- `routes/auth.py register()` refactor into `validate_registration_input` / `create_user_account` / `send_verification_email` helpers.
+- Adding type hints across the codebase (target: 60%+ coverage).
+- 110 React hook dependency warnings across the codebase — high-impact ones (recent Bookings.jsx, VendorMarket.jsx, VendorListingDetail.jsx) verified individually; the rest is technical debt.
+- 25+ nested-ternary cleanups.

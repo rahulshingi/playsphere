@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import { devError } from "@/lib/devLog";
 
@@ -79,31 +79,37 @@ export const AuthProvider = ({ children }) => {
     setUser(false);
   };
 
+  // Memoise the context value so consumers only re-render when auth state
+  // actually changes — a new object identity on every provider render would
+  // otherwise cascade a full app re-render on unrelated state updates.
+  const contextValue = useMemo(() => ({
+    user,
+    ready,
+    login,
+    register,
+    signupCompany,
+    signupOrganiser,
+    refreshMe,
+    logout,
+    isAdmin: !!user && (user.role === "admin" || user.role === "platform_admin" || user.role === "company_admin" || user.role === "organiser"),
+    isPlatformAdmin: !!user && (user.role === "platform_admin" || user.role === "admin"),
+    isSuperAdmin: !!user && (user.role === "platform_admin" || user.role === "admin") && !!user.is_super_admin,
+    adminPermissions: (user && user.permissions) || [],
+    hasPermission: (perm) => !!user && (user.role === "platform_admin" || user.role === "admin") && (user.is_super_admin || (user.permissions || []).includes(perm)),
+    isCompanyAdmin: !!user && (user.role === "company_admin" || user.role === "organiser"),
+    isOrganiser: !!user && user.role === "organiser",
+    isPlayer: !!user && user.role === "player",
+    isVendor: !!user && user.role === "vendor",
+    isSponsor: !!user && user.role === "sponsor",
+    isScorer: !!user && user.role === "scorer",
+    canSponsor: !!user && (user.role === "sponsor" || user.role === "company_admin"),
+    companyId: user && user.company_id,
+    companyName: user && user.company_name,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [user, ready]);
+
   return (
-    <AuthContext.Provider value={{
-      user,
-      ready,
-      login,
-      register,
-      signupCompany,
-      signupOrganiser,
-      refreshMe,
-      logout,
-      isAdmin: !!user && (user.role === "admin" || user.role === "platform_admin" || user.role === "company_admin" || user.role === "organiser"),
-      isPlatformAdmin: !!user && (user.role === "platform_admin" || user.role === "admin"),
-      isSuperAdmin: !!user && (user.role === "platform_admin" || user.role === "admin") && !!user.is_super_admin,
-      adminPermissions: (user && user.permissions) || [],
-      hasPermission: (perm) => !!user && (user.role === "platform_admin" || user.role === "admin") && (user.is_super_admin || (user.permissions || []).includes(perm)),
-      isCompanyAdmin: !!user && (user.role === "company_admin" || user.role === "organiser"),
-      isOrganiser: !!user && user.role === "organiser",
-      isPlayer: !!user && user.role === "player",
-      isVendor: !!user && user.role === "vendor",
-      isSponsor: !!user && user.role === "sponsor",
-      isScorer: !!user && user.role === "scorer",
-      canSponsor: !!user && (user.role === "sponsor" || user.role === "company_admin"),
-      companyId: user && user.company_id,
-      companyName: user && user.company_name,
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );

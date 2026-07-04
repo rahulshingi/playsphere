@@ -27,8 +27,12 @@ API = f"{BASE}/api"
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 
-ADMIN_EMAIL = "admin@kreedanation.com"
-ADMIN_PASSWORD = "admin123"
+ADMIN_EMAIL = os.environ.get("TEST_ADMIN_EMAIL", "admin@kreedanation.com")
+ADMIN_PASSWORD = os.environ.get("TEST_ADMIN_PASSWORD", "admin123")
+# Test-only passwords. Override via env in CI.
+TEST_VENDOR_PW = os.environ.get("TEST_VENDOR_PW", "vendor123")
+TEST_HR_PW = os.environ.get("TEST_HR_PW", "hrpass123")
+TEST_WALKIN_PW = os.environ.get("TEST_WALKIN_PW", "walkin123")
 
 RUN = uuid.uuid4().hex[:8]
 VENDOR_A_EMAIL = f"p34_vendorA_{RUN}@turf.in"
@@ -103,14 +107,14 @@ def _create_vendor(db, admin_sess, email, label):
         "business_name": f"P34_{label}_{RUN}",
         "vendor_type": "ground", "contact_name": f"Vendor {label}",
         "mobile": "+91999900" + str(abs(hash(label)) % 10000).zfill(4),
-        "email": email, "password": "vendor123", "city": "Bangalore",
+        "email": email, "password": TEST_VENDOR_PW, "city": "Bangalore",
         "otp": otp,
     })
     assert r.status_code == 200, r.text
     vdoc = _run(db.vendors.find_one({"email": email.lower()}, {"_id": 0}))
     assert vdoc, f"vendor row not found for {email}"
     admin_sess.patch(f"{API}/vendors/{vdoc['id']}/approve", json={"approved": True})
-    r = s.post(f"{API}/auth/login", json={"email": email, "password": "vendor123"})
+    r = s.post(f"{API}/auth/login", json={"email": email, "password": TEST_VENDOR_PW})
     assert r.status_code == 200, r.text
     return {"sess": s, "vendor_id": vdoc["id"]}
 
@@ -166,7 +170,7 @@ def _signup_hr(db, email, label):
     otp = _get_otp(db, "company_signup_otps", email)
     r = s.post(f"{API}/companies/signup", json={
         "company_name": f"P34_{label}_{RUN}", "admin_name": "HR Tester",
-        "admin_email": email, "admin_password": "hrpass123",
+        "admin_email": email, "admin_password": TEST_HR_PW,
         "city": "Bangalore", "otp": otp,
     })
     assert r.status_code == 200, r.text

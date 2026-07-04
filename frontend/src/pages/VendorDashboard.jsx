@@ -20,7 +20,7 @@ import { VendorReviewsInbox } from "@/components/Reviews";
 import VendorMembershipsPanel from "@/components/vendor/VendorMembershipsPanel";
 import OfflineModeCard from "@/components/vendor/OfflineModeCard";
 import InvoiceSettingsPanel from "@/components/vendor/InvoiceSettingsPanel";
-import PrivateBookingsPanel from "@/components/vendor/PrivateBookingsPanel";
+import OfflineBusinessSuite from "@/components/vendor/OfflineBusinessSuite";
 
 const SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
 
@@ -211,7 +211,7 @@ export default function VendorDashboard() {
           <TabsContent value="offline" className="mt-6" data-testid="vendor-offline-tab-content">
             <OfflineModeCard vendor={vendor} onChange={load} />
             <InvoiceSettingsPanel vendor={vendor} onSaved={load} />
-            <PrivateBookingsPanel vendor={vendor} listings={listings} />
+            {vendor?.offline_mode && <div className="mt-6"><OfflineBusinessSuite vendor={vendor} listings={listings} /></div>}
           </TabsContent>
         </Tabs>
       </div>

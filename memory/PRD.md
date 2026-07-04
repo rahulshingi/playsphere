@@ -453,6 +453,40 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
 - **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
+## Implemented (Mar 10, 2026 — Phase 5c: Offline Business Suite + Business Model)
+
+**Backend (12 new endpoints + 8 new models in `routes/business.py`)**
+- `GET /api/vendor/dashboard-stats` — 8 KPIs: today's revenue, bookings, walk-in/online customers, active members, court utilisation %, pending payments, today's schedule, new leads (7d).
+- Slot blocks (`POST/GET/DELETE /vendor/slot-blocks`) — with reasons: maintenance, tournament, private, staff_practice. Overlapping private bookings are rejected with a clear error.
+- Expenses (`POST/GET/DELETE /vendor/expenses`) — categorised (rent, electricity, water, salary, equipment, maintenance, misc).
+- Coaches (`POST/GET/PATCH/DELETE /vendor/coaches`).
+- Batches (`POST/GET/PATCH/DELETE /vendor/batches`) — coach, capacity, days-of-week, monthly fee.
+- Inventory (`POST/GET/PATCH/DELETE /vendor/inventory`) — quantity + low-stock threshold + cost/sale price.
+- Vendor staff (`POST/GET/DELETE /vendor/staff`) — new `vendor_staff` role. Receptionist and coach have scoped permission masks (no reports/expenses for receptionist).
+- Reports (`GET /vendor/reports?range=daily|weekly|monthly`) — revenue, expenses, profit, bookings split, membership sales, 24h peak-hours histogram, top-5 customers by spend.
+- Customer detail (`GET /vendor/customers/{id}`) — visits, total_spent, outstanding, memberships, last 20 bookings + invoices.
+- Check-in (`POST /vendor/checkin`) — accepts booking_id, customer_id, or phone; records a `vendor_checkins` row and stamps `checked_in_at` on the booking.
+- Invite offline customer (`POST /vendor/invite-customer`) — returns a `wa.me/...?text=<signup url>` link stamped with `?ref_vendor=<id>`.
+- Payment method on `VendorInvoice` (cash/upi/card/bank_transfer/online) — captured at mark-paid.
+
+**Business-model bridge (KEY for revenue split)**
+- New `PlayerProfile.offline_source_vendor_id` — stamped on signup when the player arrives via `?ref_vendor=<id>` (from the vendor's WhatsApp invite).
+- `POST /api/vendor-bookings` now computes `offline_source: bool` at booking creation. When true, `commission_percent = 0` and `commission_amount = 0` — the platform waives its cut for the vendor's pre-existing offline customers who joined via the invite link.
+- Otherwise commission is computed from `site_settings.commission_percentage` and stored on the booking for later payout accounting.
+
+**Frontend**
+- New umbrella component `OfflineBusinessSuite.jsx` bundling 9 sub-tabs: Dashboard, Bookings & calendar, Coaches & batches, Slot blocks, Inventory, Expenses, Reports, Staff, Check-in.
+- Rendered inside the Vendor Dashboard's `Offline business` tab (unlocked when `vendor.offline_mode=true`).
+- `PlayerSignup.jsx` now reads `?ref_vendor=<id>` from the URL and forwards it to the register endpoint.
+
+**Tests**
+- 11 new tests in `TestOfflineBusinessSuiteP0` — dashboard shape, slot-block enforcement, expenses CRUD, coach+batch flow, inventory low-stock, staff create + scoped login (receptionist blocked from `/vendor/reports`), reports shape, customer detail aggregation, check-in by booking-id, invite link, and the **offline-source commission bypass** (player invited by vendor pays platform 0% commission on future marketplace bookings to that vendor). **11/11 pass in 2.84s** (DB-seeded fixtures — bypass SendGrid rate limits).
+
+**Cross-role integration**
+- Company/HR + organiser already had `/hire` access from earlier passes.
+- Player `/hire` access was fixed earlier; player now gets the offline-source commission-waiver treatment when arriving via the vendor's WhatsApp invite.
+- Vendor staff (`vendor_staff` role) is a new authenticated role that can log in with their own email/password and inherits scoped vendor-scoped access.
+
 ## Implemented (Mar 09, 2026 — Persistent login fix: no more forced admin password resets)
 - **Bug**: Every time the backend restarted (frequent on hot-reload / redeploy), `seed_admin()` was aggressively re-hashing the admin password to match `ADMIN_PASSWORD` env var — silently wiping any password the user had set via forgot-password. Result: the user had to reset every login attempt. Also affected any admin whose stored password happened to differ from the env value.
 - **Fix**: `seed_admin()` now only re-seeds the password when (a) the stored hash is missing/blank, OR (b) the operator explicitly sets `FORCE_ADMIN_PASSWORD_RESET=true` in the environment. All other admin metadata (role, name, permissions, is_super_admin) still auto-heals as before. User-initiated password changes now persist across restarts.

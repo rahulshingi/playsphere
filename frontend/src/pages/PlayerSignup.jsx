@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import api, { formatApiErrorDetail } from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
@@ -15,6 +15,11 @@ export default function PlayerSignup() {
   const [form, setForm] = useState({ name: "", mobile: "", email: "", password: "", company_id: "" });
   const [step, setStep] = useState("details");
   const [busy, setBusy] = useState(false);
+  const [searchParams] = useSearchParams();
+  // If the user landed here via a vendor's WhatsApp invite (?ref_vendor=<id>),
+  // stamp that vendor as their offline-source so the platform commission is
+  // waived on their future bookings to that vendor (business-model bridge).
+  const refVendor = searchParams.get("ref_vendor") || "";
 
   useEffect(() => { api.get("/companies/public").then((r) => setCompanies(r.data)); }, []);
 
@@ -50,7 +55,10 @@ export default function PlayerSignup() {
   const completeSignup = async (otp) => {
     setBusy(true);
     try {
-      await api.post("/players/register", { ...form, email: form.email.trim().toLowerCase(), otp });
+      await api.post("/players/register", {
+        ...form, email: form.email.trim().toLowerCase(), otp,
+        ref_vendor: refVendor || undefined,
+      });
       toast.success("Welcome to Kreeda Nation!");
       window.location.href = "/players/me";
     } catch (err) {

@@ -956,3 +956,220 @@ class TestTeamsSponsorsOwnershipScoping:
         # Admin should see > 1 team and >= 0 sponsors (system-wide view).
         assert isinstance(r_t.json(), list)
         assert isinstance(r_s.json(), list)
+
+# =========================================================================
+# 15. Phase 5c — Offline business suite (Dashboard, expenses, coaches,
+#     batches, inventory, staff, slot blocks, check-in, reports) +
+#     offline-source commission bypass.  Uses DB-seeded vendor so we
+#     avoid SendGrid dependency for setup.
+# =========================================================================
+class TestOfflineBusinessSuiteP0:
+    @pytest.fixture(scope="class")
+    def vendor_sess(self):
+        """Seed a vendor + a listing directly in DB and log in via /auth/login."""
+        import bcrypt
+        client = AsyncIOMotorClient(MONGO_URL)
+        db = client[DB_NAME]
+        vendor_email = f"p5c.owner.{RUN[-6:]}@k.io"
+        user_id = f"u-{vendor_email}"
+        # User + vendor
+        _run(db.users.delete_many({"email": vendor_email}))
+        pwd_hash = bcrypt.hashpw(b"vend123", bcrypt.gensalt()).decode("utf-8")
+        _run(db.users.insert_one({
+            "id": user_id, "email": vendor_email, "password_hash": pwd_hash,
+            "name": "P5C Owner", "role": "vendor",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }))
+        vendor_id = f"v-{vendor_email}"
+        _run(db.vendors.insert_one({
+            "id": vendor_id, "user_id": user_id, "business_name": "P5C Turf",
+            "vendor_type": "ground", "city": "Bangalore", "email": vendor_email,
+            "approved": True, "active": True, "offline_mode": True,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }))
+        listing_id = f"l-{vendor_email}"
+        _run(db.vendor_listings.insert_one({
+            "id": listing_id, "vendor_id": vendor_id, "title": "P5C Ground",
+            "vendor_type": "ground", "city": "Bangalore",
+            "price": 500, "currency": "INR", "approved": True, "active": True,
+            "images": [], "created_at": datetime.now(timezone.utc).isoformat(),
+        }))
+        s = _sess()
+        r = s.post(f"{API}/auth/login", json={"email": vendor_email, "password": "vend123"})
+        assert r.status_code == 200, r.text
+        s.vendor_id = vendor_id
+        s.listing_id = listing_id
+        return s
+
+    def test_dashboard_stats_ok(self, vendor_sess):
+        r = vendor_sess.get(f"{API}/vendor/dashboard-stats")
+        assert r.status_code == 200, r.text
+        for k in ("today_revenue", "today_bookings", "walk_in_customers",
+                  "online_customers", "active_members", "court_utilisation_percent",
+                  "pending_payment_amount", "todays_schedule", "new_leads_count"):
+            assert k in r.json(), f"missing key {k}"
+
+    def test_slot_block_crud_and_blocks_booking(self, vendor_sess):
+        lid = vendor_sess.listing_id
+        future = (datetime.now(timezone.utc) + timedelta(days=80)).strftime("%Y-%m-%d")
+        # Create a block
+        r = vendor_sess.post(f"{API}/vendor/slot-blocks", json={
+            "listing_id": lid, "date": future, "start_time": "10:00", "end_time": "11:00",
+            "reason": "maintenance",
+        })
+        assert r.status_code == 200
+        # Now booking on the SAME slot must be rejected
+        r = vendor_sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": lid, "client_name": "BlockedClient",
+            "requested_date": future, "start_time": "10:00", "end_time": "11:00",
+            "hours": 1, "amount": 500,
+        })
+        assert r.status_code == 400 and "block" in r.text.lower(), r.text
+        # Booking on a different slot the same day works
+        r = vendor_sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": lid, "client_name": "OKClient",
+            "requested_date": future, "start_time": "12:00", "end_time": "13:00",
+            "hours": 1, "amount": 500,
+        })
+        assert r.status_code == 200
+
+    def test_expenses_crud(self, vendor_sess):
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        r = vendor_sess.post(f"{API}/vendor/expenses", json={
+            "date": today, "category": "rent", "amount": 12500, "notes": "March rent",
+        })
+        assert r.status_code == 200, r.text
+        rows = vendor_sess.get(f"{API}/vendor/expenses").json()
+        assert any(x["notes"] == "March rent" for x in rows)
+
+    def test_coach_and_batch(self, vendor_sess):
+        r = vendor_sess.post(f"{API}/vendor/coaches", json={
+            "name": "Coach Ajay", "phone": "+919999999999",
+            "sports": ["badminton"], "hourly_rate": 800,
+        })
+        assert r.status_code == 200
+        coach = r.json()
+        r = vendor_sess.post(f"{API}/vendor/batches", json={
+            "name": "Morning Batch", "sport": "badminton",
+            "coach_id": coach["id"], "listing_id": vendor_sess.listing_id,
+            "start_time": "06:00", "end_time": "07:00",
+            "days_of_week": [0, 2, 4], "capacity": 20, "monthly_fee": 2000,
+        })
+        assert r.status_code == 200
+
+    def test_inventory_low_stock_flag(self, vendor_sess):
+        r = vendor_sess.post(f"{API}/vendor/inventory", json={
+            "name": "Shuttlecock Yonex", "category": "shuttle",
+            "quantity": 3, "low_stock_threshold": 5,
+            "cost_price": 30, "sale_price": 60,
+        })
+        assert r.status_code == 200
+        item_id = r.json()["id"]
+        # Decrement to 1
+        r = vendor_sess.patch(f"{API}/vendor/inventory/{item_id}", json={"quantity": 1})
+        assert r.status_code == 200
+        assert r.json()["quantity"] == 1
+
+    def test_staff_create_and_login(self, vendor_sess):
+        run = RUN[-5:]
+        staff_email = f"p5c.staff.{run}@k.io"
+        r = vendor_sess.post(f"{API}/vendor/staff", json={
+            "name": "Test Receptionist", "email": staff_email,
+            "password": "staff123", "role": "receptionist",
+        })
+        assert r.status_code == 200, r.text
+        # Staff logs in via /auth/login and inherits scoped access
+        s2 = _sess()
+        r = s2.post(f"{API}/auth/login", json={"email": staff_email, "password": "staff123"})
+        assert r.status_code == 200
+        assert r.json().get("role") == "vendor_staff"
+        # Staff can see bookings but NOT reports (receptionist perm mask excludes reports)
+        r = s2.get(f"{API}/vendor/dashboard-stats")
+        assert r.status_code == 200
+        r = s2.get(f"{API}/vendor/reports")
+        assert r.status_code == 403
+
+    def test_reports_shape(self, vendor_sess):
+        r = vendor_sess.get(f"{API}/vendor/reports?range=monthly")
+        assert r.status_code == 200, r.text
+        d = r.json()
+        for k in ("revenue", "expenses", "profit", "bookings", "membership_sales", "peak_hours", "top_customers"):
+            assert k in d
+        assert len(d["peak_hours"]) == 24
+
+    def test_customer_detail(self, vendor_sess):
+        # Create a customer + booking + paid invoice to check aggregation
+        c = vendor_sess.post(f"{API}/vendor/customers", json={"name": f"DetailCust_{RUN[-4:]}", "phone": "+919000012345"}).json()
+        future = (datetime.now(timezone.utc) + timedelta(days=81)).strftime("%Y-%m-%d")
+        b = vendor_sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": vendor_sess.listing_id, "customer_id": c["id"],
+            "client_name": c["name"], "client_phone": c["phone"],
+            "requested_date": future, "start_time": "14:00", "end_time": "15:00",
+            "hours": 1, "amount": 900,
+        }).json()
+        inv = vendor_sess.post(f"{API}/vendor/invoices", json={"booking_id": b["id"], "tax_percent": 18}).json()
+        vendor_sess.post(f"{API}/vendor/invoices/{inv['id']}/mark-paid")
+        r = vendor_sess.get(f"{API}/vendor/customers/{c['id']}")
+        assert r.status_code == 200
+        d = r.json()
+        assert d["visits"] >= 1
+        assert d["total_spent"] > 0
+
+    def test_checkin_by_booking_id(self, vendor_sess):
+        future = (datetime.now(timezone.utc) + timedelta(days=82)).strftime("%Y-%m-%d")
+        b = vendor_sess.post(f"{API}/vendor/private-bookings", json={
+            "listing_id": vendor_sess.listing_id, "client_name": "CheckInCust",
+            "requested_date": future, "start_time": "15:00", "end_time": "16:00",
+            "hours": 1, "amount": 500,
+        }).json()
+        r = vendor_sess.post(f"{API}/vendor/checkin", json={"code": b["id"], "method": "manual"})
+        assert r.status_code == 200
+
+    def test_invite_customer_generates_wa_link(self, vendor_sess):
+        c = vendor_sess.post(f"{API}/vendor/customers", json={"name": "InviteMe", "phone": "9876543210"}).json()
+        r = vendor_sess.post(f"{API}/vendor/invite-customer", json={"customer_id": c["id"]})
+        assert r.status_code == 200
+        d = r.json()
+        assert "signup_url" in d and "ref_vendor=" in d["signup_url"]
+        assert d["wa_url"].startswith("https://wa.me/")
+
+    def test_offline_source_bypasses_commission(self, vendor_sess):
+        """Business-model KEY: a player invited by the vendor with ref_vendor=<id>
+        should have platform commission waived on marketplace bookings to that vendor."""
+        # Enable commission at 10%
+        client = AsyncIOMotorClient(MONGO_URL)
+        db = client[DB_NAME]
+        _run(db.site_settings.update_one({}, {"$set": {"commission_percentage": 10}}, upsert=True))
+        # Seed a player DIRECTLY with offline_source_vendor_id set
+        import bcrypt
+        run = RUN[-5:]
+        player_email = f"p5c.player.{run}@k.io"
+        user_id = f"u-{player_email}"
+        pwd_hash = bcrypt.hashpw(b"play123", bcrypt.gensalt()).decode("utf-8")
+        _run(db.users.delete_many({"email": player_email}))
+        _run(db.users.insert_one({
+            "id": user_id, "email": player_email, "password_hash": pwd_hash,
+            "name": "Offline Player", "role": "player", "mobile": f"+9188{run}",
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }))
+        _run(db.player_profiles.insert_one({
+            "id": f"pp-{run}", "user_id": user_id, "name": "Offline Player",
+            "mobile": f"+9188{run}", "email": player_email,
+            "offline_source_vendor_id": vendor_sess.vendor_id,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }))
+        s = _sess()
+        r = s.post(f"{API}/auth/login", json={"email": player_email, "password": "play123"})
+        assert r.status_code == 200
+        # Player books on THIS vendor → commission should be 0
+        future = (datetime.now(timezone.utc) + timedelta(days=83)).strftime("%Y-%m-%d")
+        r = s.post(f"{API}/vendor-bookings", json={
+            "listing_id": vendor_sess.listing_id, "requested_date": future,
+            "start_time": "16:00", "hours": 1, "notes": "offline source test",
+        })
+        assert r.status_code == 200, r.text
+        b = r.json()
+        assert b.get("offline_source") is True, f"expected offline_source=True, got {b.get('offline_source')}"
+        assert b.get("commission_amount") == 0
+        assert b.get("commission_percent") == 0
+

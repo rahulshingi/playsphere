@@ -579,6 +579,12 @@ class PlayerSignupBody(BaseModel):
     email: EmailStr  # required — used for OTP verification before account creation
     company_id: Optional[str] = None
     otp: Optional[str] = ""  # 6-digit code from /players/signup/request-otp
+    # Business-model bridge: when a vendor's offline customer signs up through
+    # the vendor's WhatsApp invite link (`?ref_vendor=<vendor_id>`), we stamp
+    # this field on the resulting player so future marketplace bookings to that
+    # vendor skip platform commission (they were already the vendor's customer
+    # before the platform existed).
+    ref_vendor: Optional[str] = None
 
 
 class PlayerLoginBody(BaseModel):
@@ -618,6 +624,10 @@ class PlayerProfile(BaseModel):
     weight_kg: Optional[int] = None
     bio: Optional[str] = ""
     view_count: int = 0
+    # Offline-source vendor — set when the player was invited by a vendor whose
+    # offline books they already frequent. Marketplace bookings to this vendor
+    # skip the platform commission (see request_vendor_booking).
+    offline_source_vendor_id: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -795,6 +805,12 @@ class VendorBooking(BaseModel):
     refund_amount: Optional[float] = None
     refund_reason: Optional[str] = None
     applied_membership_id: Optional[str] = None  # if set, slot was paid via membership
+    # Business-model fields:
+    #   offline_source=True when the buyer is a player whose offline_source_vendor_id
+    #   matches this listing's vendor. Commission is then skipped.
+    offline_source: bool = False
+    commission_percent: float = 0
+    commission_amount: float = 0  # rupees the platform will collect from the vendor
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -1520,6 +1536,7 @@ async def player_register(body: PlayerSignupBody, response: Response):
     profile = PlayerProfile(
         user_id=user_id, name=body.name, mobile=body.mobile, email=email,
         company_id=body.company_id, company_name=company_name,
+        offline_source_vendor_id=(body.ref_vendor or None),
     )
     await db.player_profiles.insert_one(profile.model_dump())
     await db.player_signup_otps.update_one(
@@ -1953,6 +1970,22 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         total_price = 0.0
         applied_membership_id = mem["id"]
 
+    # Business-model: skip commission when the buyer is a player who was the
+    # vendor's offline customer BEFORE joining the platform (vendor-invited via
+    # ref link → player.offline_source_vendor_id set).
+    offline_source = False
+    if user.get("role") == "player":
+        pp = await db.player_profiles.find_one({"user_id": user["id"]}, {"_id": 0, "offline_source_vendor_id": 1})
+        if pp and pp.get("offline_source_vendor_id") == listing["vendor_id"]:
+            offline_source = True
+    # Commission % from site settings — applied on the booking total only when
+    # NOT an offline-source booking.
+    settings = await db.site_settings.find_one({}, {"_id": 0}) or {}
+    commission_percent = float(settings.get("commission_percentage") or 0)
+    if offline_source:
+        commission_percent = 0
+    commission_amount = round(float(total_price) * commission_percent / 100.0, 2)
+
     booking = VendorBooking(
         listing_id=listing["id"], listing_title=listing["title"],
         vendor_id=listing["vendor_id"], vendor_type=listing["vendor_type"],
@@ -1963,6 +1996,9 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         price=price, currency=listing.get("currency", "INR"), total=total_price,
         notes=body.notes or "", created_by=user["id"], hr_email=user.get("email"),
         applied_membership_id=applied_membership_id,
+        offline_source=offline_source,
+        commission_percent=commission_percent,
+        commission_amount=commission_amount,
     )
     payload = booking.model_dump()
     payload["notifications"] = [_booking_notification(

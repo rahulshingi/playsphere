@@ -11,10 +11,11 @@ Wired from server.py via `register(api, db, deps)`. The `deps` namespace bundles
   - require_platform_admin
   - VENDOR_CATEGORY_SPORTS dict
 """
+import os
 import uuid
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+from typing import List, Optional, Dict
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
 
@@ -171,9 +172,111 @@ class VendorInvoice(BaseModel):
     currency: str = "INR"
     notes: Optional[str] = ""
     status: str = "issued"  # draft | issued | paid | void
+    payment_method: Optional[str] = None  # cash | upi | card | bank_transfer | online | other
     issued_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     paid_at: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+# ─────────────────────────────────────────────────────────────────────
+# Phase 5c models — Slot blocks, Expenses, Coaches, Batches, Inventory,
+# Vendor staff, Customer check-ins.
+# ─────────────────────────────────────────────────────────────────────
+
+class SlotBlock(BaseModel):
+    """Vendor-owner blocks a court slot so neither marketplace nor private
+    bookings can steal it. Reasons: maintenance | tournament | private | staff_practice."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_id: str
+    listing_id: str
+    date: str  # YYYY-MM-DD (for recurring, first occurrence; extend later if needed)
+    start_time: str
+    end_time: str
+    reason: str = "maintenance"  # maintenance | tournament | private | staff_practice
+    notes: Optional[str] = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class VendorExpense(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_id: str
+    date: str  # YYYY-MM-DD
+    category: str  # rent | electricity | water | salary | equipment | maintenance | misc
+    amount: float
+    currency: str = "INR"
+    vendor_name: Optional[str] = ""  # who was paid
+    notes: Optional[str] = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class VendorCoach(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_id: str
+    name: str
+    phone: Optional[str] = ""
+    email: Optional[str] = ""
+    sports: List[str] = Field(default_factory=list)
+    hourly_rate: float = 0
+    active: bool = True
+    notes: Optional[str] = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class VendorBatch(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_id: str
+    listing_id: Optional[str] = None
+    name: str  # e.g. "Morning Batch"
+    sport: Optional[str] = ""
+    coach_id: Optional[str] = None
+    start_time: str = "06:00"
+    end_time: str = "07:00"
+    days_of_week: List[int] = Field(default_factory=list)  # 0=Mon..6=Sun
+    capacity: int = 20
+    student_ids: List[str] = Field(default_factory=list)  # customer_ids
+    monthly_fee: float = 0
+    currency: str = "INR"
+    active: bool = True
+    notes: Optional[str] = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class VendorInventoryItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_id: str
+    name: str  # "Shuttlecock (Yonex Mavis 350)"
+    category: str = "other"  # shuttle | ball | jersey | equipment | consumable | other
+    unit: str = "piece"
+    quantity: int = 0
+    low_stock_threshold: int = 5
+    cost_price: float = 0
+    sale_price: float = 0
+    currency: str = "INR"
+    updated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class VendorStaff(BaseModel):
+    """Sub-user under a vendor account (owner adds receptionist / coach logins).
+    Auth reuses the shared /auth/login route — this record links a user_id to a
+    vendor with a scoped role."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_id: str
+    user_id: str
+    email: str
+    name: str
+    role: str = "receptionist"  # owner | receptionist | coach
+    permissions: List[str] = Field(default_factory=list)  # e.g. ["bookings", "customers", "reports"]
+    active: bool = True
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class VendorCheckIn(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    vendor_id: str
+    booking_id: Optional[str] = None
+    customer_id: Optional[str] = None
+    method: str = "manual"  # manual | qr | mobile | booking_id
+    checked_in_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 def register(api, db, deps):
@@ -405,6 +508,14 @@ def register(api, db, deps):
                 f"Booking window {start}–{end} falls outside opening hours ({opening}–{closing}). "
                 f"Enable 'Allow after-hours bookings' in the venue schedule to override."
             )
+
+    async def _check_no_slot_block(listing_id: str, date: str, start: str, end: str):
+        """Reject if the requested window overlaps a vendor-declared slot block
+        (maintenance / tournament / private / staff_practice)."""
+        blocks = await db.slot_blocks.find({"listing_id": listing_id, "date": date}, {"_id": 0}).to_list(200)
+        for b in blocks:
+            if start < b.get("end_time", "24:00") and end > b.get("start_time", "00:00"):
+                raise HTTPException(400, f"Slot {start}–{end} is blocked for {b.get('reason','maintenance')} — clear the block first.")
     async def _upsert_customer_from_booking(vendor_id: str, data: dict) -> Optional[str]:
         """When a private booking is created/edited with an inline client_name (no
         customer_id yet), silently upsert a matching row in `vendor_customers`
@@ -443,6 +554,8 @@ def register(api, db, deps):
         # Enforce venue opening/closing window unless the vendor has explicitly
         # enabled after-hours bookings for this listing.
         await _check_within_hours(body.listing_id, body.start_time, body.end_time)
+        # Refuse if the vendor has declared a slot block on this window.
+        await _check_no_slot_block(body.listing_id, body.requested_date, body.start_time, body.end_time)
         # Normalise the payload BEFORE constructing PrivateBooking to avoid the
         # "got multiple values for keyword argument" TypeError when defaults
         # collide with explicit kwargs.
@@ -709,3 +822,439 @@ def register(api, db, deps):
             "calendar": month_bookings,
             "generated_at": now_iso,
         }
+
+    # =========================================================================
+    # Phase 5c — CRUD endpoints for the vendor's offline business
+    # =========================================================================
+
+    async def _ensure_vendor_owner(user: dict) -> dict:
+        """The endpoints below run under either the vendor themselves or a
+        VendorStaff sub-user with matching vendor_id. Returns the vendor doc."""
+        if user.get("role") == "vendor":
+            vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+            if not vendor:
+                raise HTTPException(404, "Vendor not found")
+            return vendor
+        if user.get("role") == "vendor_staff":
+            staff = await db.vendor_staff.find_one({"user_id": user["id"], "active": True}, {"_id": 0})
+            if not staff:
+                raise HTTPException(403, "Not a vendor staff")
+            vendor = await db.vendors.find_one({"id": staff["vendor_id"]}, {"_id": 0})
+            if not vendor:
+                raise HTTPException(404, "Vendor not found")
+            # Attach staff meta so downstream can check permissions
+            vendor["_staff"] = staff
+            return vendor
+        raise HTTPException(403, "Vendor only")
+
+    def _staff_can(vendor: dict, perm: str) -> bool:
+        staff = vendor.get("_staff")
+        if not staff:
+            return True  # owner
+        if staff.get("role") == "owner":
+            return True
+        return perm in (staff.get("permissions") or [])
+
+    # -------- Slot blocks --------
+    @api.post("/vendor/slot-blocks", response_model=SlotBlock)
+    async def create_slot_block(body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        if not _staff_can(vendor, "bookings"):
+            raise HTTPException(403, "Not allowed")
+        blk = SlotBlock(vendor_id=vendor["id"], **{k: body[k] for k in ("listing_id","date","start_time","end_time","reason","notes") if k in body})
+        await db.slot_blocks.insert_one(blk.model_dump())
+        return blk
+
+    @api.get("/vendor/slot-blocks", response_model=List[SlotBlock])
+    async def list_slot_blocks(listing_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        flt = {"vendor_id": vendor["id"]}
+        if listing_id:
+            flt["listing_id"] = listing_id
+        docs = await db.slot_blocks.find(flt, {"_id": 0}).sort("date", -1).to_list(500)
+        return [SlotBlock(**d) for d in docs]
+
+    @api.delete("/vendor/slot-blocks/{block_id}")
+    async def delete_slot_block(block_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        await db.slot_blocks.delete_one({"id": block_id, "vendor_id": vendor["id"]})
+        return {"ok": True}
+
+    # -------- Expenses --------
+    @api.post("/vendor/expenses", response_model=VendorExpense)
+    async def create_expense(body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        if not _staff_can(vendor, "expenses"):
+            raise HTTPException(403, "Not allowed")
+        exp = VendorExpense(vendor_id=vendor["id"], **{k: body[k] for k in ("date","category","amount","currency","vendor_name","notes") if k in body})
+        await db.vendor_expenses.insert_one(exp.model_dump())
+        return exp
+
+    @api.get("/vendor/expenses", response_model=List[VendorExpense])
+    async def list_expenses(month: Optional[str] = None, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        if not _staff_can(vendor, "expenses"):
+            raise HTTPException(403, "Not allowed")
+        flt = {"vendor_id": vendor["id"]}
+        if month:
+            flt["date"] = {"$regex": f"^{month}"}
+        docs = await db.vendor_expenses.find(flt, {"_id": 0}).sort("date", -1).to_list(500)
+        return [VendorExpense(**d) for d in docs]
+
+    @api.delete("/vendor/expenses/{expense_id}")
+    async def delete_expense(expense_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        if not _staff_can(vendor, "expenses"):
+            raise HTTPException(403, "Not allowed")
+        await db.vendor_expenses.delete_one({"id": expense_id, "vendor_id": vendor["id"]})
+        return {"ok": True}
+
+    # -------- Coaches --------
+    @api.post("/vendor/coaches", response_model=VendorCoach)
+    async def create_coach(body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        c = VendorCoach(vendor_id=vendor["id"], **{k: body[k] for k in ("name","phone","email","sports","hourly_rate","active","notes") if k in body})
+        await db.vendor_coaches.insert_one(c.model_dump())
+        return c
+
+    @api.get("/vendor/coaches", response_model=List[VendorCoach])
+    async def list_coaches(user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        docs = await db.vendor_coaches.find({"vendor_id": vendor["id"]}, {"_id": 0}).sort("name", 1).to_list(200)
+        return [VendorCoach(**d) for d in docs]
+
+    @api.patch("/vendor/coaches/{coach_id}", response_model=VendorCoach)
+    async def update_coach(coach_id: str, body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        body.pop("id", None); body.pop("vendor_id", None)
+        await db.vendor_coaches.update_one({"id": coach_id, "vendor_id": vendor["id"]}, {"$set": body})
+        d = await db.vendor_coaches.find_one({"id": coach_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not d:
+            raise HTTPException(404, "Coach not found")
+        return VendorCoach(**d)
+
+    @api.delete("/vendor/coaches/{coach_id}")
+    async def delete_coach(coach_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        await db.vendor_coaches.delete_one({"id": coach_id, "vendor_id": vendor["id"]})
+        return {"ok": True}
+
+    # -------- Batches --------
+    @api.post("/vendor/batches", response_model=VendorBatch)
+    async def create_batch(body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        b = VendorBatch(vendor_id=vendor["id"], **{k: body[k] for k in ("listing_id","name","sport","coach_id","start_time","end_time","days_of_week","capacity","student_ids","monthly_fee","currency","active","notes") if k in body})
+        await db.vendor_batches.insert_one(b.model_dump())
+        return b
+
+    @api.get("/vendor/batches", response_model=List[VendorBatch])
+    async def list_batches(user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        docs = await db.vendor_batches.find({"vendor_id": vendor["id"]}, {"_id": 0}).sort("name", 1).to_list(200)
+        return [VendorBatch(**d) for d in docs]
+
+    @api.patch("/vendor/batches/{batch_id}", response_model=VendorBatch)
+    async def update_batch(batch_id: str, body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        body.pop("id", None); body.pop("vendor_id", None)
+        await db.vendor_batches.update_one({"id": batch_id, "vendor_id": vendor["id"]}, {"$set": body})
+        d = await db.vendor_batches.find_one({"id": batch_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not d:
+            raise HTTPException(404, "Batch not found")
+        return VendorBatch(**d)
+
+    @api.delete("/vendor/batches/{batch_id}")
+    async def delete_batch(batch_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        await db.vendor_batches.delete_one({"id": batch_id, "vendor_id": vendor["id"]})
+        return {"ok": True}
+
+    # -------- Inventory --------
+    @api.post("/vendor/inventory", response_model=VendorInventoryItem)
+    async def create_inventory(body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        it = VendorInventoryItem(vendor_id=vendor["id"], **{k: body[k] for k in ("name","category","unit","quantity","low_stock_threshold","cost_price","sale_price","currency") if k in body})
+        await db.vendor_inventory.insert_one(it.model_dump())
+        return it
+
+    @api.get("/vendor/inventory", response_model=List[VendorInventoryItem])
+    async def list_inventory(user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        docs = await db.vendor_inventory.find({"vendor_id": vendor["id"]}, {"_id": 0}).sort("name", 1).to_list(500)
+        return [VendorInventoryItem(**d) for d in docs]
+
+    @api.patch("/vendor/inventory/{item_id}", response_model=VendorInventoryItem)
+    async def update_inventory(item_id: str, body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        body.pop("id", None); body.pop("vendor_id", None)
+        body["updated_at"] = datetime.now(timezone.utc).isoformat()
+        await db.vendor_inventory.update_one({"id": item_id, "vendor_id": vendor["id"]}, {"$set": body})
+        d = await db.vendor_inventory.find_one({"id": item_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not d:
+            raise HTTPException(404, "Item not found")
+        return VendorInventoryItem(**d)
+
+    @api.delete("/vendor/inventory/{item_id}")
+    async def delete_inventory(item_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        await db.vendor_inventory.delete_one({"id": item_id, "vendor_id": vendor["id"]})
+        return {"ok": True}
+
+    # -------- Vendor staff --------
+    @api.post("/vendor/staff", response_model=VendorStaff)
+    async def create_staff(body: dict, user: dict = Depends(get_current_user)):
+        # Only the vendor owner (not a sub-staff) may add staff.
+        if user.get("role") != "vendor":
+            raise HTTPException(403, "Only the vendor owner can add staff")
+        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(404, "Vendor not found")
+        email = (body.get("email") or "").strip().lower()
+        password = (body.get("password") or "").strip()
+        role = body.get("role") or "receptionist"
+        if role not in ("owner", "receptionist", "coach"):
+            raise HTTPException(400, "Invalid role")
+        if not email or not password or len(password) < 6:
+            raise HTTPException(400, "email + password (>=6 chars) required")
+        existing = await db.users.find_one({"email": email})
+        if existing:
+            raise HTTPException(400, "Email already registered as another user")
+        # Default permission masks per role
+        perms_default = {
+            "owner": ["bookings", "customers", "expenses", "reports", "staff", "inventory", "coaches", "batches"],
+            "receptionist": ["bookings", "customers", "checkin", "inventory"],  # NO expenses/reports
+            "coach": ["batches", "checkin"],
+        }
+        # Create the user record
+        import bcrypt
+        pwd_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        user_id = str(uuid.uuid4())
+        await db.users.insert_one({
+            "id": user_id, "email": email, "name": body.get("name") or email,
+            "role": "vendor_staff", "password_hash": pwd_hash,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
+        staff = VendorStaff(
+            vendor_id=vendor["id"], user_id=user_id, email=email,
+            name=body.get("name") or email, role=role,
+            permissions=body.get("permissions") or perms_default[role],
+        )
+        await db.vendor_staff.insert_one(staff.model_dump())
+        return staff
+
+    @api.get("/vendor/staff", response_model=List[VendorStaff])
+    async def list_staff(user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        if not _staff_can(vendor, "staff"):
+            raise HTTPException(403, "Not allowed")
+        docs = await db.vendor_staff.find({"vendor_id": vendor["id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+        return [VendorStaff(**d) for d in docs]
+
+    @api.delete("/vendor/staff/{staff_id}")
+    async def delete_staff(staff_id: str, user: dict = Depends(get_current_user)):
+        if user.get("role") != "vendor":
+            raise HTTPException(403, "Only the vendor owner can remove staff")
+        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(404, "Vendor not found")
+        staff = await db.vendor_staff.find_one({"id": staff_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not staff:
+            raise HTTPException(404, "Staff not found")
+        await db.vendor_staff.delete_one({"id": staff_id})
+        await db.users.delete_one({"id": staff["user_id"]})
+        return {"ok": True}
+
+    # -------- Check-in --------
+    @api.post("/vendor/checkin", response_model=VendorCheckIn)
+    async def vendor_checkin(body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        if not _staff_can(vendor, "checkin"):
+            raise HTTPException(403, "Not allowed")
+        code = (body.get("code") or "").strip()
+        method = body.get("method") or "manual"
+        booking = None
+        customer = None
+        if code:
+            # Try booking_id → private_bookings then vendor_bookings; then customer by phone
+            booking = await db.private_bookings.find_one({"id": code, "vendor_id": vendor["id"]}, {"_id": 0})
+            if not booking:
+                booking = await db.vendor_bookings.find_one({"id": code, "vendor_id": vendor["id"]}, {"_id": 0})
+            if not booking and code.isdigit():
+                customer = await db.vendor_customers.find_one({"vendor_id": vendor["id"], "phone": {"$regex": code}}, {"_id": 0})
+            if not booking:
+                cust = await db.vendor_customers.find_one({"id": code, "vendor_id": vendor["id"]}, {"_id": 0})
+                if cust:
+                    customer = cust
+        if not booking and not customer:
+            raise HTTPException(404, "No matching booking or customer for that code")
+        ci = VendorCheckIn(
+            vendor_id=vendor["id"],
+            booking_id=(booking or {}).get("id"),
+            customer_id=(customer or {}).get("id") or (booking or {}).get("customer_id"),
+            method=method,
+        )
+        await db.vendor_checkins.insert_one(ci.model_dump())
+        # Mark booking as checked_in
+        if booking:
+            await db.private_bookings.update_one({"id": booking["id"]}, {"$set": {"checked_in_at": ci.checked_in_at}})
+            await db.vendor_bookings.update_one({"id": booking["id"]}, {"$set": {"checked_in_at": ci.checked_in_at}})
+        return ci
+
+    # -------- Customer detail (visit history + spend) --------
+    @api.get("/vendor/customers/{customer_id}")
+    async def get_customer_detail(customer_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        c = await db.vendor_customers.find_one({"id": customer_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not c:
+            raise HTTPException(404, "Customer not found")
+        # Aggregate visit history from bookings + invoices
+        bookings = await db.private_bookings.find({"vendor_id": vendor["id"], "customer_id": customer_id}, {"_id": 0}).sort("requested_date", -1).to_list(200)
+        invoices = await db.vendor_invoices.find({"vendor_id": vendor["id"], "customer_id": customer_id}, {"_id": 0}).sort("issued_at", -1).to_list(200)
+        total_spent = sum(float(i.get("total") or 0) for i in invoices if i.get("status") == "paid")
+        outstanding = sum(float(i.get("total") or 0) for i in invoices if i.get("status") not in ("paid", "void"))
+        visits = len(bookings)
+        # Membership status
+        memberships = await db.membership_purchases.find({"vendor_id": vendor["id"], "customer_id": customer_id, "status": {"$in": ["active", "paid"]}}, {"_id": 0}).to_list(50)
+        return {
+            **c,
+            "visits": visits,
+            "total_spent": total_spent,
+            "outstanding_balance": outstanding,
+            "bookings": bookings[:20],
+            "invoices": invoices[:20],
+            "memberships": memberships,
+        }
+
+    # -------- Dashboard stats --------
+    @api.get("/vendor/dashboard-stats")
+    async def vendor_dashboard_stats(user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        vid = vendor["id"]
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        # Today's revenue = paid invoices issued today + marketplace booking totals today (confirmed)
+        today_priv = await db.private_bookings.find({"vendor_id": vid, "requested_date": today}, {"_id": 0}).to_list(200)
+        today_online = await db.vendor_bookings.find({"vendor_id": vid, "requested_date": today, "status": {"$in": ["confirmed", "fulfilled"]}}, {"_id": 0}).to_list(200)
+        today_revenue = sum(float(b.get("amount") or 0) for b in today_priv) + sum(float(b.get("total") or 0) for b in today_online)
+        today_bookings = len(today_priv) + len(today_online)
+        walk_in_customers = await db.vendor_customers.count_documents({"vendor_id": vid})
+        online_customers = await db.vendor_bookings.distinct("created_by", {"vendor_id": vid})
+        active_members = await db.membership_purchases.count_documents({"vendor_id": vid, "status": {"$in": ["active", "paid"]}})
+        # Pending payments = issued unpaid invoices
+        pending_invoices = await db.vendor_invoices.find({"vendor_id": vid, "status": "issued"}, {"_id": 0}).to_list(200)
+        pending_payment_amount = sum(float(i.get("total") or 0) for i in pending_invoices)
+        # Court utilisation: how many slot-hours of today are booked / capacity heuristic (10h/day per listing)
+        listings = await db.vendor_listings.find({"vendor_id": vid}, {"_id": 0, "id": 1}).to_list(100)
+        cap_hours = max(1, 10 * len(listings))
+        booked_hours = sum(int(b.get("hours") or 0) for b in today_priv) + sum(int(b.get("hours") or 0) for b in today_online)
+        utilisation = min(100, round(100 * booked_hours / cap_hours))
+        # New leads (last 7 days)
+        seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        new_leads_count = await db.venue_leads.count_documents({"created_at": {"$gte": seven_days_ago}})
+        return {
+            "today_revenue": today_revenue,
+            "today_bookings": today_bookings,
+            "walk_in_customers": walk_in_customers,
+            "online_customers": len([u for u in online_customers if u]),
+            "active_members": active_members,
+            "court_utilisation_percent": utilisation,
+            "pending_payment_amount": pending_payment_amount,
+            "pending_payment_count": len(pending_invoices),
+            "todays_schedule": sorted(
+                [{"id": b["id"], "kind": "private", "start_time": b["start_time"], "end_time": b["end_time"], "who": b.get("client_name")} for b in today_priv] +
+                [{"id": b["id"], "kind": "online", "start_time": b["start_time"], "end_time": b["end_time"], "who": b.get("company_name")} for b in today_online],
+                key=lambda x: x["start_time"]
+            ),
+            "new_leads_count": new_leads_count,
+        }
+
+    # -------- Reports --------
+    @api.get("/vendor/reports")
+    async def vendor_reports(range: str = "monthly", user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        if not _staff_can(vendor, "reports"):
+            raise HTTPException(403, "Not allowed")
+        now = datetime.now(timezone.utc)
+        if range == "daily":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        elif range == "weekly":
+            start = now - timedelta(days=7)
+        else:
+            start = now - timedelta(days=30)
+        start_iso = start.isoformat()
+        start_date = start.strftime("%Y-%m-%d")
+        vid = vendor["id"]
+        # Paid invoices in range
+        paid_invs = await db.vendor_invoices.find({"vendor_id": vid, "status": "paid", "paid_at": {"$gte": start_iso}}, {"_id": 0}).to_list(1000)
+        revenue = sum(float(i.get("total") or 0) for i in paid_invs)
+        # Expenses in range
+        exps = await db.vendor_expenses.find({"vendor_id": vid, "date": {"$gte": start_date}}, {"_id": 0}).to_list(1000)
+        total_expenses = sum(float(e.get("amount") or 0) for e in exps)
+        profit = revenue - total_expenses
+        # Booking counts
+        priv = await db.private_bookings.count_documents({"vendor_id": vid, "requested_date": {"$gte": start_date}})
+        online = await db.vendor_bookings.count_documents({"vendor_id": vid, "requested_date": {"$gte": start_date}})
+        # Membership sales
+        mem_sales = await db.membership_purchases.count_documents({"vendor_id": vid, "created_at": {"$gte": start_iso}})
+        # Peak-hours histogram (00-23)
+        peak = [0] * 24
+        for b in (await db.private_bookings.find({"vendor_id": vid, "requested_date": {"$gte": start_date}}, {"_id": 0, "start_time": 1}).to_list(1000)):
+            try:
+                peak[int((b.get("start_time") or "00:00").split(":")[0])] += 1
+            except (ValueError, IndexError):
+                pass
+        # Top customers by spend
+        cust_totals: Dict[str, float] = {}
+        for inv in paid_invs:
+            cid = inv.get("customer_id")
+            if cid:
+                cust_totals[cid] = cust_totals.get(cid, 0) + float(inv.get("total") or 0)
+        top_ids = sorted(cust_totals.items(), key=lambda x: -x[1])[:5]
+        top_customers = []
+        for cid, amt in top_ids:
+            c = await db.vendor_customers.find_one({"id": cid}, {"_id": 0, "name": 1, "phone": 1, "id": 1})
+            if c:
+                top_customers.append({**c, "spent": amt})
+        return {
+            "range": range,
+            "since": start_iso,
+            "revenue": revenue,
+            "expenses": total_expenses,
+            "profit": profit,
+            "bookings": {"private": priv, "online": online, "total": priv + online},
+            "membership_sales": mem_sales,
+            "peak_hours": peak,
+            "top_customers": top_customers,
+            "expenses_by_category": {
+                cat: sum(float(e.get("amount") or 0) for e in exps if e.get("category") == cat)
+                for cat in {e.get("category") or "misc" for e in exps}
+            },
+        }
+
+    # -------- Invite offline customer to platform (business-model bridge) --------
+    @api.post("/vendor/invite-customer")
+    async def invite_offline_customer(body: dict, user: dict = Depends(get_current_user)):
+        """Generates a signup link that stamps ?ref_vendor=<vendor_id> so when the
+        offline customer signs up as a player, their `offline_source_vendor_id`
+        is set. Future bookings from that player to THIS vendor skip platform
+        commission (business model)."""
+        vendor = await _ensure_vendor_owner(user)
+        customer_id = body.get("customer_id")
+        if not customer_id:
+            raise HTTPException(400, "customer_id required")
+        c = await db.vendor_customers.find_one({"id": customer_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not c:
+            raise HTTPException(404, "Customer not found")
+        frontend = os.environ.get("FRONTEND_URL", "").rstrip("/")
+        signup_url = f"{frontend}/player/signup?ref_vendor={vendor['id']}" if frontend else f"/player/signup?ref_vendor={vendor['id']}"
+        # Compose a WhatsApp-ready message
+        biz = vendor.get("invoice_business_name") or vendor.get("business_name") or "Kreeda Nation venue"
+        wa_text = (
+            f"Hi {c.get('name','')}, {biz} is now on Kreeda Nation. "
+            f"Sign up here so we can send you booking confirmations and receipts online: {signup_url}"
+        )
+        digits = "".join(ch for ch in (c.get("phone") or "") if ch.isdigit())
+        if len(digits) == 10:
+            digits = "91" + digits
+        wa_url = f"https://wa.me/{digits}?text={wa_text.replace(' ', '%20')}"
+        return {"signup_url": signup_url, "wa_url": wa_url, "message": wa_text}
+

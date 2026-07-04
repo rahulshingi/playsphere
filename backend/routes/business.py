@@ -303,9 +303,18 @@ class VendorCheckIn(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     vendor_id: str
     booking_id: Optional[str] = None
+    batch_id: Optional[str] = None
     customer_id: Optional[str] = None
+    context: str = "walkin"  # booking | batch | membership | walkin
     method: str = "manual"  # manual | qr | mobile | booking_id
     checked_in_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    # Populated on close-out. When actual_checkout_at > planned end-time we
+    # compute an overrun and (optionally) mint a supplementary invoice.
+    planned_end_at: Optional[str] = None
+    checked_out_at: Optional[str] = None
+    overrun_minutes: Optional[int] = None
+    extra_amount: Optional[float] = None
+    extra_invoice_id: Optional[str] = None
 
 
 def register(api, db, deps):
@@ -895,6 +904,45 @@ def register(api, db, deps):
             raise HTTPException(404, "Customer not found")
         return {"ok": True}
 
+    # -------- Export customer directory as CSV --------
+    # Route MUST be declared BEFORE any dynamic /vendor/customers/{customer_id}
+    # so FastAPI matches on the literal ".csv" path first — but since all our
+    # routes use `@api.get("/vendor/customers/{customer_id}")` with an explicit
+    # id token, this path here is disambiguated by the trailing `.csv`.
+    @api.get("/vendor/customers.csv")
+    async def export_customers_csv(user: dict = Depends(get_current_user)):
+        import csv
+        import io
+        from fastapi.responses import StreamingResponse
+        vendor = await _vendor_for_user(user)
+        docs = await db.vendor_customers.find({"vendor_id": vendor["id"]}, {"_id": 0}).sort("name", 1).to_list(5000)
+        buf = io.StringIO()
+        w = csv.writer(buf)
+        w.writerow(["Name", "Phone", "Email", "Address", "GSTIN", "Visits", "Total paid", "Outstanding", "Notes", "Created at"])
+        for c in docs:
+            cid = c["id"]
+            bookings = await db.private_bookings.count_documents({"vendor_id": vendor["id"], "customer_id": cid})
+            invs = await db.vendor_invoices.find(
+                {"vendor_id": vendor["id"], "customer_id": cid},
+                {"_id": 0, "status": 1, "total": 1}
+            ).to_list(500)
+            paid = sum(float(i.get("total") or 0) for i in invs if i.get("status") == "paid")
+            owe = sum(float(i.get("total") or 0) for i in invs if i.get("status") not in ("paid", "void"))
+            w.writerow([
+                c.get("name", ""), c.get("phone", ""), c.get("email", ""),
+                c.get("address", ""), c.get("gstin", ""),
+                bookings, paid, owe,
+                (c.get("notes") or "").replace("\n", " ")[:200], c.get("created_at", ""),
+            ])
+        buf.seek(0)
+        fname = f"kn-customers-{vendor['id'][:8]}-{datetime.now(timezone.utc).strftime('%Y%m%d')}.csv"
+        return StreamingResponse(
+            iter([buf.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f"attachment; filename={fname}"},
+        )
+
+
     # ============================================================
     # Invoices (Phase 5D)
     # ============================================================
@@ -1285,40 +1333,273 @@ def register(api, db, deps):
         return {"ok": True}
 
     # -------- Check-in --------
-    @api.post("/vendor/checkin", response_model=VendorCheckIn)
+    @api.post("/vendor/checkin")
     async def vendor_checkin(body: dict, user: dict = Depends(get_current_user)):
+        """Check a customer in against a booking, batch, or as a walkin.
+
+        Ambiguity: if the vendor scans a customer identifier (phone / customer_id)
+        who has BOTH an active vendor-booking today AND is enrolled in a batch
+        starting within the next 60 minutes, we return `{ambiguous: true,
+        options: [...]}` so the vendor can pick.  The caller retries with an
+        explicit `context_type` + `context_id` to disambiguate.
+        """
         vendor = await _ensure_vendor_owner(user)
         if not _staff_can(vendor, "checkin"):
             raise HTTPException(403, "Not allowed")
+
         code = (body.get("code") or "").strip()
         method = body.get("method") or "manual"
+        # Optional context override — used when the client had to pick between
+        # multiple active contexts on a previous ambiguous call.
+        ctx_type = body.get("context_type")  # booking | batch
+        ctx_id = body.get("context_id")
+
         booking = None
+        batch = None
         customer = None
-        if code:
-            # Try booking_id → private_bookings then vendor_bookings; then customer by phone
+        now = datetime.now(timezone.utc)
+        today = now.strftime("%Y-%m-%d")
+
+        # -------- Step 1: resolve the CODE into candidate matches --------
+        if ctx_type == "booking" and ctx_id:
+            booking = await db.private_bookings.find_one({"id": ctx_id, "vendor_id": vendor["id"]}, {"_id": 0})
+            if not booking:
+                booking = await db.vendor_bookings.find_one({"id": ctx_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        elif ctx_type == "batch" and ctx_id:
+            batch = await db.vendor_batches.find_one({"id": ctx_id, "vendor_id": vendor["id"]}, {"_id": 0})
+
+        if code and not booking and not batch:
+            # Try booking id first (both tables)
             booking = await db.private_bookings.find_one({"id": code, "vendor_id": vendor["id"]}, {"_id": 0})
             if not booking:
                 booking = await db.vendor_bookings.find_one({"id": code, "vendor_id": vendor["id"]}, {"_id": 0})
-            if not booking and code.isdigit():
-                customer = await db.vendor_customers.find_one({"vendor_id": vendor["id"], "phone": {"$regex": code}}, {"_id": 0})
+            # Then customer id or phone
             if not booking:
                 cust = await db.vendor_customers.find_one({"id": code, "vendor_id": vendor["id"]}, {"_id": 0})
-                if cust:
-                    customer = cust
-        if not booking and not customer:
-            raise HTTPException(404, "No matching booking or customer for that code")
+                if not cust and code.strip():
+                    cust = await db.vendor_customers.find_one({"vendor_id": vendor["id"], "phone": {"$regex": code}}, {"_id": 0})
+                customer = cust
+
+        # If we ended up with a customer (no explicit booking) — look for active
+        # contexts and prompt the vendor to disambiguate.
+        if customer and not ctx_type:
+            cid = customer["id"]
+            active_bookings = await db.private_bookings.find(
+                {"vendor_id": vendor["id"], "customer_id": cid, "requested_date": today,
+                 "status": {"$nin": ["cancelled", "completed"]}},
+                {"_id": 0, "id": 1, "client_name": 1, "start_time": 1, "hours": 1, "sport": 1}
+            ).to_list(20)
+            # Batches happening today (weekday match)
+            today_dow = now.weekday()
+            active_batches = await db.vendor_batches.find(
+                {"vendor_id": vendor["id"], "student_ids": cid, "active": True,
+                 "$or": [{"days_of_week": today_dow}, {"days_of_week": {"$size": 0}}]},
+                {"_id": 0, "id": 1, "name": 1, "start_time": 1, "end_time": 1, "sport": 1}
+            ).to_list(20)
+            memberships = await db.membership_purchases.find(
+                {"vendor_id": vendor["id"], "customer_id": cid, "status": {"$in": ["active", "paid"]}},
+                {"_id": 0, "id": 1, "plan_name": 1, "expires_at": 1}
+            ).to_list(20)
+            options = (
+                [{"type": "booking", "id": b["id"], "label": f"Booking · {b.get('start_time','?')} · {b.get('sport','')} · {b.get('client_name','')}"} for b in active_bookings]
+                + [{"type": "batch", "id": b["id"], "label": f"Batch · {b.get('name')} · {b.get('start_time','')}-{b.get('end_time','')} · {b.get('sport','')}"} for b in active_batches]
+                + [{"type": "membership", "id": m["id"], "label": f"Membership · {m.get('plan_name','')} (valid till {(m.get('expires_at') or '')[:10]})"} for m in memberships]
+            )
+            if len(options) > 1:
+                return {"ambiguous": True, "customer": {"id": customer["id"], "name": customer.get("name"), "phone": customer.get("phone")}, "options": options}
+            # Only one context — auto-pick it
+            if len(options) == 1:
+                pick = options[0]
+                if pick["type"] == "booking":
+                    booking = await db.private_bookings.find_one({"id": pick["id"], "vendor_id": vendor["id"]}, {"_id": 0}) or await db.vendor_bookings.find_one({"id": pick["id"], "vendor_id": vendor["id"]}, {"_id": 0})
+                elif pick["type"] == "batch":
+                    batch = await db.vendor_batches.find_one({"id": pick["id"], "vendor_id": vendor["id"]}, {"_id": 0})
+
+        if not booking and not batch and not customer:
+            raise HTTPException(404, "No matching booking, batch or customer for that code")
+
+        # -------- Step 2: compute planned end-time --------
+        def _iso_end_from_slot(base_date: str, start_time: str, hours) -> Optional[str]:
+            try:
+                dt = datetime.strptime(f"{base_date} {start_time}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                return (dt + timedelta(hours=float(hours or 0))).isoformat()
+            except Exception:
+                return None
+
+        planned_end = None
+        context = "walkin"
+        if booking:
+            context = "booking"
+            planned_end = _iso_end_from_slot(booking.get("requested_date") or today, booking.get("start_time","00:00"), booking.get("hours", 1))
+        elif batch:
+            context = "batch"
+            try:
+                dt = datetime.strptime(f"{today} {batch.get('end_time','07:00')}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                planned_end = dt.isoformat()
+            except Exception:
+                planned_end = None
+
+        # -------- Step 3: insert check-in --------
         ci = VendorCheckIn(
             vendor_id=vendor["id"],
             booking_id=(booking or {}).get("id"),
+            batch_id=(batch or {}).get("id"),
             customer_id=(customer or {}).get("id") or (booking or {}).get("customer_id"),
+            context=context,
             method=method,
+            planned_end_at=planned_end,
         )
         await db.vendor_checkins.insert_one(ci.model_dump())
-        # Mark booking as checked_in
         if booking:
             await db.private_bookings.update_one({"id": booking["id"]}, {"$set": {"checked_in_at": ci.checked_in_at}})
             await db.vendor_bookings.update_one({"id": booking["id"]}, {"$set": {"checked_in_at": ci.checked_in_at}})
-        return ci
+        return ci.model_dump()
+
+    # -------- Active check-ins (still on-premises) --------
+    @api.get("/vendor/checkins/active")
+    async def list_active_checkins(user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        docs = await db.vendor_checkins.find(
+            {"vendor_id": vendor["id"], "checked_out_at": {"$in": [None, ""]}},
+            {"_id": 0}
+        ).sort("checked_in_at", -1).to_list(200)
+        # Enrich with customer name + context label
+        out = []
+        for d in docs:
+            cust = None
+            if d.get("customer_id"):
+                cust = await db.vendor_customers.find_one({"id": d["customer_id"]}, {"_id": 0, "name": 1, "phone": 1})
+            label = ""
+            if d.get("booking_id"):
+                b = await db.private_bookings.find_one({"id": d["booking_id"]}, {"_id": 0, "start_time": 1, "hours": 1, "sport": 1, "client_name": 1}) or \
+                    await db.vendor_bookings.find_one({"id": d["booking_id"]}, {"_id": 0, "start_time": 1, "hours": 1, "sport": 1})
+                if b:
+                    label = f"Booking · {b.get('start_time','')} · {b.get('sport','')}"
+            elif d.get("batch_id"):
+                bt = await db.vendor_batches.find_one({"id": d["batch_id"]}, {"_id": 0, "name": 1, "start_time": 1, "end_time": 1})
+                if bt:
+                    label = f"Batch · {bt.get('name')} · {bt.get('start_time','')}-{bt.get('end_time','')}"
+            else:
+                label = "Walk-in"
+            out.append({**d, "customer_name": (cust or {}).get("name") or "—", "customer_phone": (cust or {}).get("phone") or "", "label": label})
+        return out
+
+    # -------- Checkout — closes a check-in and computes overrun --------
+    @api.post("/vendor/checkins/{checkin_id}/checkout")
+    async def checkout_customer(checkin_id: str, body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        ci = await db.vendor_checkins.find_one({"id": checkin_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not ci:
+            raise HTTPException(404, "Check-in not found")
+        if ci.get("checked_out_at"):
+            raise HTTPException(400, "Already checked out")
+        now = datetime.now(timezone.utc)
+        planned = ci.get("planned_end_at")
+        overrun_minutes = 0
+        extra_amount = 0.0
+        if planned:
+            try:
+                planned_dt = datetime.fromisoformat(planned)
+                if now > planned_dt:
+                    overrun_minutes = int((now - planned_dt).total_seconds() // 60)
+            except Exception:
+                pass
+
+        # If bill_overrun is requested, generate a supplementary invoice for
+        # the extra hours (rounded up to whole hours) using the booking's
+        # hourly rate.
+        extra_invoice_id = None
+        if overrun_minutes > 0 and body.get("bill_overrun", True) and ci.get("booking_id"):
+            booking = await db.private_bookings.find_one({"id": ci["booking_id"], "vendor_id": vendor["id"]}, {"_id": 0}) \
+                or await db.vendor_bookings.find_one({"id": ci["booking_id"], "vendor_id": vendor["id"]}, {"_id": 0})
+            if booking:
+                hours_billed = booking.get("hours") or 1
+                base_amount = float(booking.get("amount") or booking.get("total") or 0)
+                hourly_rate = float(body.get("hourly_rate") or (base_amount / max(1, hours_billed)))
+                extra_hours = int((overrun_minutes + 59) // 60)  # round up
+                extra_amount = round(extra_hours * hourly_rate, 2)
+                # Create a lightweight extra-invoice record in vendor_invoices
+                if extra_amount > 0:
+                    inv_id = str(uuid.uuid4())
+                    now_iso = now.isoformat()
+                    invoice = {
+                        "id": inv_id,
+                        "vendor_id": vendor["id"],
+                        "customer_id": ci.get("customer_id"),
+                        "booking_id": ci.get("booking_id"),
+                        "parent_checkin_id": ci["id"],
+                        "kind": "overrun",
+                        "line_items": [{"desc": f"Overrun {extra_hours} hr(s) @ {hourly_rate:g}/hr", "qty": extra_hours, "rate": hourly_rate, "amount": extra_amount}],
+                        "subtotal": extra_amount,
+                        "tax": 0,
+                        "total": extra_amount,
+                        "status": "issued",
+                        "issued_at": now_iso,
+                        "created_at": now_iso,
+                    }
+                    await db.vendor_invoices.insert_one(invoice)
+                    extra_invoice_id = inv_id
+
+        update = {
+            "checked_out_at": now.isoformat(),
+            "overrun_minutes": overrun_minutes,
+            "extra_amount": extra_amount,
+            "extra_invoice_id": extra_invoice_id,
+        }
+        await db.vendor_checkins.update_one({"id": checkin_id, "vendor_id": vendor["id"]}, {"$set": update})
+        return {"ok": True, **update}
+
+    # -------- Batch enrolment (book a batch for a customer) --------
+    @api.post("/vendor/batches/{batch_id}/enrol")
+    async def enrol_batch(batch_id: str, body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        batch = await db.vendor_batches.find_one({"id": batch_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not batch:
+            raise HTTPException(404, "Batch not found")
+        customer_id = (body.get("customer_id") or "").strip()
+        if not customer_id:
+            raise HTTPException(400, "customer_id is required")
+        cust = await db.vendor_customers.find_one({"id": customer_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not cust:
+            raise HTTPException(404, "Customer not found in your directory")
+        students = list(batch.get("student_ids") or [])
+        if customer_id in students:
+            raise HTTPException(400, "Customer already enrolled")
+        capacity = int(batch.get("capacity") or 0)
+        if capacity and len(students) >= capacity:
+            raise HTTPException(400, "Batch is full")
+        students.append(customer_id)
+        await db.vendor_batches.update_one({"id": batch_id, "vendor_id": vendor["id"]}, {"$set": {"student_ids": students}})
+        # Notify vendor when the batch just filled up
+        if capacity and len(students) == capacity:
+            try:
+                owner_email = vendor.get("owner_email") or vendor.get("email")
+                if owner_email and callable(send_email):
+                    send_email(owner_email, f"Batch full: {batch.get('name')}", f"Your batch '{batch.get('name')}' just reached its capacity of {capacity} students.")
+            except Exception:
+                pass
+        return {"ok": True, "enrolled": len(students), "capacity": capacity, "full": bool(capacity and len(students) >= capacity)}
+
+    @api.post("/vendor/batches/{batch_id}/unenrol")
+    async def unenrol_batch(batch_id: str, body: dict, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        batch = await db.vendor_batches.find_one({"id": batch_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not batch:
+            raise HTTPException(404, "Batch not found")
+        customer_id = (body.get("customer_id") or "").strip()
+        students = [s for s in (batch.get("student_ids") or []) if s != customer_id]
+        await db.vendor_batches.update_one({"id": batch_id, "vendor_id": vendor["id"]}, {"$set": {"student_ids": students}})
+        return {"ok": True, "enrolled": len(students)}
+
+    @api.get("/vendor/batches/{batch_id}/roster")
+    async def batch_roster(batch_id: str, user: dict = Depends(get_current_user)):
+        vendor = await _ensure_vendor_owner(user)
+        batch = await db.vendor_batches.find_one({"id": batch_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not batch:
+            raise HTTPException(404, "Batch not found")
+        ids = batch.get("student_ids") or []
+        docs = await db.vendor_customers.find({"vendor_id": vendor["id"], "id": {"$in": ids}}, {"_id": 0}).to_list(500)
+        return {"batch": batch, "students": docs}
 
     # -------- Customer detail (visit history + spend) --------
     @api.get("/vendor/customers/{customer_id}")

@@ -46,7 +46,7 @@ export default function OfflineBusinessSuite({ vendor, listings }) {
         <TabsContent value="expenses" className="mt-4"><Expenses /></TabsContent>
         <TabsContent value="reports" className="mt-4"><Reports /></TabsContent>
         <TabsContent value="staff" className="mt-4"><Staff /></TabsContent>
-        <TabsContent value="checkin" className="mt-4"><CheckIn /></TabsContent>
+        <TabsContent value="checkin" className="mt-4"><CheckIn vendor={vendor} /></TabsContent>
       </Tabs>
     </div>
   );
@@ -104,72 +104,253 @@ function DashboardKPIs({ vendor }) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Coaches & Batches
+// Coaches & Batches — CRUD, enrol students, view roster, full notification
 // ─────────────────────────────────────────────────────────────
 function CoachesAndBatches({ vendor, listings }) {
   const [coaches, setCoaches] = useState([]);
   const [batches, setBatches] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [editingCoach, setEditingCoach] = useState(null); // null | {…}
+  const [editingBatch, setEditingBatch] = useState(null);
+  const [rosterBatch, setRosterBatch] = useState(null);
+
   const load = () => {
     api.get("/vendor/coaches").then((r) => setCoaches(r.data || []));
     api.get("/vendor/batches").then((r) => setBatches(r.data || []));
+    api.get("/vendor/customers").then((r) => setCustomers(r.data || [])).catch(() => {});
   };
   useEffect(load, []);
-  const addCoach = async () => {
-    const name = prompt("Coach name?"); if (!name) return;
-    await api.post("/vendor/coaches", { name, phone: prompt("Phone?") || "", sports: (prompt("Sports (comma-sep)?") || "").split(",").map((s) => s.trim()).filter(Boolean), hourly_rate: Number(prompt("Hourly rate?") || 0) });
-    toast.success("Coach added"); load();
+
+  const saveCoach = async (form) => {
+    try {
+      if (form.id) {
+        await api.patch(`/vendor/coaches/${form.id}`, form);
+        toast.success("Coach updated");
+      } else {
+        await api.post("/vendor/coaches", form);
+        toast.success("Coach added");
+      }
+      setEditingCoach(null); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
-  const addBatch = async () => {
-    const name = prompt("Batch name?"); if (!name) return;
-    const coachId = coaches[0]?.id;
-    const listingId = listings[0]?.id;
-    await api.post("/vendor/batches", { name, sport: prompt("Sport?") || "", coach_id: coachId, listing_id: listingId, start_time: prompt("Start (HH:MM)?", "06:00") || "06:00", end_time: prompt("End (HH:MM)?", "07:00") || "07:00", capacity: Number(prompt("Capacity?", "20") || 20), monthly_fee: Number(prompt("Monthly fee?", "2000") || 2000) });
-    toast.success("Batch added"); load();
+
+  const saveBatch = async (form) => {
+    try {
+      if (form.id) {
+        await api.patch(`/vendor/batches/${form.id}`, form);
+        toast.success("Batch updated");
+      } else {
+        await api.post("/vendor/batches", form);
+        toast.success("Batch added");
+      }
+      setEditingBatch(null); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
+
   return (
     <div className="grid md:grid-cols-2 gap-4">
+      {/* Coaches column */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ Coaches ({coaches.length})</div>
-          <Button size="sm" data-testid="obs-coach-add" onClick={addCoach} className="bg-[#EC4899] hover:bg-[#DB2777] text-white rounded-sm h-7"><Plus className="w-3 h-3 mr-1" /> New</Button>
+          <Button size="sm" data-testid="obs-coach-add" onClick={() => setEditingCoach({ name: "", phone: "", email: "", sports: "", hourly_rate: 0 })} className="bg-[#EC4899] hover:bg-[#DB2777] text-white rounded-sm h-7"><Plus className="w-3 h-3 mr-1" /> New</Button>
         </div>
         <div className="space-y-1">
           {coaches.map((c) => (
             <div key={c.id} data-testid={`coach-${c.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-2 flex justify-between items-center">
               <div>
                 <div className="text-sm">{c.name}</div>
-                <div className="text-[10px] font-mono text-neutral-500">{c.phone} · {c.sports.join(", ")} · {fmtPrice(c.hourly_rate, "INR")}/h</div>
+                <div className="text-[10px] font-mono text-neutral-500">{c.phone} · {(c.sports || []).join(", ")} · {fmtPrice(c.hourly_rate, "INR")}/h</div>
               </div>
-              <Button size="sm" variant="ghost" onClick={async () => { await api.delete(`/vendor/coaches/${c.id}`); load(); }} className="text-[#FF3B30]"><Trash2 className="w-3 h-3" /></Button>
+              <div className="flex gap-1">
+                <Button size="sm" variant="ghost" data-testid={`coach-edit-${c.id}`} onClick={() => setEditingCoach({ ...c, sports: (c.sports || []).join(", ") })} className="text-[#06B6D4] h-7 px-2 text-[11px]">Edit</Button>
+                <Button size="sm" variant="ghost" onClick={async () => { if (!window.confirm(`Delete coach ${c.name}?`)) return; await api.delete(`/vendor/coaches/${c.id}`); load(); }} className="text-[#FF3B30] h-7 px-2"><Trash2 className="w-3 h-3" /></Button>
+              </div>
             </div>
           ))}
           {coaches.length === 0 && <div className="text-neutral-500 text-xs">No coaches yet.</div>}
         </div>
       </div>
+
+      {/* Batches column */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ Batches ({batches.length})</div>
-          <Button size="sm" data-testid="obs-batch-add" onClick={addBatch} disabled={coaches.length === 0} className="bg-[#06B6D4] hover:bg-[#0891B2] text-black rounded-sm h-7"><Plus className="w-3 h-3 mr-1" /> New</Button>
+          <Button size="sm" data-testid="obs-batch-add" onClick={() => setEditingBatch({ name: "", sport: "", coach_id: coaches[0]?.id || "", listing_id: listings[0]?.id || "", start_time: "06:00", end_time: "07:00", capacity: 20, monthly_fee: 2000 })} disabled={coaches.length === 0} className="bg-[#06B6D4] hover:bg-[#0891B2] text-black rounded-sm h-7"><Plus className="w-3 h-3 mr-1" /> New</Button>
         </div>
         <div className="space-y-1">
           {batches.map((b) => {
             const coachName = coaches.find((c) => c.id === b.coach_id)?.name || "—";
+            const enrolled = b.student_ids?.length || 0;
+            const isFull = b.capacity && enrolled >= b.capacity;
             return (
-              <div key={b.id} data-testid={`batch-${b.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-2 flex justify-between items-center">
-                <div>
-                  <div className="text-sm">{b.name}</div>
-                  <div className="text-[10px] font-mono text-neutral-500">{b.start_time}–{b.end_time} · coach {coachName} · {b.student_ids?.length || 0}/{b.capacity} · {fmtPrice(b.monthly_fee, "INR")}/mo</div>
+              <div key={b.id} data-testid={`batch-${b.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm flex items-center gap-2">
+                      {b.name}
+                      {isFull && <span data-testid={`batch-full-${b.id}`} className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-sm bg-[#FF3B30]/20 text-[#FF3B30] border border-[#FF3B30]/40">FULL</span>}
+                    </div>
+                    <div className="text-[10px] font-mono text-neutral-500">{b.start_time}–{b.end_time} · coach {coachName} · {enrolled}/{b.capacity} · {fmtPrice(b.monthly_fee, "INR")}/mo</div>
+                  </div>
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="ghost" data-testid={`batch-roster-${b.id}`} onClick={() => setRosterBatch(b)} className="text-[#84CC16] h-7 px-2 text-[11px]">Roster</Button>
+                    <Button size="sm" variant="ghost" data-testid={`batch-edit-${b.id}`} onClick={() => setEditingBatch(b)} className="text-[#06B6D4] h-7 px-2 text-[11px]">Edit</Button>
+                    <Button size="sm" variant="ghost" onClick={async () => { if (!window.confirm(`Delete batch ${b.name}?`)) return; await api.delete(`/vendor/batches/${b.id}`); load(); }} className="text-[#FF3B30] h-7 px-2"><Trash2 className="w-3 h-3" /></Button>
+                  </div>
                 </div>
-                <Button size="sm" variant="ghost" onClick={async () => { await api.delete(`/vendor/batches/${b.id}`); load(); }} className="text-[#FF3B30]"><Trash2 className="w-3 h-3" /></Button>
               </div>
             );
           })}
           {batches.length === 0 && <div className="text-neutral-500 text-xs">No batches yet — add a coach first.</div>}
         </div>
       </div>
+
+      <CoachDialog open={!!editingCoach} initial={editingCoach} onClose={() => setEditingCoach(null)} onSave={saveCoach} />
+      <BatchDialog open={!!editingBatch} initial={editingBatch} onClose={() => setEditingBatch(null)} onSave={saveBatch} coaches={coaches} listings={listings} />
+      <BatchRosterDialog open={!!rosterBatch} batch={rosterBatch} customers={customers} onClose={() => { setRosterBatch(null); load(); }} />
     </div>
   );
 }
+
+function CoachDialog({ open, initial, onClose, onSave }) {
+  const [f, setF] = useState({});
+  useEffect(() => { setF(initial || {}); }, [initial]);
+  if (!open) return null;
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="bg-[#0c0c0c] border-white/10 text-white">
+        <DialogHeader><DialogTitle>{f.id ? "Edit coach" : "New coach"}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <Input data-testid="coach-form-name" placeholder="Full name" value={f.name || ""} onChange={(e) => setF({ ...f, name: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          <Input data-testid="coach-form-phone" placeholder="Phone" value={f.phone || ""} onChange={(e) => setF({ ...f, phone: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          <Input data-testid="coach-form-email" placeholder="Email" value={f.email || ""} onChange={(e) => setF({ ...f, email: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          <Input data-testid="coach-form-sports" placeholder="Sports (comma-separated: cricket, football)" value={f.sports || ""} onChange={(e) => setF({ ...f, sports: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          <Input data-testid="coach-form-rate" placeholder="Hourly rate (INR)" type="number" value={f.hourly_rate ?? 0} onChange={(e) => setF({ ...f, hourly_rate: Number(e.target.value) })} className="bg-black/40 border-white/10 text-white" />
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button data-testid="coach-form-save" onClick={() => onSave({ ...f, sports: typeof f.sports === "string" ? f.sports.split(",").map((s) => s.trim()).filter(Boolean) : (f.sports || []) })} className="bg-[#EC4899] hover:bg-[#DB2777] text-white">Save</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BatchDialog({ open, initial, onClose, onSave, coaches, listings }) {
+  const [f, setF] = useState({});
+  useEffect(() => { setF(initial || {}); }, [initial]);
+  if (!open) return null;
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="bg-[#0c0c0c] border-white/10 text-white">
+        <DialogHeader><DialogTitle>{f.id ? "Edit batch" : "New batch"}</DialogTitle></DialogHeader>
+        <div className="space-y-3">
+          <Input data-testid="batch-form-name" placeholder="Batch name (Morning batch, U-14 …)" value={f.name || ""} onChange={(e) => setF({ ...f, name: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          <Input data-testid="batch-form-sport" placeholder="Sport" value={f.sport || ""} onChange={(e) => setF({ ...f, sport: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          <Select value={f.coach_id || ""} onValueChange={(v) => setF({ ...f, coach_id: v })}>
+            <SelectTrigger data-testid="batch-form-coach" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Assign coach" /></SelectTrigger>
+            <SelectContent className="bg-[#0c0c0c] text-white border-white/10">
+              {coaches.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={f.listing_id || ""} onValueChange={(v) => setF({ ...f, listing_id: v })}>
+            <SelectTrigger data-testid="batch-form-listing" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Attach to listing (optional)" /></SelectTrigger>
+            <SelectContent className="bg-[#0c0c0c] text-white border-white/10">
+              {listings.map((l) => <SelectItem key={l.id} value={l.id}>{l.title}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <div className="grid grid-cols-2 gap-2">
+            <Input data-testid="batch-form-start" placeholder="Start (06:00)" value={f.start_time || ""} onChange={(e) => setF({ ...f, start_time: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+            <Input data-testid="batch-form-end" placeholder="End (07:00)" value={f.end_time || ""} onChange={(e) => setF({ ...f, end_time: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input data-testid="batch-form-capacity" type="number" placeholder="Capacity" value={f.capacity ?? 20} onChange={(e) => setF({ ...f, capacity: Number(e.target.value) })} className="bg-black/40 border-white/10 text-white" />
+            <Input data-testid="batch-form-fee" type="number" placeholder="Monthly fee (INR)" value={f.monthly_fee ?? 0} onChange={(e) => setF({ ...f, monthly_fee: Number(e.target.value) })} className="bg-black/40 border-white/10 text-white" />
+          </div>
+        </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button data-testid="batch-form-save" onClick={() => onSave(f)} className="bg-[#06B6D4] hover:bg-[#0891B2] text-black">Save</Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function BatchRosterDialog({ open, batch, customers, onClose }) {
+  const [roster, setRoster] = useState([]);
+  const [pick, setPick] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const reload = async () => {
+    if (!batch?.id) return;
+    const { data } = await api.get(`/vendor/batches/${batch.id}/roster`);
+    setRoster(data.students || []);
+  };
+  useEffect(() => { if (open && batch?.id) reload(); /* eslint-disable-next-line */ }, [open, batch?.id]);
+
+  if (!open || !batch) return null;
+  const capacity = batch.capacity || 0;
+  const isFull = capacity && roster.length >= capacity;
+
+  const enrol = async () => {
+    if (!pick) return;
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/vendor/batches/${batch.id}/enrol`, { customer_id: pick });
+      if (data.full) toast.info("Batch is now full — you may want to open a waitlist");
+      else toast.success("Enrolled");
+      setPick(""); reload();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+    finally { setBusy(false); }
+  };
+  const unenrol = async (cid) => {
+    if (!window.confirm("Remove this student from the batch?")) return;
+    await api.post(`/vendor/batches/${batch.id}/unenrol`, { customer_id: cid });
+    toast.success("Removed"); reload();
+  };
+  const available = customers.filter((c) => !roster.some((r) => r.id === c.id));
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="bg-[#0c0c0c] border-white/10 text-white max-w-lg">
+        <DialogHeader><DialogTitle>{batch.name} · Roster</DialogTitle></DialogHeader>
+        <div className="text-[10px] font-mono uppercase text-neutral-500">{roster.length}/{capacity} enrolled {isFull && <span className="text-[#FF3B30]">· FULL</span>}</div>
+
+        <div className="mt-3 border border-white/10 rounded-sm max-h-64 overflow-auto divide-y divide-white/5">
+          {roster.length === 0 && <div className="p-3 text-neutral-500 text-xs">No students enrolled yet.</div>}
+          {roster.map((s) => (
+            <div key={s.id} data-testid={`roster-row-${s.id}`} className="p-2 flex items-center justify-between">
+              <div>
+                <div className="text-sm">{s.name}</div>
+                <div className="text-[10px] font-mono text-neutral-500">{s.phone}</div>
+              </div>
+              <Button size="sm" variant="ghost" onClick={() => unenrol(s.id)} className="text-[#FF3B30] h-7 px-2"><Trash2 className="w-3 h-3" /></Button>
+            </div>
+          ))}
+        </div>
+
+        {!isFull && (
+          <div className="mt-3 flex items-end gap-2">
+            <div className="flex-1">
+              <div className="font-mono text-[10px] uppercase text-neutral-500 mb-1">/ Enrol a customer</div>
+              <Select value={pick} onValueChange={setPick}>
+                <SelectTrigger data-testid="roster-pick" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Pick from your directory" /></SelectTrigger>
+                <SelectContent className="bg-[#0c0c0c] text-white border-white/10 max-h-64">
+                  {available.map((c) => <SelectItem key={c.id} value={c.id}>{c.name} — {c.phone}</SelectItem>)}
+                  {available.length === 0 && <div className="p-2 text-neutral-500 text-xs">No more customers to enrol.</div>}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button data-testid="roster-enrol" disabled={!pick || busy} onClick={enrol} className="bg-[#84CC16] hover:bg-[#65A30D] text-black">Enrol</Button>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
 // ─────────────────────────────────────────────────────────────
 // Slot blocks
@@ -415,35 +596,180 @@ function Staff() {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Check-in (QR / booking-id / phone)
+// Check-in — QR poster + list of currently on-premise + countdown +
+// checkout with automatic overrun-billing + ambiguity picker.
 // ─────────────────────────────────────────────────────────────
-function CheckIn() {
+function CheckIn({ vendor }) {
   const [code, setCode] = useState("");
   const [last, setLast] = useState(null);
-  const submit = async () => {
-    if (!code.trim()) return;
+  const [ambiguous, setAmbiguous] = useState(null); // {customer, options}
+  const [active, setActive] = useState([]);
+  const [showPoster, setShowPoster] = useState(false);
+  const [_tick, setTick] = useState(0);
+
+  const loadActive = () => {
+    api.get("/vendor/checkins/active").then((r) => setActive(r.data || [])).catch(() => {});
+  };
+  useEffect(() => {
+    loadActive();
+    // Client-side countdown tick — every 30s recompute time-remaining labels
+    const t = setInterval(() => setTick((x) => x + 1), 30000);
+    return () => clearInterval(t);
+  }, []);
+
+  const submit = async (opts = {}) => {
+    if (!code.trim() && !opts.context_type) return;
     try {
-      const { data } = await api.post("/vendor/checkin", { code: code.trim(), method: "manual" });
-      setLast(data); setCode(""); toast.success("Checked in");
+      const body = { code: code.trim(), method: "manual", ...opts };
+      const { data } = await api.post("/vendor/checkin", body);
+      if (data.ambiguous) {
+        setAmbiguous(data);
+        return;
+      }
+      setLast(data); setCode(""); setAmbiguous(null);
+      toast.success("Checked in");
+      loadActive();
     } catch (e) { toast.error(e.response?.data?.detail || "Not found"); }
   };
+
+  const pickOption = (opt) => {
+    submit({ context_type: opt.type, context_id: opt.id });
+  };
+
+  const checkout = async (ci) => {
+    if (!window.confirm("Confirm checkout?")) return;
+    try {
+      const { data } = await api.post(`/vendor/checkins/${ci.id}/checkout`, { bill_overrun: true });
+      if (data.overrun_minutes > 0 && data.extra_amount > 0) {
+        toast.warning(`Overrun ${data.overrun_minutes} min — extra invoice for ${fmtPrice(data.extra_amount, "INR")} generated.`);
+      } else {
+        toast.success("Checked out");
+      }
+      loadActive();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+  };
+
+  // Vendor QR poster — encodes the vendor's public site URL. Anyone scanning
+  // lands on Kreeda Nation, then picks a listing to browse/book.
+  const base = typeof window !== "undefined" ? window.location.origin : "";
+  const posterUrl = `${base}/vendors/${vendor?.id || "unknown"}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=280x280&data=${encodeURIComponent(posterUrl)}`;
+
+  const remaining = (planned) => {
+    if (!planned) return { text: "—", warn: false };
+    const p = new Date(planned).getTime();
+    const now = Date.now();
+    const diff = p - now;
+    if (diff < 0) {
+      const over = Math.floor(-diff / 60000);
+      return { text: `Overdue ${over}m`, warn: true };
+    }
+    const mins = Math.floor(diff / 60000);
+    const hh = Math.floor(mins / 60);
+    const mm = mins % 60;
+    return { text: `${hh > 0 ? `${hh}h ` : ""}${mm}m left`, warn: mins <= 5 };
+  };
+
   return (
-    <div className="max-w-md space-y-3">
-      <div className="border border-white/10 rounded-sm bg-[#141414] p-4">
-        <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-2">/ Check-in in &lt; 5 seconds</div>
-        <p className="text-xs text-neutral-400 mb-3">Scan the QR code, type the booking ID, or enter the customer&apos;s phone number.</p>
-        <div className="flex gap-2">
-          <Input autoFocus data-testid="checkin-code" placeholder="Booking ID or phone" value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} className="bg-black/40 border-white/10 text-white" />
-          <Button data-testid="checkin-submit" onClick={submit} className="bg-[#84CC16] hover:bg-[#65A30D] text-black rounded-sm"><QrCode className="w-4 h-4 mr-1" /> Check-in</Button>
+    <div className="grid md:grid-cols-2 gap-4">
+      {/* Left: QR check-in input + QR poster */}
+      <div className="space-y-3">
+        <div className="border border-white/10 rounded-sm bg-[#141414] p-4">
+          <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-2">/ Check-in in &lt; 5 seconds</div>
+          <p className="text-xs text-neutral-400 mb-3">Scan the customer&apos;s booking QR, or type booking ID / phone number below.</p>
+          <div className="flex gap-2">
+            <Input autoFocus data-testid="checkin-code" placeholder="Booking ID or phone" value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()} className="bg-black/40 border-white/10 text-white" />
+            <Button data-testid="checkin-submit" onClick={() => submit()} className="bg-[#84CC16] hover:bg-[#65A30D] text-black rounded-sm"><QrCode className="w-4 h-4 mr-1" /> Check-in</Button>
+          </div>
+        </div>
+
+        {last && (
+          <div className="border border-[#84CC16]/40 rounded-sm bg-[#84CC16]/5 p-3 text-sm">
+            <div className="text-[#84CC16] font-mono uppercase text-[10px]">Last check-in · {last.context}</div>
+            <div className="text-white mt-1">{last.method} · {new Date(last.checked_in_at).toLocaleTimeString()}</div>
+            {last.booking_id && <div className="text-neutral-400 text-xs font-mono">Booking {last.booking_id.slice(0, 8)}…</div>}
+            {last.batch_id && <div className="text-neutral-400 text-xs font-mono">Batch {last.batch_id.slice(0, 8)}…</div>}
+          </div>
+        )}
+
+        {/* Vendor QR poster */}
+        <div data-testid="checkin-qr-block" className="border border-white/10 rounded-sm bg-[#141414] p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ Your check-in QR poster</div>
+            <Button size="sm" data-testid="checkin-print-poster" variant="ghost" onClick={() => setShowPoster(true)} className="h-7 text-[11px] text-[#06B6D4]">Print / preview</Button>
+          </div>
+          <div className="flex items-center gap-3">
+            <img data-testid="checkin-qr-image" src={qrSrc} alt="QR poster" className="w-28 h-28 rounded-sm bg-white p-1" />
+            <div className="text-xs text-neutral-400">
+              Print this and mount at your reception. Customers scan it → land on your public listing page → confirm booking on their phone.
+              <div className="mt-2 font-mono text-[10px] text-neutral-500 break-all">{posterUrl}</div>
+            </div>
+          </div>
         </div>
       </div>
-      {last && (
-        <div className="border border-[#84CC16]/40 rounded-sm bg-[#84CC16]/5 p-3 text-sm">
-          <div className="text-[#84CC16] font-mono uppercase text-[10px]">Last check-in</div>
-          <div className="text-white mt-1">{last.method} · {new Date(last.checked_in_at).toLocaleTimeString()}</div>
-          {last.booking_id && <div className="text-neutral-400 text-xs font-mono">Booking {last.booking_id.slice(0, 8)}…</div>}
+
+      {/* Right: Currently on-premise list */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ Currently on premises ({active.length})</div>
+          <Button size="sm" variant="ghost" onClick={loadActive} className="text-[#06B6D4] h-7 px-2 text-[11px]">Refresh</Button>
         </div>
-      )}
+        <div className="space-y-2 max-h-[440px] overflow-auto">
+          {active.length === 0 && <div className="text-neutral-500 text-xs italic">Nobody checked in right now.</div>}
+          {active.map((ci) => {
+            const r = remaining(ci.planned_end_at);
+            return (
+              <div key={ci.id} data-testid={`active-checkin-${ci.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="text-sm">{ci.customer_name}</div>
+                    <div className="text-[10px] font-mono text-neutral-500">{ci.label || "Walk-in"} · in @ {new Date(ci.checked_in_at).toLocaleTimeString()}</div>
+                  </div>
+                  <div className={`text-[10px] font-mono uppercase tracking-widest px-2 py-1 rounded-sm ${r.warn ? "bg-[#FF3B30]/20 text-[#FF3B30] border border-[#FF3B30]/40" : "bg-black/40 text-neutral-300 border border-white/10"}`}>{r.text}</div>
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <Button size="sm" data-testid={`checkout-${ci.id}`} onClick={() => checkout(ci)} className="bg-[#84CC16] hover:bg-[#65A30D] text-black h-7 text-[11px] rounded-sm">Check out</Button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Ambiguity picker */}
+      <Dialog open={!!ambiguous} onOpenChange={() => setAmbiguous(null)}>
+        <DialogContent className="bg-[#0c0c0c] border-white/10 text-white">
+          <DialogHeader><DialogTitle>Which one is {ambiguous?.customer?.name} here for?</DialogTitle></DialogHeader>
+          <p className="text-xs text-neutral-400 mb-2">Multiple active contexts found — pick one to check them in.</p>
+          <div className="space-y-2 max-h-72 overflow-auto">
+            {(ambiguous?.options || []).map((opt, i) => (
+              <button
+                key={i}
+                data-testid={`checkin-opt-${opt.type}-${opt.id}`}
+                onClick={() => pickOption(opt)}
+                className="w-full text-left border border-white/10 rounded-sm bg-black/40 hover:bg-[#84CC16] hover:text-black transition-colors p-3"
+              >
+                <div className="font-mono text-[10px] uppercase tracking-widest opacity-70">{opt.type}</div>
+                <div className="text-sm mt-1">{opt.label}</div>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Poster preview modal */}
+      <Dialog open={showPoster} onOpenChange={() => setShowPoster(false)}>
+        <DialogContent className="bg-white text-black max-w-md">
+          <div className="text-center p-4">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-2">SCAN TO CHECK IN</div>
+            <div className="text-xl font-semibold mb-3">{vendor?.business_name || "Your venue"}</div>
+            <img src={qrSrc.replace("280x280", "500x500")} alt="QR poster preview" className="mx-auto rounded" />
+            <div className="mt-3 text-xs text-neutral-600">Powered by Kreeda Nation</div>
+            <Button data-testid="poster-print-btn" onClick={() => window.print()} className="mt-4 bg-black text-white hover:bg-neutral-800">Print</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

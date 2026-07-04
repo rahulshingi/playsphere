@@ -223,6 +223,16 @@ export default function VendorMarket() {
                       </div>
                       {l.sports?.length > 0 && <div className="text-[10px] font-mono uppercase text-neutral-400">{l.sports.slice(0, 3).join(" · ")}</div>}
                     </div>
+                    <div className="mt-3 pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-mono uppercase tracking-widest">
+                      <button
+                        data-testid={`vm-details-${l.id}`}
+                        onClick={(e) => { e.stopPropagation(); window.open(`/vendor-listing/${l.id}`, "_blank", "noopener"); }}
+                        className="text-[#06B6D4] hover:text-white transition-colors"
+                      >
+                        View details →
+                      </button>
+                      <span className="text-neutral-500">Tap card to book</span>
+                    </div>
                   </div>
                 </button>
               ))}

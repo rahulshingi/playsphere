@@ -640,3 +640,32 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - **Player manual** gained a bullet list documenting the /bookings + /my-memberships + share flows.
 - **Organiser coverage**: organisers already receive `isCompanyAdmin=true` in `AuthContext.jsx`, so all HR/company_admin capabilities (dashboard, /hire, /bookings, /my-memberships, sponsor inbox) already apply. No extra plumbing needed.
 - Verified end-to-end via curl (player login → create booking → cancel → 200, reschedule → 200) and Playwright (`/bookings` shows heading, hire CTA, Cancel+Reschedule buttons).
+
+## Feb 2026 — Vendor productivity: CSV export, check-in v2, batches roster
+### Backend (`routes/business.py`)
+- **`GET /api/vendor/customers.csv`** — streaming CSV export with columns: Name, Phone, Email, Address, GSTIN, Visits, Total paid, Outstanding, Notes, Created at. Filename auto-tags date + vendor id prefix.
+- **`POST /api/vendor/checkin`** rewritten:
+  - Detects ambiguity — when a customer_id matches multiple active contexts (booking today + batch running today + active membership), returns `{ambiguous: true, options: [...]}` for the vendor to disambiguate; client retries with `context_type + context_id`.
+  - New fields on `VendorCheckIn`: `batch_id`, `context` (booking|batch|membership|walkin), `planned_end_at`, `checked_out_at`, `overrun_minutes`, `extra_amount`, `extra_invoice_id`.
+  - Auto-picks the single context if only one candidate exists.
+- **`GET /api/vendor/checkins/active`** — list of check-ins with `checked_out_at is null`, enriched with `customer_name`, `customer_phone`, `label` (Batch · X · time OR Booking · X · sport OR Walk-in).
+- **`POST /api/vendor/checkins/{id}/checkout`** — closes a check-in, computes `overrun_minutes = now - planned_end_at`. When `bill_overrun=true` + booking-context + positive overrun → mints a supplementary `vendor_invoices` record (`kind=overrun`, `parent_checkin_id`) at the same hourly rate. Batches skip auto-invoicing (monthly-fee model).
+- **`POST /api/vendor/batches/{id}/enrol`** — adds a customer_id to `student_ids`; rejects duplicates + capacity overflow; **sends `send_email` to vendor owner the moment capacity is hit**.
+- **`POST /api/vendor/batches/{id}/unenrol`** — remove customer.
+- **`GET /api/vendor/batches/{id}/roster`** — returns `{batch, students: [VendorCustomer]}` with names/phones for the roster UI.
+
+### Frontend
+- **`OfflineBusinessSuite.jsx`**:
+  - **`CheckIn` component rewritten** — split panel: left = code input + last-check-in card + **visible QR poster** (image via `api.qrserver.com`, print/preview modal); right = "Currently on premises" list with client-side countdown ticking every 30s. Row goes red when `≤5 min` remaining or overdue. Every row has a `Check out` button that surfaces the overrun toast + auto-invoice notification.
+  - **Ambiguity picker** — modal dialog listing all candidate contexts as clickable cards (`data-testid=checkin-opt-{type}-{id}`); tapping one retries the check-in with the explicit context.
+  - **`CoachesAndBatches` rewritten** — replaces `prompt()` with proper `Dialog`-based create/edit forms. Batches show a red **FULL** badge when at capacity; each batch has **Roster / Edit / Delete** buttons.
+  - **`BatchRosterDialog`** — enrol from the vendor's customer directory, remove students, live capacity indicator.
+- **`PrivateBookingsPanel.jsx`** — added an **Export CSV** button on the Customers tab that hits `/api/vendor/customers.csv` directly (browser handles the download).
+- **`VendorMarket.jsx`** — every listing card now has a **View details →** link (opens `/vendor-listing/{id}` in a new tab) so the public share/detail page becomes discoverable from /hire. Existing "Tap card to book" behaviour preserved.
+
+### Manuals
+- Vendor manual gained bullets for check-in v2 (QR poster, ambiguity, overrun invoice), coach/batch editor, CSV export. 7 PDFs regenerated.
+
+### Verification (Feb 2026)
+- **Curl**: coach create → customer create → batch create (cap=2) → enrol → roster shows 1 student → check-in via customer_id → auto-picks batch context → active list shows Alice with `planned_end_at` → checkout returns `overrun_minutes=383` (correct math), active list clears.
+- **Playwright**: vendor login → offline biz → Check-in tab shows QR image + "Currently on premises (0)".

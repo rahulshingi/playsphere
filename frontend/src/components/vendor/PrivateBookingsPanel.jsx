@@ -221,9 +221,18 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
         </TabsContent>
 
         <TabsContent value="customers" className="mt-4">
-          <Button data-testid="pb-new-customer" onClick={() => setShowCustomer(true)} className="mb-3 bg-[#EC4899] hover:bg-[#db2777] text-white font-semibold rounded-sm">
-            <Plus className="w-4 h-4 mr-1" /> New customer
-          </Button>
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <Button data-testid="pb-new-customer" onClick={() => setShowCustomer(true)} className="bg-[#EC4899] hover:bg-[#db2777] text-white font-semibold rounded-sm">
+              <Plus className="w-4 h-4 mr-1" /> New customer
+            </Button>
+            <a
+              data-testid="pb-cust-export"
+              href={`${process.env.REACT_APP_BACKEND_URL}/api/vendor/customers.csv`}
+              className="inline-flex items-center gap-1 h-9 px-3 rounded-sm bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold text-sm"
+            >
+              Export CSV ({customers.length})
+            </a>
+          </div>
           {customers.length === 0 ? (
             <div className="text-neutral-500 text-sm text-center py-8 border border-dashed border-white/10 rounded-sm">No customers yet.</div>
           ) : (

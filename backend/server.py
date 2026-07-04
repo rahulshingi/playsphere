@@ -772,6 +772,13 @@ class VendorBookingRequest(BaseModel):
     sport: Optional[str] = None
     notes: Optional[str] = ""
     apply_membership_id: Optional[str] = None  # buyer wants to use this active membership
+    # ---- Optional weekly recurrence (Phase 6) --------------------------------
+    # When set, the server EXPANDS this single request into one booking row per
+    # matching date from `requested_date` .. `recurrence_until` inclusive, so the
+    # buyer can cancel / reschedule each occurrence independently.
+    recurrence: Optional[str] = None  # None | "weekly"
+    recurrence_until: Optional[str] = None  # YYYY-MM-DD (inclusive)
+    recurrence_days_of_week: List[int] = Field(default_factory=list)  # 0=Mon..6=Sun
 
 
 class VendorBooking(BaseModel):
@@ -805,6 +812,10 @@ class VendorBooking(BaseModel):
     refund_amount: Optional[float] = None
     refund_reason: Optional[str] = None
     applied_membership_id: Optional[str] = None  # if set, slot was paid via membership
+    # Recurrence linkage — populated when this booking is one occurrence of a
+    # weekly-recurring booking. All occurrences share the same group id so the
+    # /bookings tab can show them as a series.
+    recurrence_group_id: Optional[str] = None
     # Business-model fields:
     #   offline_source=True when the buyer is a player whose offline_source_vendor_id
     #   matches this listing's vendor. Commission is then skipped.
@@ -1931,7 +1942,7 @@ async def _require_vendor_buyer(user: dict = Depends(get_current_user)) -> dict:
     return user
 
 
-@api.post("/vendor-bookings", response_model=VendorBooking)
+@api.post("/vendor-bookings")
 async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depends(_require_vendor_buyer)):
     listing = await db.vendor_listings.find_one({"id": body.listing_id, "approved": True, "active": True}, {"_id": 0})
     if not listing:
@@ -1991,38 +2002,80 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         commission_percent = 0
     commission_amount = round(float(total_price) * commission_percent / 100.0, 2)
 
-    booking = VendorBooking(
-        listing_id=listing["id"], listing_title=listing["title"],
-        vendor_id=listing["vendor_id"], vendor_type=listing["vendor_type"],
-        company_id=user.get("company_id") or "",
-        company_name=(company or {}).get("name") or user.get("name") or user.get("email") or "Player",
-        requested_date=body.requested_date, start_time=body.start_time, end_time=end_time,
-        hours=hours, sport=sport, city=listing.get("city"), sub_unit_id=body.sub_unit_id,
-        price=price, currency=listing.get("currency", "INR"), total=total_price,
-        notes=body.notes or "", created_by=user["id"], hr_email=user.get("email"),
-        applied_membership_id=applied_membership_id,
-        offline_source=offline_source,
-        commission_percent=commission_percent,
-        commission_amount=commission_amount,
-    )
-    payload = booking.model_dump()
-    payload["notifications"] = [_booking_notification(
-        "created",
-        (f"Request submitted for {listing['title']} on {body.requested_date} {body.start_time} ({hours}h)."
-         + (" Paid via membership." if applied_membership_id else "")),
-        user,
-    )]
-    await db.vendor_bookings.insert_one(payload)
-    # Increment usage counter on the membership (best-effort)
-    if applied_membership_id:
-        await db.membership_purchases.update_one(
-            {"id": applied_membership_id}, {"$inc": {"bookings_used": 1}}
+    # -------- Compute the list of dates to create bookings for --------
+    # For a plain booking this is `[requested_date]`. For a weekly recurring
+    # booking, we expand into one date per matching weekday from
+    # requested_date through recurrence_until (inclusive).
+    dates: List[str] = []
+    if body.recurrence == "weekly" and body.recurrence_until:
+        try:
+            first = datetime.strptime(body.requested_date, "%Y-%m-%d").date()
+            until = datetime.strptime(body.recurrence_until, "%Y-%m-%d").date()
+        except Exception:
+            raise HTTPException(400, "Invalid requested_date or recurrence_until (use YYYY-MM-DD)")
+        if until < first:
+            raise HTTPException(400, "recurrence_until must be on or after requested_date")
+        days = set(body.recurrence_days_of_week or [first.weekday()])
+        d = first
+        one_day = timedelta(days=1)
+        while d <= until:
+            if d.weekday() in days:
+                dates.append(d.strftime("%Y-%m-%d"))
+            d += one_day
+        if not dates:
+            raise HTTPException(400, "Recurrence produced zero occurrences — check days_of_week vs date range")
+        if len(dates) > 52:
+            raise HTTPException(400, "Recurrence limited to 52 occurrences at a time — please split into shorter series")
+    else:
+        dates = [body.requested_date]
+
+    group_id = str(uuid.uuid4()) if len(dates) > 1 else None
+    created: List[dict] = []
+    for i, dt in enumerate(dates):
+        # Membership can only pay for the FIRST occurrence — subsequent
+        # occurrences fall back to hourly pricing so the buyer isn't accidentally
+        # billed against a single membership counter for 4 slots.
+        this_price = total_price if i == 0 else (price * hours)
+        this_membership = applied_membership_id if i == 0 else None
+        this_commission = round(float(this_price) * commission_percent / 100.0, 2)
+        booking = VendorBooking(
+            listing_id=listing["id"], listing_title=listing["title"],
+            vendor_id=listing["vendor_id"], vendor_type=listing["vendor_type"],
+            company_id=user.get("company_id") or "",
+            company_name=(company or {}).get("name") or user.get("name") or user.get("email") or "Player",
+            requested_date=dt, start_time=body.start_time, end_time=end_time,
+            hours=hours, sport=sport, city=listing.get("city"), sub_unit_id=body.sub_unit_id,
+            price=price, currency=listing.get("currency", "INR"), total=this_price,
+            notes=body.notes or "", created_by=user["id"], hr_email=user.get("email"),
+            applied_membership_id=this_membership,
+            offline_source=offline_source,
+            commission_percent=commission_percent if not this_membership else 0,
+            commission_amount=this_commission if not this_membership else 0,
+            recurrence_group_id=group_id,
         )
+        payload = booking.model_dump()
+        payload["notifications"] = [_booking_notification(
+            "created",
+            (f"Request submitted for {listing['title']} on {dt} {body.start_time} ({hours}h)."
+             + (" Paid via membership." if this_membership else "")
+             + (f" · Series {i+1}/{len(dates)}." if group_id else "")),
+            user,
+        )]
+        await db.vendor_bookings.insert_one(payload)
+        created.append(payload)
+        if this_membership:
+            await db.membership_purchases.update_one(
+                {"id": this_membership}, {"$inc": {"bookings_used": 1}}
+            )
     logger.warning(
-        "BOOKING NOTIFICATION for %s | booking=%s | created — Request submitted for %s on %s %s (%sh).",
-        user.get("email"), booking.id, listing["title"], body.requested_date, body.start_time, hours,
+        "BOOKING NOTIFICATION for %s | series=%s | count=%d | listing=%s",
+        user.get("email"), group_id, len(created), listing["title"],
     )
-    return VendorBooking(**payload)
+    # For a single booking, keep the legacy shape (single object). For a
+    # recurring series, return a summary so the client can show the count.
+    if group_id:
+        return {"recurrence_group_id": group_id, "count": len(created), "bookings": [VendorBooking(**b).model_dump() for b in created]}
+    return VendorBooking(**created[0])
 
 
 def _mask_for_vendor(doc: dict) -> dict:

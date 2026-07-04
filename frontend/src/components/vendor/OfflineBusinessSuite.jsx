@@ -99,6 +99,29 @@ function DashboardKPIs({ vendor }) {
             </div>
           )}
       </div>
+
+      {/* Top customers by lifetime spend */}
+      <div data-testid="kpi-top-customers" className="border border-[#FACC15]/40 bg-[#FACC15]/5 rounded-sm p-4">
+        <div className="font-mono text-[10px] uppercase tracking-widest text-[#FACC15] mb-2">/ Top customers · lifetime value</div>
+        {(d.top_customers || []).length === 0
+          ? <div className="text-neutral-500 text-sm">Once you have paid invoices, your top 20 customers will show here — perfect for personalised offers.</div>
+          : (
+            <div className="grid md:grid-cols-2 gap-2">
+              {d.top_customers.map((c, i) => (
+                <div key={c.id} data-testid={`top-cust-${c.id}`} className="flex items-center justify-between border border-white/10 rounded-sm bg-black/40 p-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-[10px] w-6 text-center text-[#FACC15]">#{i + 1}</span>
+                    <div className="min-w-0">
+                      <div className="text-sm truncate">{c.name}</div>
+                      <div className="text-[10px] font-mono text-neutral-500">{c.phone || "—"} · {c.invoices} inv</div>
+                    </div>
+                  </div>
+                  <div className="font-mono text-sm text-[#84CC16] shrink-0">{fmtPrice(c.total_spent, "INR")}</div>
+                </div>
+              ))}
+            </div>
+          )}
+      </div>
     </div>
   );
 }

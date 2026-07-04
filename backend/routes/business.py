@@ -1651,6 +1651,30 @@ def register(api, db, deps):
         # New leads (last 7 days)
         seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
         new_leads_count = await db.venue_leads.count_documents({"created_at": {"$gte": seven_days_ago}})
+        # -------- Top 20 customers by lifetime spend (paid invoices only) --------
+        pipeline = [
+            {"$match": {"vendor_id": vid, "status": "paid"}},
+            {"$group": {"_id": "$customer_id", "spent": {"$sum": "$total"}, "invoices": {"$sum": 1}}},
+            {"$sort": {"spent": -1}},
+            {"$limit": 20},
+        ]
+        try:
+            top_agg = await db.vendor_invoices.aggregate(pipeline).to_list(20)
+        except Exception:
+            top_agg = []
+        top_cust_ids = [t["_id"] for t in top_agg if t["_id"]]
+        cust_docs = await db.vendor_customers.find(
+            {"vendor_id": vid, "id": {"$in": top_cust_ids}}, {"_id": 0, "id": 1, "name": 1, "phone": 1}
+        ).to_list(100) if top_cust_ids else []
+        cust_map = {c["id"]: c for c in cust_docs}
+        top_customers = [{
+            "id": t["_id"],
+            "name": (cust_map.get(t["_id"]) or {}).get("name") or "(walk-in)",
+            "phone": (cust_map.get(t["_id"]) or {}).get("phone") or "",
+            "total_spent": round(float(t["spent"] or 0), 2),
+            "invoices": int(t["invoices"] or 0),
+        } for t in top_agg if t["_id"]]
+
         return {
             "today_revenue": today_revenue,
             "today_bookings": today_bookings,
@@ -1666,6 +1690,7 @@ def register(api, db, deps):
                 key=lambda x: x["start_time"]
             ),
             "new_leads_count": new_leads_count,
+            "top_customers": top_customers,
         }
 
     # -------- Reports --------

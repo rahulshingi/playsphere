@@ -81,19 +81,34 @@ export default function VendorMarket() {
     const err = validateFutureDateTime(form.requested_date, form.start_time);
     if (err) return toast.error(err);
     if (!form.hours || form.hours < 1) return toast.error("Hours must be at least 1");
+    // Recurrence — if enabled, expand the base weekday of `requested_date` into
+    // a series stretching to `recurrence_until`. Backend does the actual
+    // date-list expansion and inserts one booking per occurrence.
+    const payload = {
+      listing_id: selected.id,
+      requested_date: form.requested_date,
+      start_time: form.start_time,
+      hours: Number(form.hours),
+      sport,
+      notes: form.notes,
+      apply_membership_id: form.apply_membership_id || null,
+    };
+    if (form.recurrence_enabled && form.recurrence_until) {
+      const dow = new Date(form.requested_date + "T00:00:00").getDay(); // 0=Sun..6=Sat (JS)
+      const isoDow = (dow + 6) % 7; // Convert to 0=Mon..6=Sun for backend
+      payload.recurrence = "weekly";
+      payload.recurrence_until = form.recurrence_until;
+      payload.recurrence_days_of_week = [isoDow];
+    }
     try {
-      await api.post("/vendor-bookings", {
-        listing_id: selected.id,
-        requested_date: form.requested_date,
-        start_time: form.start_time,
-        hours: Number(form.hours),
-        sport,
-        notes: form.notes,
-        apply_membership_id: form.apply_membership_id || null,
-      });
-      toast.success(form.apply_membership_id
-        ? "Booked using your membership — vendor will confirm shortly"
-        : "Booking request sent — admin will confirm with the vendor");
+      const { data } = await api.post("/vendor-bookings", payload);
+      if (data.recurrence_group_id) {
+        toast.success(`Created ${data.count} weekly bookings — cancel or reschedule each occurrence individually from /bookings.`);
+      } else {
+        toast.success(form.apply_membership_id
+          ? "Booked using your membership — vendor will confirm shortly"
+          : "Booking request sent — admin will confirm with the vendor");
+      }
       setSelected(null);
       nav("/bookings");
     } catch (e) {
@@ -393,6 +408,28 @@ export function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
             <Label className="text-xs font-mono uppercase text-neutral-500">Notes</Label>
             <Textarea data-testid="vm-book-notes" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Tournament name, slot preference, etc." className="mt-2 bg-black/40 border-white/10 text-white" />
           </div>
+
+          {/* Weekly recurrence — creates individual bookings per week so each
+              occurrence can be rescheduled or cancelled on its own. */}
+          <label data-testid="vm-recurrence-toggle-label" className="flex items-start gap-2 border border-[#06B6D4]/40 bg-[#06B6D4]/5 rounded-sm p-3 cursor-pointer">
+            <input
+              type="checkbox"
+              data-testid="vm-recurrence-toggle"
+              checked={!!form.recurrence_enabled}
+              onChange={(e) => setForm({ ...form, recurrence_enabled: e.target.checked })}
+              className="mt-0.5 accent-[#06B6D4]"
+            />
+            <div className="flex-1">
+              <div className="text-sm font-semibold">Book this weekly</div>
+              <div className="text-[11px] font-mono text-neutral-400 mt-0.5">Every {form.requested_date ? new Date(form.requested_date + "T00:00:00").toLocaleDateString(undefined, { weekday: "long" }) : "matching weekday"} until…</div>
+              {form.recurrence_enabled && (
+                <div className="mt-2 flex items-center gap-2">
+                  <Input data-testid="vm-recurrence-until" type="date" value={form.recurrence_until || ""} min={form.requested_date || undefined} onChange={(e) => setForm({ ...form, recurrence_until: e.target.value })} className="bg-black/40 border-white/10 text-white h-8 text-xs w-44" />
+                  <span className="text-[10px] font-mono text-neutral-500">Each week becomes its own booking so you can cancel or reschedule them individually.</span>
+                </div>
+              )}
+            </div>
+          </label>
 
           {eligibility && (
             <label data-testid="vm-apply-memb" className="flex items-start gap-2 border border-[#EC4899]/40 bg-[#EC4899]/5 rounded-sm p-3 cursor-pointer">

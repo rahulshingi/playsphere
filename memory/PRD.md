@@ -669,3 +669,28 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 ### Verification (Feb 2026)
 - **Curl**: coach create → customer create → batch create (cap=2) → enrol → roster shows 1 student → check-in via customer_id → auto-picks batch context → active list shows Alice with `planned_end_at` → checkout returns `overrun_minutes=383` (correct math), active list clears.
 - **Playwright**: vendor login → offline biz → Check-in tab shows QR image + "Currently on premises (0)".
+
+## Feb 2026 — Event editor + Recurring bookings + Top-customers widget
+### Event Edit (item 1 from user's Feb request)
+- **Frontend `EventDetail.jsx`**: added `Edit event` button next to the stream-link button (visible when `canManage`). Opens a dialog with editable **name / description / venue / start_date / end_date**. Sport & format intentionally NOT editable (would break fixtures/standings).
+- **Backend** already supported `PATCH /api/events/{event_id}` via `routes/events.py` — permission gate: platform_admin OR (company_admin/organiser AND event.company_id == user.company_id). Verified via curl: admin PATCH → 200, venue updated.
+- Testids: `event-edit-btn`, `event-edit-name/desc/venue/start/end`, `event-edit-save`.
+
+### Recurring bookings expanded into individual rows (item 2)
+- **Backend `POST /api/vendor-bookings`**:
+  - Added optional `recurrence` ("weekly"|None), `recurrence_until` (YYYY-MM-DD), `recurrence_days_of_week` ([0..6], Monday=0) to `VendorBookingRequest`.
+  - Server now expands a weekly recurring request into a list of matching dates (`first .. until` inclusive, filtered by day-of-week) and **inserts one `VendorBooking` per date**, all sharing a common `recurrence_group_id`. Membership discount is only applied to the FIRST occurrence.
+  - Guards: rejects when `until < first`, when the range produces zero occurrences, or when count > 52.
+  - Response shape: for single bookings unchanged (`VendorBooking`). For a series returns `{recurrence_group_id, count, bookings:[…]}`.
+- **New `VendorBooking.recurrence_group_id`** field so buyers + admins can visually group series in `/bookings`.
+- **Frontend `VendorMarket.jsx` BookingModal**: added a **Book this weekly** toggle with a `recurrence_until` date picker. Client computes the JS weekday and converts to ISO Monday=0 index before POST.
+- **Frontend `VendorBookings.jsx`**: rows in a series show a `Weekly series` badge (`data-testid=vb-series-<id>`). Cancel + Reschedule already operate per-row so each occurrence remains independent — matches the user's ask (cancel any single Saturday, keep the rest).
+- Verified via curl: player creates a weekly booking from 2026-07-11 → 2026-08-03 with `days_of_week=[5]` (Sat) → server creates 4 bookings on 11/18/25 Jul + 1 Aug, all sharing `group_id=27fe83ad…`.
+
+### Top 20 customers KPI (from previous "potential improvement")
+- **Backend `GET /api/vendor/dashboard-stats`** now returns `top_customers: [{id, name, phone, total_spent, invoices}]` — computed via a MongoDB aggregation over `vendor_invoices` where `status=paid`, grouped by `customer_id`, sorted by lifetime spend DESC, limited to 20. Joined with `vendor_customers` for names/phones.
+- **Frontend Vendor Dashboard KPIs**: new yellow card block "Top customers · lifetime value" listing #1..#20 with name + phone + invoice count + `INR` totals. Empty state prompts vendors to start invoicing.
+- Testid: `kpi-top-customers`, per-row `top-cust-<id>`.
+
+### Manuals
+- Company section gained bullets for **Edit events** + **Book recurring slots** (7 PDFs regenerated).

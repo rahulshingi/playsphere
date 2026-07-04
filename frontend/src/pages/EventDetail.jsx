@@ -5,6 +5,8 @@ import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { renderScore, sportColor } from "@/lib/sports";
 import { useAuth } from "@/context/AuthContext";
@@ -28,6 +30,8 @@ export default function EventDetail() {
   const [sponsors, setSponsors] = useState([]);
   const [scoringFixture, setScoringFixture] = useState(null);
   const [editingStream, setEditingStream] = useState(false);
+  const [editingEvent, setEditingEvent] = useState(false);
+  const [eventDraft, setEventDraft] = useState({});
   const [streamDraft, setStreamDraft] = useState("");
   const [myPlayerId, setMyPlayerId] = useState(null);
   const [myScorerAssignment, setMyScorerAssignment] = useState(null);
@@ -200,6 +204,9 @@ export default function EventDetail() {
                   <Edit3 className="w-3.5 h-3.5 mr-1" /> {event.stream_url ? "Edit stream link" : "Add stream link"}
                 </Button>
               )}
+              <Button data-testid="event-edit-btn" size="sm" variant="outline" onClick={() => { setEventDraft({ name: event.name, description: event.description || "", venue: event.venue || "", start_date: event.start_date || "", end_date: event.end_date || "" }); setEditingEvent(true); }} className="rounded-sm border-white/10 text-white">
+                <Edit3 className="w-3.5 h-3.5 mr-1" /> Edit event
+              </Button>
             </div>
           )}
         </div>
@@ -268,6 +275,33 @@ export default function EventDetail() {
           onSaved={loadAll}
         />
       )}
+
+      <Dialog open={editingEvent} onOpenChange={setEditingEvent}>
+        <DialogContent className="bg-[#0c0c0c] border-white/10 text-white">
+          <DialogHeader><DialogTitle>Edit event</DialogTitle></DialogHeader>
+          <p className="text-xs text-neutral-500">Sport &amp; format aren&apos;t editable once the event exists (would break fixtures / standings). Use the buttons below for anything else.</p>
+          <div className="grid gap-3 mt-2">
+            <div><Label className="text-xs font-mono uppercase text-neutral-500">Event name</Label><Input data-testid="event-edit-name" value={eventDraft.name || ""} onChange={(e) => setEventDraft({ ...eventDraft, name: e.target.value })} className="bg-black/40 border-white/10 text-white mt-1" /></div>
+            <div><Label className="text-xs font-mono uppercase text-neutral-500">Description</Label><Input data-testid="event-edit-desc" value={eventDraft.description || ""} onChange={(e) => setEventDraft({ ...eventDraft, description: e.target.value })} className="bg-black/40 border-white/10 text-white mt-1" /></div>
+            <div><Label className="text-xs font-mono uppercase text-neutral-500">Venue</Label><Input data-testid="event-edit-venue" value={eventDraft.venue || ""} onChange={(e) => setEventDraft({ ...eventDraft, venue: e.target.value })} className="bg-black/40 border-white/10 text-white mt-1" /></div>
+            <div className="grid grid-cols-2 gap-2">
+              <div><Label className="text-xs font-mono uppercase text-neutral-500">Start date</Label><Input data-testid="event-edit-start" type="date" value={eventDraft.start_date || ""} onChange={(e) => setEventDraft({ ...eventDraft, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white mt-1" /></div>
+              <div><Label className="text-xs font-mono uppercase text-neutral-500">End date</Label><Input data-testid="event-edit-end" type="date" value={eventDraft.end_date || ""} onChange={(e) => setEventDraft({ ...eventDraft, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white mt-1" /></div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => setEditingEvent(false)}>Cancel</Button>
+            <Button data-testid="event-edit-save" onClick={async () => {
+              try {
+                await api.patch(`/events/${id}`, eventDraft);
+                toast.success("Event updated");
+                setEditingEvent(false);
+                loadAll();
+              } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+            }} className="bg-[#84CC16] hover:bg-[#65A30D] text-black">Save changes</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Footer />
     </div>

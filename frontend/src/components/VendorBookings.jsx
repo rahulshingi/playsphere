@@ -145,7 +145,14 @@ function BookingRow({ booking, role, onPatch }) {
     <div data-testid={`vb-row-${booking.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="font-semibold">{booking.listing_title}</div>
+          <div className="font-semibold flex items-center gap-2">
+            {booking.listing_title}
+            {booking.recurrence_group_id && (
+              <span data-testid={`vb-series-${booking.id}`} className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-sm bg-[#06B6D4]/20 text-[#06B6D4] border border-[#06B6D4]/40">
+                Weekly series
+              </span>
+            )}
+          </div>
           <div className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest mt-0.5">
             {booking.city || "—"} · {booking.sport || booking.vendor_type} · {booking.requested_date} · {booking.start_time}–{booking.end_time} ({booking.hours}h)
           </div>

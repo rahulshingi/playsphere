@@ -235,14 +235,42 @@ function SubscriptionPackagesSection() {
 // ─────────────────────────────────────────────────────────────
 function ReferralLeaderboardSection() {
   const [rows, setRows] = useState([]);
-  useEffect(() => { api.get("/admin/vendor-referral-leaderboard").then((r) => setRows(r.data || [])).catch(() => setRows([])); }, []);
+  const [busy, setBusy] = useState(false);
+  const [lastReward, setLastReward] = useState(null);
+  const load = () => { api.get("/admin/vendor-referral-leaderboard").then((r) => setRows(r.data || [])).catch(() => setRows([])); };
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const rewardTop = async () => {
+    if (!confirm("Issue a 20%-off promo code to the top 5 referring vendors and email them?")) return;
+    setBusy(true);
+    try {
+      const { data } = await api.post("/admin/promo-codes/reward-top-referrers", { top_n: 5, discount_percent: 20, validity_days: 60 });
+      setLastReward(data);
+      toast.success(`Issued ${data.issued} promo code(s)`);
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+    finally { setBusy(false); }
+  };
   return (
     <section data-testid="pa-vendor-referrals" className="mt-8">
-      <div className="mb-3">
-        <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ Vendor referral leaderboard</div>
-        <h2 className="font-display text-2xl tracking-wide mt-1">Top offline→platform Referrers</h2>
-        <div className="text-xs text-neutral-500 mt-1">Vendors who moved the most of their pre-existing offline customers onto Kreeda Nation. Consider rewarding the top rows with a subscription discount.</div>
+      <div className="mb-3 flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ Vendor referral leaderboard</div>
+          <h2 className="font-display text-2xl tracking-wide mt-1">Top offline→platform Referrers</h2>
+          <div className="text-xs text-neutral-500 mt-1">Vendors who moved the most of their pre-existing offline customers onto Kreeda Nation.</div>
+        </div>
+        <button data-testid="reward-top-5" onClick={rewardTop} disabled={busy || rows.length === 0} className="bg-[#FACC15] hover:bg-[#eab308] text-black rounded-sm px-3 py-2 text-sm font-semibold disabled:opacity-50">
+          {busy ? "Sending…" : "🎁 Reward top 5 (20% off promo)"}
+        </button>
       </div>
+      {lastReward && (
+        <div data-testid="reward-last-batch" className="mb-3 border border-[#84CC16]/40 rounded-sm bg-[#84CC16]/5 p-3 text-xs">
+          <div className="text-[#84CC16] font-mono uppercase">Issued {lastReward.issued} promo(s):</div>
+          <div className="mt-1 space-y-0.5 font-mono">
+            {lastReward.results.map((r) => (
+              <div key={r.vendor_id}>{r.business_name} — <span className="text-[#FACC15]">{r.code}</span> ({r.referred_count} referrals{r.email_sent ? " · email sent" : ""})</div>
+            ))}
+          </div>
+        </div>
+      )}
       {rows.length === 0
         ? <div className="text-neutral-500 text-xs italic">No referrals yet. Vendors invite via their Customers tab → WhatsApp invite link.</div>
         : (

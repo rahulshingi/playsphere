@@ -1278,3 +1278,54 @@ class TestSubscriptionPackagesAndReferrals:
                       "estimated_commission_waived"):
                 assert k in row
 
+
+
+# =========================================================================
+# 17. Phase 5c++ — Promo codes for top referrers + promo-at-checkout.
+# =========================================================================
+class TestPromoCodesForTopReferrers:
+    def test_reward_endpoint_issues_promo_and_apply_at_checkout(self, admin_sess):
+        # Trigger the reward endpoint — reuses the existing top-referrer data from
+        # earlier tests in the run (at least one player has offline_source_vendor_id set).
+        r = admin_sess.post(f"{API}/admin/promo-codes/reward-top-referrers", json={
+            "top_n": 5, "discount_percent": 20, "validity_days": 30, "min_referrals": 1,
+        })
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["issued"] >= 1
+        picked = d["results"][0]
+        code = picked["code"]
+        vendor_id = picked["vendor_id"]
+        assert code.startswith("REFER-")
+
+        # Log in as that vendor and use the code on a fresh offline subscription request.
+        client = AsyncIOMotorClient(MONGO_URL); db = client[DB_NAME]
+        vend_email = _run(db.vendors.find_one({"id": vendor_id}, {"_id": 0, "email": 1}))["email"]
+        # We may not know their password (seeded elsewhere) — set a known one.
+        import bcrypt
+        _run(db.users.update_one({"email": vend_email}, {"$set": {
+            "password_hash": bcrypt.hashpw(b"promo123", bcrypt.gensalt()).decode("utf-8"),
+        }}))
+        # Wipe any pending subscription so the request goes through
+        _run(db.offline_subscriptions.delete_many({"vendor_id": vendor_id, "status": "pending_payment"}))
+        s = _sess()
+        assert s.post(f"{API}/auth/login", json={"email": vend_email, "password": "promo123"}).status_code == 200
+        # Force site setting price to a known value so we can assert the discount
+        _run(db.settings.update_one({"id": "site"}, {"$set": {
+            "offline_subscription_monthly_price": 100.0,
+            "offline_subscription_locks_existing_price": False,  # disable lock so we test the promo path
+        }}, upsert=True))
+        r = s.post(f"{API}/offline-subscriptions/request", json={
+            "plan_type": "monthly", "promo_code": code,
+        })
+        assert r.status_code == 200, r.text
+        # 100 - 20% = 80
+        assert r.json()["amount"] == 80.0, f"expected 80.0 after 20% off, got {r.json()['amount']}"
+
+        # Re-using the same code should now fail (already used).
+        _run(db.offline_subscriptions.delete_many({"vendor_id": vendor_id, "status": "pending_payment"}))
+        r = s.post(f"{API}/offline-subscriptions/request", json={
+            "plan_type": "monthly", "promo_code": code,
+        })
+        assert r.status_code == 400
+        assert "invalid or already used" in r.text.lower()

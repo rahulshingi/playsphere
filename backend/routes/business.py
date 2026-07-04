@@ -81,6 +81,7 @@ class OfflineSubscription(BaseModel):
 class OfflineSubscriptionRequest(BaseModel):
     plan_type: str  # "monthly" | "yearly"
     package_id: Optional[str] = None  # optional: pick a custom SubscriptionPackage
+    promo_code: Optional[str] = None  # optional: single-use discount code
 
 
 class SubscriptionPackage(BaseModel):
@@ -93,6 +94,20 @@ class SubscriptionPackage(BaseModel):
     currency: str = "INR"
     active: bool = True
     description: Optional[str] = ""
+    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+class PromoCode(BaseModel):
+    """A single-use discount code, currently only for offline-subscription requests.
+    Auto-issued to top referring vendors from the Referral leaderboard."""
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    code: str
+    vendor_id: Optional[str] = None  # if set, only this vendor can redeem
+    discount_percent: float = 20.0
+    reason: str = "top_referrer_reward"
+    expires_at: Optional[str] = None
+    used: bool = False
+    used_at: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -297,6 +312,7 @@ def register(api, db, deps):
     get_current_user = deps.get_current_user
     require_platform_admin = deps.require_platform_admin
     VENDOR_CATEGORY_SPORTS = deps.VENDOR_CATEGORY_SPORTS
+    send_email = getattr(deps, "send_email", None) or (lambda *a, **k: {"ok": False})
 
     # ============================================================
     # Meta — exposed publicly for the adaptive UI
@@ -413,11 +429,31 @@ def register(api, db, deps):
                 price = float(prior.get("amount") or price)
                 currency = prior.get("currency", currency)
 
+        # (4) Apply promo code if provided (single-use, non-expired, vendor-scoped).
+        promo_applied = None
+        if body.promo_code:
+            code = body.promo_code.strip().upper()
+            promo = await db.promo_codes.find_one({"code": code, "used": False}, {"_id": 0})
+            if not promo:
+                raise HTTPException(400, "Promo code is invalid or already used")
+            if promo.get("vendor_id") and promo["vendor_id"] != vendor["id"]:
+                raise HTTPException(400, "This promo code belongs to another vendor")
+            if promo.get("expires_at") and promo["expires_at"] < datetime.now(timezone.utc).isoformat():
+                raise HTTPException(400, "Promo code has expired")
+            discount = float(promo.get("discount_percent") or 0)
+            price = round(price * (1 - discount / 100.0), 2)
+            promo_applied = promo
+
         sub = OfflineSubscription(
             vendor_id=vendor["id"], vendor_email=vendor.get("email", ""),
             plan_type=body.plan_type, amount=price, currency=currency,
         )
         await db.offline_subscriptions.insert_one(sub.model_dump())
+        if promo_applied:
+            await db.promo_codes.update_one(
+                {"id": promo_applied["id"]},
+                {"$set": {"used": True, "used_at": datetime.now(timezone.utc).isoformat()}},
+            )
         return sub
 
     # -------- Subscription packages (admin) --------
@@ -436,7 +472,8 @@ def register(api, db, deps):
 
     @api.patch("/admin/subscription-packages/{package_id}", response_model=SubscriptionPackage)
     async def admin_update_package(package_id: str, body: dict, _: dict = Depends(require_platform_admin)):
-        body.pop("id", None); body.pop("created_at", None)
+        body.pop("id", None)
+        body.pop("created_at", None)
         await db.subscription_packages.update_one({"id": package_id}, {"$set": body})
         d = await db.subscription_packages.find_one({"id": package_id}, {"_id": 0})
         if not d:
@@ -492,6 +529,72 @@ def register(api, db, deps):
                 "estimated_commission_waived": round(gross * pct / 100.0, 2),
             })
         return out
+
+    @api.post("/admin/promo-codes/reward-top-referrers")
+    async def reward_top_referrers(body: dict = None, _: dict = Depends(require_platform_admin)):
+        """Issues a one-off promo code to each of the top-N referring vendors and
+        emails them a congratulatory note. Idempotent-ish: if a vendor already has
+        an UNUSED reward code, we reuse that instead of piling up duplicates."""
+        body = body or {}
+        top_n = int(body.get("top_n") or 5)
+        discount = float(body.get("discount_percent") or 20)
+        validity_days = int(body.get("validity_days") or 60)
+        min_referrals = int(body.get("min_referrals") or 1)
+        # Reuse the leaderboard aggregation
+        pipeline = [
+            {"$match": {"offline_source_vendor_id": {"$ne": None}}},
+            {"$group": {"_id": "$offline_source_vendor_id", "referred_count": {"$sum": 1}}},
+            {"$sort": {"referred_count": -1}},
+            {"$limit": top_n},
+        ]
+        rows = await db.player_profiles.aggregate(pipeline).to_list(top_n)
+        rows = [r for r in rows if r["referred_count"] >= min_referrals]
+        expires_at = (datetime.now(timezone.utc) + timedelta(days=validity_days)).isoformat()
+        results = []
+        for row in rows:
+            vid = row["_id"]
+            v = await db.vendors.find_one({"id": vid}, {"_id": 0})
+            if not v:
+                continue
+            # Reuse an existing unused reward promo if present.
+            existing = await db.promo_codes.find_one(
+                {"vendor_id": vid, "used": False, "reason": "top_referrer_reward"},
+                {"_id": 0},
+            )
+            if existing:
+                promo = PromoCode(**existing)
+            else:
+                # Generate a short human-friendly code.
+                import secrets
+                code = f"REFER-{secrets.token_hex(3).upper()}"
+                promo = PromoCode(
+                    code=code, vendor_id=vid, discount_percent=discount,
+                    reason="top_referrer_reward", expires_at=expires_at,
+                )
+                await db.promo_codes.insert_one(promo.model_dump())
+            biz = v.get("business_name") or "Vendor"
+            subject = f"You've earned a {int(discount)}% off code — thanks for growing Kreeda Nation!"
+            body_msg = (
+                f"Hi {biz},\n\n"
+                f"You moved {row['referred_count']} of your customer(s) onto Kreeda Nation last cycle — "
+                f"you're one of our top offline-to-platform referrers.\n\n"
+                f"As a thank-you, here's a one-time {int(discount)}% off code for your next offline-mode "
+                f"subscription renewal:\n\n    {promo.code}\n\n"
+                f"Valid until {expires_at[:10]}. Apply it at checkout when you request or renew your "
+                f"offline-mode subscription in the vendor dashboard.\n\n"
+                f"— The Kreeda Nation team"
+            )
+            email_result = {"ok": False}
+            if v.get("email"):
+                try:
+                    email_result = send_email(v["email"], subject, body_msg, kind="top_referrer_reward")
+                except Exception as e:  # pragma: no cover — SendGrid rate limits etc.
+                    email_result = {"ok": False, "error": str(e)}
+            results.append({
+                "vendor_id": vid, "business_name": biz, "code": promo.code,
+                "referred_count": row["referred_count"], "email_sent": bool(email_result.get("ok")),
+            })
+        return {"issued": len(results), "results": results}
 
     @api.get("/offline-subscriptions/mine", response_model=List[OfflineSubscription])
     async def list_my_offline_subscriptions(user: dict = Depends(get_current_user)):
@@ -1040,7 +1143,8 @@ def register(api, db, deps):
     @api.patch("/vendor/coaches/{coach_id}", response_model=VendorCoach)
     async def update_coach(coach_id: str, body: dict, user: dict = Depends(get_current_user)):
         vendor = await _ensure_vendor_owner(user)
-        body.pop("id", None); body.pop("vendor_id", None)
+        body.pop("id", None)
+        body.pop("vendor_id", None)
         await db.vendor_coaches.update_one({"id": coach_id, "vendor_id": vendor["id"]}, {"$set": body})
         d = await db.vendor_coaches.find_one({"id": coach_id, "vendor_id": vendor["id"]}, {"_id": 0})
         if not d:
@@ -1070,7 +1174,8 @@ def register(api, db, deps):
     @api.patch("/vendor/batches/{batch_id}", response_model=VendorBatch)
     async def update_batch(batch_id: str, body: dict, user: dict = Depends(get_current_user)):
         vendor = await _ensure_vendor_owner(user)
-        body.pop("id", None); body.pop("vendor_id", None)
+        body.pop("id", None)
+        body.pop("vendor_id", None)
         await db.vendor_batches.update_one({"id": batch_id, "vendor_id": vendor["id"]}, {"$set": body})
         d = await db.vendor_batches.find_one({"id": batch_id, "vendor_id": vendor["id"]}, {"_id": 0})
         if not d:
@@ -1100,7 +1205,8 @@ def register(api, db, deps):
     @api.patch("/vendor/inventory/{item_id}", response_model=VendorInventoryItem)
     async def update_inventory(item_id: str, body: dict, user: dict = Depends(get_current_user)):
         vendor = await _ensure_vendor_owner(user)
-        body.pop("id", None); body.pop("vendor_id", None)
+        body.pop("id", None)
+        body.pop("vendor_id", None)
         body["updated_at"] = datetime.now(timezone.utc).isoformat()
         await db.vendor_inventory.update_one({"id": item_id, "vendor_id": vendor["id"]}, {"$set": body})
         d = await db.vendor_inventory.find_one({"id": item_id, "vendor_id": vendor["id"]}, {"_id": 0})

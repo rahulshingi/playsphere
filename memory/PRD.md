@@ -453,6 +453,13 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
 - **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
+## Implemented (Mar 12, 2026 — Promo codes: reward top offline→platform referrers)
+- **New `PromoCode` model + collection** — one-time discount codes for offline-subscription checkout. Fields: `code, vendor_id, discount_percent, reason, expires_at, used, used_at`.
+- **`POST /api/admin/promo-codes/reward-top-referrers`** — admin trigger. Picks top-N referring vendors (from the leaderboard), generates a `REFER-XXXXXX` promo (default 20% off, 60-day validity), and sends the vendor a congratulatory email via SendGrid. Idempotent-ish: reuses an existing unused reward promo if one already exists for that vendor.
+- **`request_offline_subscription` accepts `promo_code`** — validates (exists / not used / not expired / vendor-scoped), deducts the discount, marks the code used on success.
+- **UI**: golden "🎁 Reward top 5 (20% off promo)" button on the Vendor Referral Leaderboard in Platform Admin → Business tab. Shows the batch of codes it just issued (with per-vendor email-sent flag).
+- **Tests**: 1 new test in `TestPromoCodesForTopReferrers` (18/18 pass across the last four Phase 5c test classes) — verifies promo issuance, 20% deduction at checkout, and single-use rejection on re-use.
+
 ## Implemented (Mar 11, 2026 — Phase 5c+ P1: subscription packages, price lock, referrals, QR posters)
 
 **Admin subscription packages (CRUD)** — `POST/GET/PATCH/DELETE /api/admin/subscription-packages`. New model `SubscriptionPackage` (name, duration_days, price, currency, active, description). Vendors can now pick from custom plans (e.g. quarterly, annual, promo) instead of only the default monthly/yearly.

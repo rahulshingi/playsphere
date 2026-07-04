@@ -4185,6 +4185,7 @@ business_routes.register(api, db, SimpleNamespace(
     get_current_user=get_current_user,
     require_platform_admin=require_platform_admin,
     VENDOR_CATEGORY_SPORTS=VENDOR_CATEGORY_SPORTS,
+    send_email=send_email,
 ))
 
 

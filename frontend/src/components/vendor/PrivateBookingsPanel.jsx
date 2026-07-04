@@ -48,7 +48,23 @@ export default function PrivateBookingsPanel({ vendor, listings = [] }) {
 
   const reload = () => {
     if (!enabled) return;
-    api.get("/vendor/private-bookings").then((r) => setBookings(r.data || [])).catch(() => setBookings([]));
+    // Merge offline (private) + platform (marketplace) bookings so the
+    // vendor's calendar shows every occupied slot — matching the "block the
+    // time on my calendar" expectation. Marketplace rows are tagged with a
+    // `source` marker so we can render them read-only in the calendar.
+    Promise.all([
+      api.get("/vendor/private-bookings").then((r) => (r.data || []).map((b) => ({ ...b, source: "offline" }))).catch(() => []),
+      api.get("/vendor-bookings").then((r) => (r.data || [])
+        // Ignore cancelled/rejected marketplace slots — the time is freed up.
+        .filter((b) => !["cancelled", "rejected"].includes(b.status))
+        .map((b) => ({
+          ...b,
+          source: "platform",
+          client_name: b.company_name || "Platform booking",
+          amount: b.total,
+          status: b.status === "completed" ? "completed" : "active",
+        }))).catch(() => []),
+    ]).then(([offline, platform]) => setBookings([...offline, ...platform]));
     api.get("/vendor/customers").then((r) => setCustomers(r.data || [])).catch(() => setCustomers([]));
     api.get("/vendor/invoices").then((r) => setInvoices(r.data || [])).catch(() => setInvoices([]));
   };
@@ -574,18 +590,23 @@ function BookingsCalendar({ bookings, listings, onEdit }) {
                   {c.items.length > 0 && <span className="text-[9px] px-1 rounded bg-[#06B6D4] text-black">{c.items.length}</span>}
                 </div>
                 <div className="mt-1 space-y-0.5">
-                  {c.items.slice(0, 3).map((b, idx) => (
-                    <button key={`${b.id}-${idx}`}
-                      onClick={() => onEdit?.(b)}
-                      data-testid={`pb-cal-item-${c.dateIso}-${idx}`}
-                      title={`${b.start_time}–${b.end_time} · ${b.client_name}`}
-                      className={`w-full text-left truncate text-[10px] px-1 py-0.5 rounded-sm font-mono ${
-                        b.status === "completed" ? "bg-[#84CC16]/20 text-[#84CC16]" :
-                        b.status === "cancelled" ? "bg-neutral-800 text-neutral-500 line-through" :
-                        "bg-[#06B6D4]/25 text-[#67e8f9]"
-                      }`}
-                    >{b.start_time} {b.client_name.slice(0, 10)}</button>
-                  ))}
+                  {c.items.slice(0, 3).map((b, idx) => {
+                    const platform = b.source === "platform";
+                    return (
+                      <button key={`${b.id}-${idx}`}
+                        onClick={() => !platform && onEdit?.(b)}
+                        disabled={platform}
+                        data-testid={`pb-cal-item-${c.dateIso}-${idx}`}
+                        title={`${b.start_time}–${b.end_time} · ${b.client_name}${platform ? " · platform (read-only)" : ""}`}
+                        className={`w-full text-left truncate text-[10px] px-1 py-0.5 rounded-sm font-mono ${
+                          platform ? "bg-[#FACC15]/20 text-[#FACC15] border border-[#FACC15]/40 cursor-not-allowed" :
+                          b.status === "completed" ? "bg-[#84CC16]/20 text-[#84CC16]" :
+                          b.status === "cancelled" ? "bg-neutral-800 text-neutral-500 line-through" :
+                          "bg-[#06B6D4]/25 text-[#67e8f9]"
+                        }`}
+                      >{platform ? "\u25CF " : ""}{b.start_time} {b.client_name.slice(0, 10)}</button>
+                    );
+                  })}
                   {c.items.length > 3 && <div className="text-[9px] font-mono text-neutral-500">+{c.items.length - 3} more</div>}
                 </div>
               </>
@@ -596,6 +617,7 @@ function BookingsCalendar({ bookings, listings, onEdit }) {
       <div className="mt-3 flex items-center gap-3 text-[10px] font-mono uppercase text-neutral-500 flex-wrap">
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#06B6D4]/25 border border-[#06B6D4]/40"></span> Active</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#84CC16]/20"></span> Completed</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#FACC15]/20 border border-[#FACC15]/40"></span> Platform (read-only)</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-[#A855F7]/20 border border-[#A855F7]"></span> Today</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-black border border-white/10"></span> Available</span>
       </div>

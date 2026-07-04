@@ -733,3 +733,21 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Curl: admin PATCH settings fee=500 → organiser POST ack empty → HTTP 400 "Event fee of 500.0 INR required" → organiser ack `offline` → `payment.status=pending_offline` → admin POST mark-paid → `payment.status=paid_offline, paid_at, confirmed_by` set. Online path also verified (`paid_online, provider=razorpay_stub`).
 - Bug caught during test: my acknowledge endpoint originally read `db.site_settings` (nonexistent collection); switched to `db.settings.find_one({id:"site"})` to match the settings router.
 - Lint clean, 7 PDFs regenerated with Platform-Admin bullet documenting the new fee panel + payment status.
+
+## Feb 2026 — Vendor calendar shows platform bookings + Invite share link
+### Fix 1: Platform bookings block the vendor calendar
+- **`PrivateBookingsPanel.jsx`** now loads both `/vendor/private-bookings` (offline) AND `/vendor-bookings` (marketplace) in parallel and merges them into the same `bookings` array. Marketplace rows are tagged `source: "platform"`, mapped so `client_name = company_name || "Platform booking"` and `status` normalised. Cancelled + rejected marketplace bookings are filtered out (time freed).
+- **`BookingsCalendar` cells**: platform bookings render as **yellow (`#FACC15`) read-only pills** with a bullet marker (●); tapping a platform pill does nothing (edit only allowed for offline rows). Legend updated with "Platform (read-only)" chip.
+- Verified via curl + Playwright: player creates a booking on `p5b_listing_1` → phase5b vendor's calendar cell for that date now shows the platform pill.
+
+### Fix 2: Vendor referral share link (item 2)
+- **`OfflineBusinessSuite.jsx VendorInviteCard`** (new component) — displays on the Vendor's `Offline business → Dashboard` tab. Contains:
+  - A **QR code image** encoding `${window.origin}/players/signup?ref_vendor=<vendor.id>`.
+  - The plain URL rendered as `data-testid="vendor-invite-url"`.
+  - Three CTAs: **Copy link** (`vendor-invite-copy` — clipboard), **WhatsApp share** (`vendor-invite-wa` — pre-filled message), **Print QR poster** (`vendor-invite-qr` — 500×500 image link).
+- No backend changes needed: `POST /players/register` already accepts `ref_vendor` and stamps `offline_source_vendor_id` (server.py line 1562). The booking commission logic (line 1998-2002) already waives commission when that player later books from the referring vendor.
+
+### Verification
+- Curl: `POST /vendor-bookings` for phase5b listing → vendor sees count=1 in `/vendor-bookings`.
+- Playwright: vendor login → Offline business → Bookings & calendar → Calendar sub-tab → **yellow platform pill visible on 6 July**. Invite card renders with URL `.../players/signup?ref_vendor=p5b_vendor_1`.
+- Lint clean.

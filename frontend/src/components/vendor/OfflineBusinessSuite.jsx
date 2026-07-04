@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import {
   LayoutDashboard, GraduationCap, Users2, Package, Wallet, BarChart3, ShieldCheck,
-  Ban, Plus, Trash2, QrCode, MessageCircle, IndianRupee,
+  Ban, Plus, Trash2, QrCode, MessageCircle, IndianRupee, Copy,
 } from "lucide-react";
 import DatePicker from "@/components/ui/DatePicker";
 import { fmtPrice } from "@/lib/currency";
@@ -83,6 +83,9 @@ function DashboardKPIs({ vendor }) {
           </div>
         ))}
       </div>
+
+      <VendorInviteCard vendor={vendor} />
+
       <div className="border border-white/10 rounded-sm bg-[#141414] p-4">
         <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-2">/ Today's schedule</div>
         {d.todays_schedule.length === 0
@@ -125,6 +128,57 @@ function DashboardKPIs({ vendor }) {
     </div>
   );
 }
+
+// ─────────────────────────────────────────────────────────────
+// Vendor invite / referral share card
+// Any player who signs up via this link is stamped as an offline-source
+// customer of THIS vendor — so future bookings between them skip the platform
+// commission. Shareable via WhatsApp, Copy, or a downloadable QR poster.
+// ─────────────────────────────────────────────────────────────
+function VendorInviteCard({ vendor }) {
+  const base = typeof window !== "undefined" ? window.location.origin : "";
+  const refUrl = vendor?.id ? `${base}/players/signup?ref_vendor=${vendor.id}` : "";
+  const listingUrls = []; // not used — kept for future expansion
+  const businessName = vendor?.invoice_business_name || vendor?.business_name || "our venue";
+  const message = `Hi! Sign up to Kreeda Nation via ${businessName}'s invite link so we can send you booking confirmations & receipts online: ${refUrl}`;
+  const wa = `https://wa.me/?text=${encodeURIComponent(message)}`;
+  const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(refUrl)}`;
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(refUrl);
+      toast.success("Invite link copied");
+    } catch { toast.error("Couldn't copy link"); }
+  };
+
+  if (!vendor?.id) return null;
+  return (
+    <div data-testid="vendor-invite-card" className="border border-[#EC4899]/40 bg-[#EC4899]/5 rounded-sm p-4">
+      <div className="flex items-start gap-4 flex-wrap">
+        <img src={qrSrc} alt="Invite QR" className="w-24 h-24 rounded-sm bg-white p-1 shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="font-mono text-[10px] uppercase tracking-widest text-[#EC4899]">/ Share your invite link · make clients offline-owned</div>
+          <div className="text-sm text-neutral-200 mt-1">
+            Anyone who signs up through this link becomes <b>your</b> offline-source customer — Kreeda Nation waives the platform commission on future bookings between you two.
+          </div>
+          <div data-testid="vendor-invite-url" className="mt-2 font-mono text-[11px] text-neutral-400 break-all">{refUrl}</div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button data-testid="vendor-invite-copy" size="sm" onClick={copy} className="bg-white/10 hover:bg-white/20 text-white h-8 text-[11px] rounded-sm inline-flex items-center gap-1">
+              <Copy className="w-3 h-3" /> Copy link
+            </Button>
+            <a data-testid="vendor-invite-wa" href={wa} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 h-8 px-3 rounded-sm bg-[#25D366] hover:bg-[#1ea855] text-black font-semibold text-[11px]">
+              WhatsApp share
+            </a>
+            <a data-testid="vendor-invite-qr" href={qrSrc.replace("220x220", "500x500")} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 h-8 px-3 rounded-sm bg-black/40 border border-white/10 hover:bg-white/5 text-neutral-200 text-[11px]">
+              Print QR poster
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 
 // ─────────────────────────────────────────────────────────────
 // Coaches & Batches — CRUD, enrol students, view roster, full notification

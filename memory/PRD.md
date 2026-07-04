@@ -453,6 +453,12 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Mounted only when `status === "active"` on both `/my-memberships` (buyer's view, full-width) and inside `VendorPurchaseRequests` (vendor's view, compact mode).
 - **No "recommended renewal" suggestion** — per user's choice, only the raw numbers are shown.
 
+## Implemented (Mar 09, 2026 — Persistent login fix: no more forced admin password resets)
+- **Bug**: Every time the backend restarted (frequent on hot-reload / redeploy), `seed_admin()` was aggressively re-hashing the admin password to match `ADMIN_PASSWORD` env var — silently wiping any password the user had set via forgot-password. Result: the user had to reset every login attempt. Also affected any admin whose stored password happened to differ from the env value.
+- **Fix**: `seed_admin()` now only re-seeds the password when (a) the stored hash is missing/blank, OR (b) the operator explicitly sets `FORCE_ADMIN_PASSWORD_RESET=true` in the environment. All other admin metadata (role, name, permissions, is_super_admin) still auto-heals as before. User-initiated password changes now persist across restarts.
+- **Bonus**: `POST /api/auth/login` now trims trailing whitespace on both email and password (a common cause of "right password still fails" reports from copy-paste). Logs a breadcrumb `LOGIN FAIL email=<x> reason=no-user|bad-password` on every failure so future support tickets are easier to triage.
+- Verified via curl: whitespace-padded email + trailing-newline password + clean payload all now return HTTP 200.
+
 ## Implemented (Mar 08, 2026 — Venue lead affordance + refreshed guides)
 - **Bug**: Organisers at `/admin` couldn't surface a venue lead when the venue wasn't already on the platform — the `SuggestVenueButton` component only existed on the platform-admin's EventsTab, not the shared `Admin.jsx` used by organisers/HR.
 - **Fix**: Added `<SuggestVenueButton>` next to the "Pick verified venue" button in `Admin.jsx`. Added a one-line helper text under it explaining the flow. Backend `POST /api/venue-leads` was already correct — this was purely a discoverability bug.

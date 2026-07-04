@@ -3161,12 +3161,22 @@ async def seed_admin():
         })
         logger.info(f"Seeded platform admin: {admin_email}")
     else:
-        # ensure role, password, name are all correct
-        updates = {}
+        # ensure role, name, permissions are all correct — but NEVER auto-reset the
+        # password on restart. Doing so wiped out user-initiated password changes
+        # (via forgot-password) every time the backend hot-reloaded, forcing the
+        # admin to keep resetting. If the password is somehow blank/corrupt we still
+        # heal it below.
+        updates: dict = {}
         if existing.get("role") not in ("platform_admin",):
             updates["role"] = "platform_admin"
-        if not verify_password(admin_password, existing["password_hash"]):
+        # Only reseed the password when it's missing/blank OR when the operator
+        # has explicitly requested a reset via FORCE_ADMIN_PASSWORD_RESET=true.
+        current_hash = existing.get("password_hash") or ""
+        force_reset = os.environ.get("FORCE_ADMIN_PASSWORD_RESET", "").lower() in ("1", "true", "yes")
+        if not current_hash or force_reset:
             updates["password_hash"] = hash_password(admin_password)
+            if force_reset:
+                logger.warning("FORCE_ADMIN_PASSWORD_RESET=true — admin password reset to ADMIN_PASSWORD env value")
         if existing.get("name") in ("PlaySphere Admin", "PLAYSPHERE Admin"):
             updates["name"] = "Kreeda Nation Admin"
         if not existing.get("is_super_admin"):

@@ -124,9 +124,14 @@ def register(api, db, deps):
 
     @api.post("/auth/login", response_model=UserPublic)
     async def auth_login(body: LoginBody, response: Response):
-        email = body.email.lower()
+        # Guard against copy-paste whitespace on both fields — a common cause of
+        # "correct-password-but-still-fails" complaints from real users.
+        email = (body.email or "").strip().lower()
+        password = (body.password or "").rstrip("\r\n\t ")
         user = await db.users.find_one({"email": email})
-        if not user or not verify_password(body.password, user["password_hash"]):
+        if not user or not verify_password(password, user["password_hash"]):
+            reason = "no-user" if not user else "bad-password"
+            logger.info("LOGIN FAIL email=%s reason=%s", email, reason)
             raise HTTPException(status_code=401, detail="Invalid email or password")
         if user.get("disabled"):
             raise HTTPException(

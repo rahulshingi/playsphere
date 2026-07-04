@@ -264,7 +264,7 @@ function SectionTitle({ n, title }) {
   );
 }
 
-function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
+export function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
   const total = useMemo(() => Number(listing.price) * Number(form.hours || 0), [listing.price, form.hours]);
   const [availability, setAvailability] = useState(null);
   const [eligibility, setEligibility] = useState(null);

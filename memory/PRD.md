@@ -612,3 +612,14 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Removed the unauth redirect guard on `pages/VendorMarket.jsx`. Anyone can now browse `/hire` — sport chips, city picker, and verified listing cards render for guest visitors (matches the promise made in player/vendor manuals).
 - Auth is enforced at the "click a listing" step: `openBookingFor()` bounces guests to `/login?next=/hire` before opening the booking modal. Signed-in non-buyer roles (vendor, admin) still see the modal but the existing `canBook` gate blocks submission.
 - Improves conversion from QR-poster / SEO / cold-traffic visits: users can validate the marketplace before committing to signup.
+
+## Feb 2026 — Public listing detail page + OG social previews
+- **NEW public route** `GET /vendor-listing/:id` (`pages/VendorListingDetail.jsx`) — fixes a dangling QR-poster link (the poster generator at `VendorDashboard.jsx:59` already pointed here, but no route existed).
+- **Backend endpoint reused**: existing `GET /api/vendor-listings/{listing_id}` (in `routes/vendors.py`) returns only `approved && active` listings — safe for public exposure.
+- **SEO / OpenGraph / Twitter Card meta tags** injected into `document.head` per listing on mount, cleaned up on unmount:
+  - `<title>`, `<meta name="description">`
+  - `og:title`, `og:description`, `og:image`, `og:url`, `og:type`
+  - `twitter:card=summary_large_image`, `twitter:title`, `twitter:description`, `twitter:image`
+- **Book CTA** reuses the exported `BookingModal` from `VendorMarket.jsx`; unauth clicks bounce to `/login?next=/vendor-listing/{id}`.
+- Verified end-to-end (Playwright): `og:title=P5C Ground · Bangalore · Kreeda Nation`, `twitter:card=summary_large_image`, title & CTA rendered.
+- **Impact**: every QR poster now lands users on a real page, and every share on WhatsApp / Instagram / X / LinkedIn shows a rich preview card instead of a bare URL.

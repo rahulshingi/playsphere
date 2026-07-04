@@ -340,6 +340,9 @@ class Event(BaseModel):
     submitted_at: Optional[str] = None
     approved_at: Optional[str] = None
     approved_by: Optional[str] = None
+    # Organiser event-fee payment record. Populated at acknowledge-instructions:
+    # `{fee, currency, status: not_required|pending_offline|paid_offline|paid_online, method, paid_at, provider}`.
+    payment: Optional[Dict[str, Any]] = None
     created_by: Optional[str] = None  # user_id who created the event
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
@@ -850,6 +853,10 @@ class SiteSettings(BaseModel):
         "4. Fair-play rules apply — match results, scoring and conduct are subject to platform audit.\n"
         "5. By submitting, you authorise Kreeda Nation to list your event publicly once approved."
     )
+    # Non-refundable fee the organiser pays per event before it goes to admin
+    # approval. 0 = free (skip payment step). Admin edits this in /platform-admin.
+    organiser_event_fee: float = 0.0
+    organiser_event_fee_currency: str = "INR"
     # ---- Phase 5C: business model ----
     booking_commission_percent: float = 10.0
     membership_commission_percent: float = 5.0

@@ -226,10 +226,17 @@ def register(api, db, deps):
 
     # ---------- Approval workflow ----------
     @api.post("/events/{event_id}/acknowledge-instructions", response_model=Event)
-    async def acknowledge_instructions(event_id: str, user: dict = Depends(require_admin)):
+    async def acknowledge_instructions(event_id: str, body: Optional[dict] = None, user: dict = Depends(require_admin)):
         """Organiser acknowledges the platform's instructions and submits the event
         for admin approval. Allowed when the event is `pending_organiser_ack`
-        (initial flow) OR `rejected` (resubmit after editing)."""
+        (initial flow) OR `rejected` (resubmit after editing).
+
+        Body may include `{payment_method: "online"|"offline"}` to record how the
+        organiser is paying the (admin-configured) event fee. `online` is stubbed
+        as instantly paid until Razorpay lands; `offline` marks the invoice
+        pending and the platform admin later marks it paid. When the fee is 0,
+        payment_method is ignored and the event submits for free.
+        """
         ev = await db.events.find_one({"id": event_id}, {"_id": 0})
         if not ev:
             raise HTTPException(404, "Event not found")
@@ -238,11 +245,46 @@ def register(api, db, deps):
         if ev.get("created_by") and ev.get("created_by") != user.get("id"):
             if user.get("role") not in ("platform_admin", "admin"):
                 raise HTTPException(403, "Only the event creator can acknowledge")
+
+        # Load fee from site settings and record a payment record on the event.
+        settings = await db.settings.find_one({"id": "site"}, {"_id": 0}) or {}
+        fee = float(settings.get("organiser_event_fee") or 0)
+        currency = settings.get("organiser_event_fee_currency") or "INR"
+        payment_method = (body or {}).get("payment_method")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        payment: dict = {"fee": fee, "currency": currency, "status": "not_required"}
+        if fee > 0:
+            if payment_method == "online":
+                # Stubbed: Razorpay integration lands later. For now we accept the
+                # organiser's declaration + capture the fact it should have been
+                # collected online. Admin sees this in the dashboard.
+                payment.update({"status": "paid_online", "method": "online", "paid_at": now_iso, "provider": "razorpay_stub"})
+            elif payment_method == "offline":
+                payment.update({"status": "pending_offline", "method": "offline"})
+            else:
+                raise HTTPException(400, f"Event fee of {fee} {currency} required — pick payment_method online or offline")
         await db.events.update_one({"id": event_id}, {"$set": {
             "approval_status": "pending_admin_approval",
-            "submitted_at": datetime.now(timezone.utc).isoformat(),
+            "submitted_at": now_iso,
             "rejection_reason": "",
+            "payment": payment,
         }})
+        doc = await db.events.find_one({"id": event_id}, {"_id": 0})
+        return Event(**doc)
+
+    @api.post("/events/{event_id}/mark-paid", response_model=Event)
+    async def mark_event_paid(event_id: str, user: dict = Depends(require_admin)):
+        """Platform admin marks an offline event-fee payment as received."""
+        if user.get("role") not in ("platform_admin", "admin"):
+            raise HTTPException(403, "Only the platform admin can confirm payment")
+        ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+        if not ev:
+            raise HTTPException(404, "Event not found")
+        payment = ev.get("payment") or {}
+        if payment.get("status") not in ("pending_offline",):
+            raise HTTPException(400, "Nothing to mark paid on this event")
+        payment.update({"status": "paid_offline", "paid_at": datetime.now(timezone.utc).isoformat(), "confirmed_by": user.get("id")})
+        await db.events.update_one({"id": event_id}, {"$set": {"payment": payment}})
         doc = await db.events.find_one({"id": event_id}, {"_id": 0})
         return Event(**doc)
 

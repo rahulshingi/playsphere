@@ -713,3 +713,23 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Adding type hints across the codebase (target: 60%+ coverage).
 - 110 React hook dependency warnings across the codebase — high-impact ones (recent Bookings.jsx, VendorMarket.jsx, VendorListingDetail.jsx) verified individually; the rest is technical debt.
 - 25+ nested-ternary cleanups.
+
+## Feb 2026 — Organiser event fee + payment step at submission
+### Backend
+- **`SiteSettings.organiser_event_fee`** (float, default 0) + **`organiser_event_fee_currency`** (default "INR"). Persisted in `db.settings` singleton.
+- **`Event.payment`** field (dict): `{fee, currency, status: not_required|pending_offline|paid_offline|paid_online, method, paid_at, provider}`.
+- **`POST /api/events/{id}/acknowledge-instructions`** — now accepts `{payment_method: "online"|"offline"}`. When the configured fee > 0, `payment_method` is REQUIRED; server returns 400 otherwise. `online` is stubbed as instantly paid (`provider=razorpay_stub`) pending real Razorpay wiring; `offline` marks `pending_offline` and lets the event still enter admin approval.
+- **`POST /api/events/{id}/mark-paid`** (platform-admin only) — flips `payment.status` from `pending_offline` to `paid_offline`, stamps `paid_at` + `confirmed_by`.
+
+### Frontend
+- **`SettingsTab.jsx`**: new panel "ORGANISER EVENT FEE" with amount + currency inputs (`data-testid=setting-organiser_event_fee`, `setting-organiser_event_fee_currency`, `organiser-fee-save`).
+- **`EventApprovalBanner.jsx`**: fetches fee alongside instructions. Displays a green fee-summary block above the CTA when > 0. Clicking "I agree — pay ₹500 & submit" opens a **payment picker dialog** with two cards:
+  - `approval-pay-online` — POSTs `payment_method: "online"` (stubbed as paid).
+  - `approval-pay-offline` — POSTs `payment_method: "offline"` (event enters admin queue, pending).
+  Free events (fee = 0) skip the dialog entirely, keeping the flow identical to before.
+- **`PendingApprovalsTab.jsx`**: every event row shows a payment pill — green for `paid_online`/`paid_offline`, orange for `pending_offline` with an inline **Mark paid** button (`approval-mark-paid-<id>`) that fires `/mark-paid`.
+
+### Verification (Feb 2026)
+- Curl: admin PATCH settings fee=500 → organiser POST ack empty → HTTP 400 "Event fee of 500.0 INR required" → organiser ack `offline` → `payment.status=pending_offline` → admin POST mark-paid → `payment.status=paid_offline, paid_at, confirmed_by` set. Online path also verified (`paid_online, provider=razorpay_stub`).
+- Bug caught during test: my acknowledge endpoint originally read `db.site_settings` (nonexistent collection); switched to `db.settings.find_one({id:"site"})` to match the settings router.
+- Lint clean, 7 PDFs regenerated with Platform-Admin bullet documenting the new fee panel + payment status.

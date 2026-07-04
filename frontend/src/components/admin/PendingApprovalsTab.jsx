@@ -4,7 +4,8 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, XCircle, ExternalLink } from "lucide-react";
+import { CheckCircle2, XCircle, ExternalLink, Wallet } from "lucide-react";
+import { fmtPrice } from "@/lib/currency";
 
 /**
  * Platform-admin approvals inbox. Shows every event submitted by an organiser
@@ -80,6 +81,9 @@ function ApprovalRow({ event, organiser, reload }) {
           {event.description && (
             <p className="text-sm text-neutral-300 mt-2 max-w-2xl line-clamp-2">{event.description}</p>
           )}
+          {event.payment && event.payment.fee > 0 && (
+            <PaymentPill event={event} onChange={reload} />
+          )}
         </div>
         <Link to={`/events/${event.id}`} data-testid={`approval-open-${event.id}`}
           className="text-xs font-mono uppercase tracking-widest px-3 py-2 bg-white/5 hover:bg-white/10 rounded-sm flex items-center gap-1.5">
@@ -117,6 +121,44 @@ function ApprovalRow({ event, organiser, reload }) {
             </Button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+
+function PaymentPill({ event, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const p = event.payment || {};
+  const tone = p.status === "paid_online" || p.status === "paid_offline"
+    ? "border-[#84CC16]/40 bg-[#84CC16]/10 text-[#84CC16]"
+    : "border-[#FF9500]/40 bg-[#FF9500]/10 text-[#FF9500]";
+  const label = {
+    paid_online: "Paid online",
+    paid_offline: "Paid offline",
+    pending_offline: "Awaiting offline payment",
+  }[p.status] || p.status;
+
+  const markPaid = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/events/${event.id}/mark-paid`);
+      toast.success("Payment recorded");
+      onChange?.();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed");
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div data-testid={`approval-payment-${event.id}`} className={`mt-2 inline-flex items-center gap-2 border rounded-sm px-2.5 py-1 ${tone}`}>
+      <Wallet className="w-3 h-3" />
+      <span className="text-[11px] font-mono uppercase tracking-widest">{label} · {fmtPrice(p.fee, p.currency || "INR")}</span>
+      {p.status === "pending_offline" && (
+        <Button data-testid={`approval-mark-paid-${event.id}`} size="sm" variant="ghost" disabled={busy} onClick={markPaid}
+          className="h-6 px-2 text-[10px] font-mono uppercase tracking-widest text-[#84CC16] hover:bg-[#84CC16]/10">
+          Mark paid
+        </Button>
       )}
     </div>
   );

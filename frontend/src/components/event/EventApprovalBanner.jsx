@@ -4,7 +4,9 @@ import DOMPurify from "dompurify";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ShieldAlert, CheckCircle2, XCircle, FileText } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { fmtPrice } from "@/lib/currency";
+import { ShieldAlert, CheckCircle2, XCircle, FileText, Wallet } from "lucide-react";
 
 /**
  * Event approval banner — handles the three pre-approval states:
@@ -20,14 +22,21 @@ export default function EventApprovalBanner({
   isOwnerOrganiser, isPlatformAdmin, onChange,
 }) {
   const [instructions, setInstructions] = useState("");
+  const [fee, setFee] = useState({ amount: 0, currency: "INR" });
+  const [showPay, setShowPay] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [reason, setReason] = useState("");
 
   useEffect(() => {
     if (!isPendingAck && !isRejected) return;
-    api.get("/settings").then((r) => setInstructions(r.data?.organiser_event_instructions || ""))
-      .catch(() => setInstructions(""));
+    api.get("/settings").then((r) => {
+      setInstructions(r.data?.organiser_event_instructions || "");
+      setFee({
+        amount: Number(r.data?.organiser_event_fee || 0),
+        currency: r.data?.organiser_event_fee_currency || "INR",
+      });
+    }).catch(() => setInstructions(""));
   }, [isPendingAck, isRejected]);
 
   // Sanitize the admin-authored instructions HTML before injecting it. The platform admin
@@ -42,15 +51,29 @@ export default function EventApprovalBanner({
     });
   }, [instructions]);
 
-  const acknowledge = async () => {
+  const acknowledge = async (paymentMethod) => {
     setBusy(true);
     try {
-      await api.post(`/events/${event.id}/acknowledge-instructions`);
-      toast.success("Event submitted to platform admin for approval");
+      const body = paymentMethod ? { payment_method: paymentMethod } : {};
+      await api.post(`/events/${event.id}/acknowledge-instructions`, body);
+      const msg = paymentMethod === "offline"
+        ? "Event submitted — pay the fee offline to the platform admin; they will confirm receipt."
+        : paymentMethod === "online"
+          ? "Payment recorded — event submitted for approval."
+          : "Event submitted to platform admin for approval";
+      toast.success(msg);
+      setShowPay(false);
       onChange?.();
     } catch (err) {
       toast.error(err.response?.data?.detail || "Failed to submit");
     } finally { setBusy(false); }
+  };
+
+  // Entry point from the "I agree & submit" button — routes free events
+  // straight through, else shows the payment picker.
+  const beginSubmit = () => {
+    if (fee.amount > 0) setShowPay(true);
+    else acknowledge();
   };
 
   const approve = async () => {
@@ -93,10 +116,40 @@ export default function EventApprovalBanner({
           className="mt-4 bg-black/40 border border-white/10 rounded-sm p-4 text-sm text-neutral-200 whitespace-pre-wrap leading-relaxed max-h-72 overflow-y-auto"
           dangerouslySetInnerHTML={{ __html: safeInstructions || "<em class='text-neutral-500'>No instructions have been set by the platform admin yet — proceed to submit.</em>" }}
         />
-        <Button data-testid="approval-acknowledge-btn" onClick={acknowledge} disabled={busy}
+        {fee.amount > 0 && (
+          <div data-testid="approval-fee-summary" className="mt-4 border border-[#84CC16]/40 bg-[#84CC16]/5 rounded-sm p-3 flex items-center gap-3">
+            <Wallet className="w-4 h-4 text-[#84CC16] shrink-0" />
+            <div className="flex-1">
+              <div className="text-sm font-semibold">Event submission fee</div>
+              <div className="text-[11px] font-mono text-neutral-400">One-time platform charge — payable before your event reaches the approval queue.</div>
+            </div>
+            <div data-testid="approval-fee-amount" className="font-mono text-lg text-[#84CC16]">{fmtPrice(fee.amount, fee.currency)}</div>
+          </div>
+        )}
+        <Button data-testid="approval-acknowledge-btn" onClick={beginSubmit} disabled={busy}
           className="mt-4 bg-[#FACC15] hover:bg-[#EAB308] text-black font-semibold rounded-sm">
-          {busy ? "Submitting…" : "I agree & submit for approval"}
+          {busy ? "Submitting…" : fee.amount > 0 ? `I agree — pay ${fmtPrice(fee.amount, fee.currency)} & submit` : "I agree & submit for approval"}
         </Button>
+
+        {/* Payment picker — only shown when a fee is configured. */}
+        <Dialog open={showPay} onOpenChange={setShowPay}>
+          <DialogContent className="bg-[#0c0c0c] border-white/10 text-white">
+            <DialogHeader><DialogTitle>Pay the event submission fee</DialogTitle></DialogHeader>
+            <div className="text-sm text-neutral-400">Kreeda Nation charges <span className="text-[#84CC16] font-mono">{fmtPrice(fee.amount, fee.currency)}</span> per event submission. Pick a payment method to send this to the admin queue:</div>
+            <div className="grid gap-2 mt-3">
+              <button data-testid="approval-pay-online" disabled={busy} onClick={() => acknowledge("online")}
+                className="text-left border border-[#84CC16]/50 bg-[#84CC16]/10 hover:bg-[#84CC16] hover:text-black transition-colors p-3 rounded-sm">
+                <div className="text-sm font-semibold">Pay online now</div>
+                <div className="text-[11px] font-mono opacity-70">Charged instantly via Razorpay (stubbed until integration lands — treated as paid).</div>
+              </button>
+              <button data-testid="approval-pay-offline" disabled={busy} onClick={() => acknowledge("offline")}
+                className="text-left border border-white/10 bg-black/40 hover:bg-white/5 transition-colors p-3 rounded-sm">
+                <div className="text-sm font-semibold">Pay offline & proceed</div>
+                <div className="text-[11px] font-mono opacity-70">Event goes to admin approval immediately. Settle offline (bank transfer / UPI / cash) and the admin will confirm receipt.</div>
+              </button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     );
   }

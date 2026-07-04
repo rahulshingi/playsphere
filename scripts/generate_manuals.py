@@ -715,7 +715,7 @@ admin_sections = [
         ]),
         ("warn", "HR / company events skip this workflow and are public immediately. Only independent <i>organiser</i> accounts hit the approval queue."),
         ("h3", "Customise the instructions organisers must acknowledge"),
-        ("p", "Open <b>Settings</b> tab → scroll to <b>ORGANISER EVENT INSTRUCTIONS</b>. Edit the rich-text block with your latest fair-play, sponsorship and policy rules. Organisers see this verbatim inside the acknowledgement modal on every new event they create."),
+        ("p", "Open <b>Settings</b> tab → scroll to <b>ORGANISER EVENT INSTRUCTIONS</b>. Edit the rich-text block with your latest fair-play, sponsorship and policy rules. Organisers see this verbatim inside the acknowledgement modal on every new event they create. Right below it, set the <b>ORGANISER EVENT FEE</b> — one-time platform charge per event submission. Leave it at 0 for free submissions; any positive amount triggers a payment step (Pay online / Pay offline) before the event enters your approval queue. Offline payments land as <b>Awaiting offline payment</b> in the Approvals inbox with a <b>Mark paid</b> button once you receive the funds."),
         ("h3", "Vendor / listing approvals now send emails"),
         ("p", "Approvals tab actions on the <b>Vendors</b> and <b>Listings</b> tabs now auto-email the vendor:"),
         ("kv", [

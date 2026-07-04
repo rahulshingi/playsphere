@@ -67,6 +67,39 @@ export default function SettingsTab({ settings, setSettings, reload }) {
         </Button>
       </div>
 
+      <div className="border border-white/10 rounded-sm bg-[#141414] p-6 max-w-2xl space-y-3 mt-6">
+        <div className="font-display tracking-wider text-2xl">ORGANISER EVENT FEE</div>
+        <p className="text-xs text-neutral-500 font-mono">
+          One-time platform charge every organiser pays when submitting an event for approval.
+          Set to <b>0</b> to make submissions free — the payment picker won&apos;t be shown.
+        </p>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="col-span-2">
+            <div className="text-[10px] font-mono uppercase text-neutral-500">Amount</div>
+            <Input
+              data-testid="setting-organiser_event_fee"
+              type="number" min="0" step="0.01"
+              value={settings.organiser_event_fee ?? 0}
+              onChange={(e) => setSettings({ ...settings, organiser_event_fee: Number(e.target.value) })}
+              className="mt-1 bg-black/40 border-white/10 text-white font-mono"
+            />
+          </div>
+          <div>
+            <div className="text-[10px] font-mono uppercase text-neutral-500">Currency</div>
+            <Input
+              data-testid="setting-organiser_event_fee_currency"
+              value={settings.organiser_event_fee_currency || "INR"}
+              onChange={(e) => setSettings({ ...settings, organiser_event_fee_currency: e.target.value.toUpperCase() })}
+              className="mt-1 bg-black/40 border-white/10 text-white font-mono uppercase"
+            />
+          </div>
+        </div>
+        <Button data-testid="organiser-fee-save" onClick={save}
+          className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
+          Save event fee
+        </Button>
+      </div>
+
       <ContactInbox />
     </>
   );

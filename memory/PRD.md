@@ -607,3 +607,8 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - **PDFs regenerated** (Feb 2026, 7 manuals, ~325 KB each). Company manual now lists venue-direct-booking; Admin manual documents the enable/disable toggle. Script: `python3 /app/scripts/generate_manuals.py`.
 - Verified end-to-end via curl (login cookie, PATCH round-trip: disable → hidden → include_inactive shows → enable) and Playwright screenshot (17 toggle buttons rendered on Services tab).
 
+
+## Feb 2026 — Public `/hire` marketplace preview
+- Removed the unauth redirect guard on `pages/VendorMarket.jsx`. Anyone can now browse `/hire` — sport chips, city picker, and verified listing cards render for guest visitors (matches the promise made in player/vendor manuals).
+- Auth is enforced at the "click a listing" step: `openBookingFor()` bounces guests to `/login?next=/hire` before opening the booking modal. Signed-in non-buyer roles (vendor, admin) still see the modal but the existing `canBook` gate blocks submission.
+- Improves conversion from QR-poster / SEO / cold-traffic visits: users can validate the marketplace before committing to signup.

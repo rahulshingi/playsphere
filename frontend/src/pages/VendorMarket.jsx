@@ -39,13 +39,18 @@ export default function VendorMarket() {
   const [selected, setSelected] = useState(null);
   const [form, setForm] = useState({ requested_date: "", start_time: "18:00", hours: 2, notes: "", apply_membership_id: "" });
 
-  // Anyone can browse, but booking requires an authenticated buyer role.
-  // Players + organisers + company admins are all allowed to send a booking request.
+  // Anyone can browse /hire — no login wall. We only gate the click-to-book
+  // action so QR-poster traffic and organic visitors can preview listings first.
+  // Players + organisers + company admins are the roles allowed to submit a booking.
   const canBook = !!user && ["player", "organiser", "company_admin"].includes(user.role);
 
-  useEffect(() => {
-    if (ready && !user) nav("/login?next=/hire");
-  }, [ready, user, nav]);
+  const openBookingFor = (listing) => {
+    if (ready && !user) {
+      nav("/login?next=/hire");
+      return;
+    }
+    setSelected(listing);
+  };
 
   // When sport is picked, fetch cities
   useEffect(() => {
@@ -187,7 +192,7 @@ export default function VendorMarket() {
                 <button
                   key={l.id}
                   data-testid={`vm-listing-${l.id}`}
-                  onClick={() => setSelected(l)}
+                  onClick={() => openBookingFor(l)}
                   className="text-left border border-white/10 rounded-sm bg-[#141414] overflow-hidden hover-lift"
                 >
                   <div className="h-40 bg-black/40 relative">

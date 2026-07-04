@@ -113,6 +113,17 @@ export default function MyMemberships() {
                       <Button data-testid={`my-memb-cancel-${p.id}`} size="sm" variant="ghost"
                         onClick={() => cancel(p)} className="text-[#FF3B30] hover:text-[#FF3B30]">Cancel request</Button>
                     )}
+                    {(p.status === "active" || p.status === "expired") && p.listing_id && (
+                      <Button data-testid={`my-memb-renew-${p.id}`} size="sm"
+                        onClick={() => nav(`/vendor-listing/${p.listing_id}`)}
+                        className="bg-[#EC4899] hover:bg-[#DB2777] text-white rounded-sm">
+                        {p.status === "expired" ? "Renew pass" : (dleft != null && dleft <= 7) ? "Renew now" : "Renew"}
+                      </Button>
+                    )}
+                    <Button data-testid={`my-memb-browse-${p.id}`} size="sm" variant="ghost"
+                      onClick={() => nav("/hire")} className="text-neutral-400 hover:text-white ml-auto">
+                      Browse more →
+                    </Button>
                   </div>
                 </div>
               );

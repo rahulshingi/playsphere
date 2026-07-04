@@ -629,3 +629,14 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Testids: `vld-share-whatsapp`, `vld-share-x`, `vld-share-copy`, `vld-share-more`.
 - Manual updates (targeted only): vendor manual now documents the public listing page + rich share previews under Phase 5c bullet list; player manual clarifies /hire is browseable without sign-in.
 - 7 PDFs regenerated (Feb 2026).
+
+## Feb 2026 — Player + Organiser vendor-marketplace access
+- **`/bookings` unlocked for players** — `Bookings.jsx` no longer redirects `role in {player, organiser}` to /login. Players/organisers see their vendor-marketplace bookings via `<VendorBookings />`; company_admin + platform_admin still get service bookings too.
+- **Cancel + reschedule for buyers** — backend `POST /api/vendor-bookings/{id}/cancel` and `.../reschedule` now permit `role in {player, organiser}` when the booking's `created_by == user.id`. Company admins remain scoped to their `company_id`.
+- **`VendorBookings.jsx`** — `canBuyerModify` now includes `isPlayer`; completed bookings show a `/ Completed · read-only` marker (`data-testid=vb-readonly-<id>`) and hide the modify buttons. Review form still available on completed bookings for players + company_admin.
+- **Player nav additions** — `Nav.jsx` adds `Hire vendors` (→ /hire) and `My bookings` (→ /bookings) to the player More menu.
+- **`Book a venue` CTA** on `/bookings` for players (`data-testid=bookings-browse-hire`).
+- **Renew memberships** — `/my-memberships` cards for `active` + `expired` passes now expose a `Renew` button (label upgrades to `Renew now` in the last 7 days, `Renew pass` when expired). Deep-links to `/vendor-listing/<listing_id>`. Also added a `Browse more →` link on every card.
+- **Player manual** gained a bullet list documenting the /bookings + /my-memberships + share flows.
+- **Organiser coverage**: organisers already receive `isCompanyAdmin=true` in `AuthContext.jsx`, so all HR/company_admin capabilities (dashboard, /hire, /bookings, /my-memberships, sponsor inbox) already apply. No extra plumbing needed.
+- Verified end-to-end via curl (player login → create booking → cancel → 200, reschedule → 200) and Playwright (`/bookings` shows heading, hire CTA, Cancel+Reschedule buttons).

@@ -792,6 +792,9 @@ def whats_new(role: str) -> dict:
             ("p", "You no longer need a company account to book a ground or coach. Head to <b>/hire</b> and browse venues + coaches in your city — <b>no sign-in required to browse</b>. You only sign in when you tap <b>Book this venue</b>. Bookings appear under <b>My bookings</b> on your dashboard."),
             ("bul", [
                 "<b>Buy memberships</b> — venues sell monthly / quarterly passes. Apply them automatically at checkout to unlock discounted rates or bundled hours.",
+                "<b>Manage every booking</b> — the <b>/bookings</b> page shows every venue slot you've booked. While a booking is still active you can <b>Cancel</b> (refund follows the venue's policy) or <b>Reschedule</b> to a different date/time. Completed bookings turn read-only so history stays intact.",
+                "<b>Renew memberships in one tap</b> — the <b>/my-memberships</b> page shows every pass you hold. Active + expired passes get a <b>Renew</b> button that jumps straight to the venue's listing page. Passes expiring within 7 days show a highlighted <b>Renew now</b>.",
+                "<b>Share a venue you love</b> — every listing has a <b>/vendor-listing/&lt;id&gt;</b> public page with one-tap WhatsApp / X / Copy sharing. Send it to teammates so they can book without hunting through search.",
                 "<b>Universal profile</b> — your stats travel with you across employers. Update it once, share the profile URL anywhere.",
                 "<b>Multi-sport tracking</b> — add football, cricket, badminton, chess and more to a single profile with per-sport stats and match history.",
             ]),

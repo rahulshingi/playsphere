@@ -126,10 +126,12 @@ function AdminActions({ booking, onConfirm, onReject }) {
 }
 
 function BookingRow({ booking, role, onPatch }) {
-  const { isVendor, isCompanyAdmin, isPlatformAdmin } = role;
+  const { isVendor, isCompanyAdmin, isPlatformAdmin, isPlayer } = role;
   const canVendorAct = isVendor && booking.status === "pending";
   const canAdminAct = isPlatformAdmin && booking.status !== "cancelled";
-  const canHrModify = isCompanyAdmin && !["cancelled", "rejected", "completed"].includes(booking.status);
+  // Company admins, organisers, players who OWN this booking can cancel/reschedule
+  // — but only while the booking is still active (not terminal, not completed).
+  const canBuyerModify = (isCompanyAdmin || isPlayer) && !["cancelled", "rejected", "completed"].includes(booking.status);
 
   const hrCancel = async () => {
     if (!window.confirm("Cancel this booking? Refund will be auto-calculated from the listing policy.")) return;
@@ -166,9 +168,14 @@ function BookingRow({ booking, role, onPatch }) {
       )}
 
       {canVendorAct && <VendorActions booking={booking} onAct={(s) => onPatch(booking.id, { status: s })} />}
-      {canHrModify && <HrCancelReschedule booking={booking} onCancel={hrCancel} onReschedule={hrReschedule} />}
-      {isCompanyAdmin && booking.status === "completed" && (
+      {canBuyerModify && <HrCancelReschedule booking={booking} onCancel={hrCancel} onReschedule={hrReschedule} />}
+      {(isCompanyAdmin || isPlayer) && booking.status === "completed" && (
         <ReviewForm listingId={booking.listing_id} bookingId={booking.id} />
+      )}
+      {booking.status === "completed" && (
+        <div data-testid={`vb-readonly-${booking.id}`} className="mt-2 text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+          / Completed · read-only
+        </div>
       )}
       {(booking.refund_amount !== null && booking.refund_amount !== undefined) && (
         <div className="mt-2 text-[11px] text-[#F59E0B] bg-[#F59E0B]/5 border border-[#F59E0B]/20 rounded-sm px-3 py-2">
@@ -240,6 +247,7 @@ export default function VendorBookings() {
       <p className="text-xs text-neutral-500 mt-1">
         {role.isPlatformAdmin && "Confirm or reject each request after coordinating with the vendor."}
         {role.isCompanyAdmin && "Track your booking requests. You'll be notified when Kreeda Nation confirms with the vendor."}
+        {role.isPlayer && "Track your venue bookings. Cancel or reschedule while the booking is still active — refund follows the venue's policy."}
         {role.isVendor && "Respond to incoming requests. Kreeda Nation admin will finalize."}
       </p>
 

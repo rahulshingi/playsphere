@@ -2550,10 +2550,12 @@ async def cancel_vendor_booking(booking_id: str, body: dict, user: dict = Depend
     if not doc:
         raise HTTPException(404, "Booking not found")
     role = user.get("role")
-    # HR can cancel only their company's bookings; admins all
+    # HR can cancel only their company's bookings; players/organisers only their own; admins all
     if role == "company_admin" and doc.get("company_id") != user.get("company_id"):
         raise HTTPException(403, "Not your booking")
-    if role not in ("company_admin", "platform_admin", "admin"):
+    if role in ("player", "organiser") and doc.get("created_by") != user["id"]:
+        raise HTTPException(403, "Not your booking")
+    if role not in ("company_admin", "player", "organiser", "platform_admin", "admin"):
         raise HTTPException(403, "Cancellation not allowed for this role")
     if doc.get("status") in ("cancelled", "declined"):
         raise HTTPException(400, "Already cancelled or declined")
@@ -2591,7 +2593,9 @@ async def reschedule_vendor_booking(booking_id: str, body: dict, user: dict = De
     role = user.get("role")
     if role == "company_admin" and doc.get("company_id") != user.get("company_id"):
         raise HTTPException(403, "Not your booking")
-    if role not in ("company_admin", "platform_admin", "admin"):
+    if role in ("player", "organiser") and doc.get("created_by") != user["id"]:
+        raise HTTPException(403, "Not your booking")
+    if role not in ("company_admin", "player", "organiser", "platform_admin", "admin"):
         raise HTTPException(403, "Reschedule not allowed for this role")
     if doc.get("status") in ("cancelled", "declined", "completed"):
         raise HTTPException(400, "Booking cannot be rescheduled in its current state")

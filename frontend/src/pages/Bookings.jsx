@@ -13,19 +13,23 @@ import VendorBookings from "@/components/VendorBookings";
 const statusOptions = ["pending", "approved", "fulfilled", "cancelled"];
 
 export default function Bookings() {
-  const { ready, isCompanyAdmin, isPlatformAdmin, isVendor } = useAuth();
+  const { ready, isCompanyAdmin, isPlatformAdmin, isVendor, isPlayer } = useAuth();
   const nav = useNavigate();
   const [items, setItems] = useState([]);
 
+  // Players + organisers don't have service (goodies/awards) bookings, only
+  // vendor-marketplace bookings — those are rendered by <VendorBookings />.
+  const hasServiceBookings = isCompanyAdmin || isPlatformAdmin;
+
   const load = () => {
-    if (isVendor) { setItems([]); return; } // vendors don't have service bookings
+    if (!hasServiceBookings) { setItems([]); return; }
     api.get("/bookings").then((r) => setItems(r.data));
   };
 
   useEffect(() => {
-    if (ready && !(isCompanyAdmin || isPlatformAdmin || isVendor)) { nav("/login"); return; }
+    if (ready && !(isCompanyAdmin || isPlatformAdmin || isVendor || isPlayer)) { nav("/login"); return; }
     if (ready) load();
-  }, [ready, isCompanyAdmin, isPlatformAdmin, isVendor, nav]);
+  }, [ready, isCompanyAdmin, isPlatformAdmin, isVendor, isPlayer, nav]);
 
   const updateStatus = async (id, status) => {
     try { await api.patch(`/bookings/${id}`, { status }); toast.success("Updated"); load(); } catch { toast.error("Failed"); }
@@ -44,12 +48,15 @@ export default function Bookings() {
           <h1 className="font-display text-6xl tracking-wide mt-3">
             {isVendor ? "INCOMING REQUESTS" : isPlatformAdmin ? "ALL BOOKINGS" : "YOUR BOOKINGS"}
           </h1>
-          {!isVendor && (
+          {!isVendor && hasServiceBookings && (
             <Link to="/services"><Button data-testid="bookings-browse" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Browse services</Button></Link>
+          )}
+          {isPlayer && (
+            <Link to="/hire"><Button data-testid="bookings-browse-hire" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Book a venue</Button></Link>
           )}
         </div>
 
-        {!isVendor && (
+        {hasServiceBookings && (
         <div className="mt-10 border border-white/10 rounded-sm overflow-hidden">
           <table data-testid="bookings-table" className="w-full text-sm">
             <thead className="bg-[#141414] font-mono text-[10px] uppercase tracking-widest text-neutral-500">

@@ -10,6 +10,7 @@ import { Eye, MapPin, ExternalLink } from "lucide-react";
 import { SPORT_SCHEMAS } from "@/lib/sportProfileSchema";
 import PlayerFilters from "@/components/player/PlayerFilters";
 import SportStatsDashboard from "@/components/player/SportStatsDashboard";
+import PlayerTournamentsSection from "@/components/player/PlayerTournamentsSection";
 
 const EMPTY_FILTERS = { q: "", sport: "", role: "", hand: "", city: "" };
 
@@ -167,6 +168,9 @@ export function PlayerProfileView() {
             <div className="mt-6">
               <SportStatsDashboard profileId={p.id} interestedSports={p.interested_sports?.length ? p.interested_sports : ["cricket"]} />
             </div>
+
+            {/* Tournaments hosted + played */}
+            <PlayerTournamentsSection profileId={p.id} isOwner={false} />
 
             {p.bio && <p className="mt-6 text-neutral-300 leading-relaxed">{p.bio}</p>}
 

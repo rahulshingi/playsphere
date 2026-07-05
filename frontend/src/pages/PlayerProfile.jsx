@@ -16,6 +16,7 @@ import SportsMultiSelect from "@/components/player/SportsMultiSelect";
 import SportProfileSection from "@/components/player/SportProfileSection";
 import SportStatsEditor from "@/components/player/SportStatsEditor";
 import SportStatsDashboard from "@/components/player/SportStatsDashboard";
+import PlayerTournamentsSection from "@/components/player/PlayerTournamentsSection";
 import { SPORT_SCHEMAS } from "@/lib/sportProfileSchema";
 import { STATS_SCHEMAS } from "@/lib/sportStatsSchema";
 
@@ -162,7 +163,10 @@ export default function PlayerProfile() {
             toggleInterestedSports={toggleInterestedSports}
           />
         ) : (
-          <ViewMode profile={profile} companyName={companyName} interested={interested} />
+          <>
+            <ViewMode profile={profile} companyName={companyName} interested={interested} />
+            {profile.id && <PlayerTournamentsSection profileId={profile.id} isOwner />}
+          </>
         )}
 
         {editing && (

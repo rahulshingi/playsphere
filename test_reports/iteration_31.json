@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 31 (Player Tournaments MVP) validated end-to-end. Backend pytest suite `test_player_tournaments_iter31.py` 11/11 passing (POST /events auto-tags is_local_match for role=player, respects listed_publicly; anonymous /api/events hides hidden matches; scope=hosted returns owner's hidden events; admin sees hidden; creator can PATCH; protected fields (created_by/approval_status) not overwritable; POST/DELETE /api/events/{id}/photos owner-only; GET /api/players/{id}/hosted-tournaments hides hidden events from strangers). Frontend Playwright covered all 8 review cases except one gap on public profile visibility — see frontend_issues.integration_issues.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/players/profiles/{id}", "issue": "Returns 401 for anonymous callers. Review request specifies that /players/profiles/{profile_id} must render publicly for anonymous users so the player-tournaments-section can be visible. Either loosen auth on this endpoint or expose a public variant."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Anonymous public player profile", "issue": "PlayerDirectory.jsx::PlayerProfileView (line 116) redirects anonymous users to /players/login, so /players/profiles/{profile_id} never mounts PlayerTournamentsSection for logged-out viewers. Combined with the /api/players/profiles/{id} 401 above, requirement #7 of the review request FAILS. Backend GET /api/players/{id}/hosted-tournaments IS accessible anonymously and correctly returns only public events (1 event out of 2 created).", "affected_selectors": ["player-tournaments-section"]}
+    ],
+    "design_issues": [
+      {"screen": "First-time orientation modal", "issues": ["The WelcomeModal overlay (data-testid=welcome-modal, z-[60]) intercepts clicks on the player-host page and the Admin form on first visit. After dismissing it once the flow proceeds fine. This is expected UX but automated tests must remember to dismiss it — not a bug."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_player_tournaments_iter31.py",
+    "/app/test_reports/pytest/iter31_player_tournaments.xml"
+  ],
+  "action_items": [
+    "Loosen auth on GET /api/players/profiles/{id} to allow anonymous access (public profile view is a stated requirement of iteration 31).",
+    "Remove the anonymous redirect at PlayerDirectory.jsx line 116 so /players/profiles/{profile_id} renders without login. Ensure PlayerTournamentsSection still receives isOwner=false for anonymous callers."
+  ],
+  "critical_code_review_comments": [
+    "PlayerDirectory.jsx L116 hard-redirects anon users to /players/login, but the review spec (case 7) explicitly requires the public profile to render for anonymous users with PlayerTournamentsSection visible. This is a direct spec contradiction — fix required.",
+    "Backend /api/players/profiles/{id} appears to require auth (401 to curl). If public profile viewing is intended, the endpoint should support anonymous callers (mobile_masked / dob can be gated inside the response instead).",
+    "EventPhotoGallery.removePhoto uses window.confirm — works but blocks Playwright without an explicit dialog handler. Consider replacing with a shadcn AlertDialog for better UX + testability.",
+    "server.py already very large (~4353+ lines per iter30 review). Route file split (routes/events.py, routes/player_tournaments.py) is improving but the Pydantic Event/EventCreate/EventUpdate triplet is still duplicated. Extract a shared mixin."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (11/11 pytest + all curl checks)", "frontend": "87.5% (7/8 review cases; anonymous public profile FAILS)"},
+  "test_credentials": "testplayer@example.com/player123, admin@kreedanation.com/admin123, acme@example.com/acme123",
+  "seed_data_creation": "Created TEST_UI_PublicMatch and TEST_UI_HiddenMatch events during the UI run and DELETED both via authenticated DELETE /api/events/{id} at the end of testing. pytest fixtures self-clean via `created_events` teardown.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend response for Event now correctly includes is_local_match, listed_publicly, photos, hero_image_url, awards (verified via /api/events + /api/players/{id}/hosted-tournaments). Playwright must dismiss the WelcomeModal (click [data-testid=welcome-dismiss]) before interacting with /admin, /players/me, /events/{id} because the first-time orientation overlay intercepts clicks. Photo gallery deletion triggers a native window.confirm — attach page.once('dialog', d=>d.accept()) before clicking gallery-delete. Only one gap remains: anonymous /players/profiles/{id} redirects to login (both FE guard and BE 401). Once that's fixed retest case 7.",
+  "rca of the issue": "Anonymous public profile failure — Two-layer auth guard: (1) frontend PlayerDirectory.jsx line 116 forcibly redirects when !user, (2) backend GET /api/players/profiles/{id} returns 401 without a session. Neither the FE guard nor the BE endpoint honours the review requirement that public profile pages be viewable anonymously. Fix: remove the FE redirect (or gate only on the public boolean), and mark the BE endpoint as `current_user: Optional[User] = Depends(get_optional_user)` so it responds to anonymous callers with a shape that omits mobile/dob but keeps id/name/photo/company_name."
+}

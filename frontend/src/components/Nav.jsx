@@ -38,6 +38,7 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
   }
   if (isPlayer) {
     primary.push({ to: "/players/me", label: "My profile", icon: User, accent: "#84CC16" });
+    primary.push({ to: "/admin", label: "Host match", icon: Shield, accent: "#84CC16" });
     more.push({ to: "/hire", label: "Hire vendors", icon: Store });
     more.push({ to: "/bookings", label: "My bookings" });
     more.push({ to: "/players/profiles", label: "Find players" });

@@ -110,6 +110,9 @@ def register(api, db, deps):
             cid = user.get("company_id")
             if cid:
                 q = {"$or": [{"company_id": cid}, {"companies": cid}]}
+        if scope == "hosted" and user and user.get("id"):
+            # "Events I host" — used by player local-match dashboard.
+            q = {"created_by": user["id"]}
 
         # ---- Approval-status visibility filter ----
         # Public + non-organiser-non-admin viewers only see approved events.
@@ -135,6 +138,28 @@ def register(api, db, deps):
                 q = {"$and": [q, allowed_filter]}
             else:
                 q = allowed_filter
+
+        # ---- Local-match visibility filter ----
+        # Player-hosted local matches with `listed_publicly=False` are hidden
+        # from the general /events list. Creator + admins still see them via
+        # direct fetch and (for the creator) via list.
+        if role not in ("platform_admin", "admin"):
+            uid = (user or {}).get("id")
+            hide_hidden = {
+                "$or": [
+                    {"listed_publicly": {"$ne": False}},
+                    {"is_local_match": {"$ne": True}},
+                ]
+            }
+            if uid:
+                hide_hidden = {
+                    "$or": [
+                        {"listed_publicly": {"$ne": False}},
+                        {"is_local_match": {"$ne": True}},
+                        {"created_by": uid},
+                    ]
+                }
+            q = {"$and": [q, hide_hidden]} if q else hide_hidden
 
         docs = await db.events.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
         return [Event(**d) for d in docs]
@@ -286,6 +311,29 @@ def register(api, db, deps):
         await db.events.update_one({"id": event_id}, {"$set": {"photos": photos}})
         return {"ok": True, "photos": photos}
 
+    # -------- Tournaments a player HOSTED (created themselves) --------
+    @api.get("/players/{player_id}/hosted-tournaments")
+    async def player_hosted_tournaments(player_id: str, user: Optional[dict] = Depends(get_current_user_optional)):
+        # Resolve player_id -> user_id (creator column stores user id, not profile id).
+        prof = await db.player_profiles.find_one({"id": player_id}, {"_id": 0, "user_id": 1})
+        if not prof:
+            return []
+        uid = prof.get("user_id")
+        if not uid:
+            return []
+        # Hide unlisted events from strangers.
+        is_owner = user and user.get("id") == uid
+        is_admin = user and user.get("role") in ("platform_admin", "admin")
+        q = {"created_by": uid}
+        if not (is_owner or is_admin):
+            q = {"$and": [q, {"$or": [{"listed_publicly": {"$ne": False}}, {"is_local_match": {"$ne": True}}]}]}
+        events = await db.events.find(q, {
+            "_id": 0, "id": 1, "name": 1, "sport": 1, "start_date": 1, "end_date": 1,
+            "banner_url": 1, "is_local_match": 1, "listed_publicly": 1,
+            "approval_status": 1, "status": 1, "venue": 1,
+        }).sort("created_at", -1).to_list(500)
+        return events
+
     # -------- Tournaments a player participated in --------
     @api.get("/players/{player_id}/tournaments")
     async def player_tournaments(player_id: str):
@@ -433,23 +481,29 @@ def register(api, db, deps):
         return Event(**doc)
 
     @api.patch("/events/{event_id}", response_model=Event)
-    async def update_event(event_id: str, body: dict, user: dict = Depends(require_admin)):
+    async def update_event(event_id: str, body: dict, user: dict = Depends(get_current_user)):
         body.pop("id", None)
         existing = await db.events.find_one({"id": event_id}, {"_id": 0})
         if not existing:
             raise HTTPException(404, "Event not found")
-        if user.get("role") in ("company_admin", "organiser") and existing.get("company_id") != user.get("company_id"):
+        # Creator OR anyone who can manage the event (platform admin,
+        # company_admin/organiser of the owning company) may edit.
+        if not await _can_manage_event(user, existing):
             raise HTTPException(403, "Not your event")
+        # Protect sensitive lifecycle fields from being overwritten via PATCH.
+        for protected in ("created_by", "company_id", "approval_status",
+                          "approved_by", "approved_at", "created_at", "payment"):
+            body.pop(protected, None)
         await db.events.update_one({"id": event_id}, {"$set": body})
         doc = await db.events.find_one({"id": event_id}, {"_id": 0})
         return Event(**doc)
 
     @api.delete("/events/{event_id}")
-    async def delete_event(event_id: str, user: dict = Depends(require_admin)):
+    async def delete_event(event_id: str, user: dict = Depends(get_current_user)):
         existing = await db.events.find_one({"id": event_id}, {"_id": 0})
         if not existing:
             return {"ok": True}
-        if user.get("role") in ("company_admin", "organiser") and existing.get("company_id") != user.get("company_id"):
+        if not await _can_manage_event(user, existing):
             raise HTTPException(403, "Not your event")
         await db.events.delete_one({"id": event_id})
         await db.teams.update_many({"event_id": event_id}, {"$set": {"event_id": None}})

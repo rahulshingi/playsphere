@@ -17,6 +17,8 @@ import EventTeamsManager from "@/components/EventTeamsManager";
 import EventSponsorshipManager from "@/components/sponsorship/EventSponsorshipManager";
 import EventScorersManager from "@/components/event/EventScorersManager";
 import EventApprovalBanner from "@/components/event/EventApprovalBanner";
+import EventPhotoGallery from "@/components/event/EventPhotoGallery";
+import FixtureAwardsEditor, { FixtureAwardsBanner } from "@/components/event/FixtureAwardsEditor";
 import useFixtureSocket from "@/lib/useFixtureSocket";
 import { toast } from "sonner";
 
@@ -64,10 +66,11 @@ export default function EventDetail() {
     }).catch(() => setMyScorerAssignment(null));
   }, [isScorer, id]);
 
-  // True only for the event's own organiser/HR (or any platform admin).
-  // Stops a different company's HR from generating fixtures or scoring this event.
+  // True only for the event's own organiser/HR (or any platform admin) OR the
+  // user who originally created the event (covers player-hosted local matches).
   const canManage = !!event && (
     isPlatformAdmin ||
+    (user && event.created_by === user.id) ||
     (isCompanyAdmin && companyId && (event.company_id === companyId || (event.companies || []).includes(companyId)))
   );
   // Lock fixture regeneration as soon as any match has started or completed —
@@ -120,7 +123,7 @@ export default function EventDetail() {
     () => (myPlayerId ? teams.filter((t) => t.captain_player_id === myPlayerId).map((t) => t.id) : []),
     [teams, myPlayerId]
   );
-  const canSeeTeamsTab = isAdmin || myCaptainTeamIds.length > 0;
+  const canSeeTeamsTab = isAdmin || canManage || myCaptainTeamIds.length > 0;
 
   const generate = async () => {
     try {
@@ -145,10 +148,16 @@ export default function EventDetail() {
         </div>
         <div className="relative max-w-7xl mx-auto px-6 pt-16 pb-10">
           <Link to="/events" className="text-xs font-mono text-neutral-400 hover:text-white">← All events</Link>
-          <div className="flex items-center gap-2 mt-4">
+          <div className="flex items-center gap-2 mt-4 flex-wrap">
             <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm border" style={{ borderColor: sportColor(event.sport), color: sportColor(event.sport) }}>{event.sport}</span>
             <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-sm bg-white/5 text-neutral-300">{event.format.replace("_", " ")}</span>
             <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-sm bg-white/5 text-neutral-300">{event.status}</span>
+            {event.is_local_match && (
+              <span data-testid="event-local-badge" className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm border border-[#84CC16]/40 bg-[#84CC16]/10 text-[#84CC16]">LOCAL MATCH</span>
+            )}
+            {event.is_local_match && event.listed_publicly === false && (
+              <span data-testid="event-hidden-badge" className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm border border-neutral-500/40 bg-neutral-500/10 text-neutral-400">HIDDEN</span>
+            )}
           </div>
           <h1 data-testid="event-title" className="font-display text-6xl tracking-wide mt-4">{event.name}</h1>
           <p className="text-neutral-400 mt-3 max-w-2xl">{event.description}</p>
@@ -229,7 +238,7 @@ export default function EventDetail() {
           </TabsList>
 
           <TabsContent value="fixtures" className="mt-6">
-            <FixturesList fixtures={fixtures} event={event} teamMap={teamMap} canManage={canManage} canScoreFixture={canScoreFixture} onScore={(f) => setScoringFixture(f)} />
+            <FixturesList fixtures={fixtures} event={event} teamMap={teamMap} canManage={canManage} canScoreFixture={canScoreFixture} onScore={(f) => setScoringFixture(f)} onAwardsSaved={loadAll} />
           </TabsContent>
           <TabsContent value="standings" className="mt-6">
             <StandingsTable standings={standings} />
@@ -258,6 +267,12 @@ export default function EventDetail() {
             </TabsContent>
           )}
         </Tabs>
+
+        <EventPhotoGallery
+          event={event}
+          canManage={canManage}
+          onChange={(photos) => setEvent({ ...event, photos })}
+        />
       </div>
 
       {scoringFixture && event.sport === "cricket" && (
@@ -320,7 +335,7 @@ export default function EventDetail() {
   );
 }
 
-function FixturesList({ fixtures, event, teamMap, canManage, canScoreFixture, onScore }) {
+function FixturesList({ fixtures, event, teamMap, canManage, canScoreFixture, onScore, onAwardsSaved }) {
   const grouped = fixtures.reduce((acc, f) => {
     (acc[f.round] = acc[f.round] || []).push(f);
     return acc;
@@ -333,7 +348,7 @@ function FixturesList({ fixtures, event, teamMap, canManage, canScoreFixture, on
           <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Round {rnd}</div>
           <div className="grid md:grid-cols-2 gap-3">
             {list.map((f) => (
-              <FixtureCard key={f.id} fixture={f} event={event} teamMap={teamMap} canScore={canScoreFixture(f)} onScore={onScore} />
+              <FixtureCard key={f.id} fixture={f} event={event} teamMap={teamMap} canManage={canManage} canScore={canScoreFixture(f)} onScore={onScore} onAwardsSaved={onAwardsSaved} />
             ))}
           </div>
         </div>
@@ -342,10 +357,12 @@ function FixturesList({ fixtures, event, teamMap, canManage, canScoreFixture, on
   );
 }
 
-function FixtureCard({ fixture, event, teamMap, canScore, onScore }) {
+function FixtureCard({ fixture, event, teamMap, canManage, canScore, onScore, onAwardsSaved }) {
   const a = teamMap[fixture.team_a_id];
   const b = teamMap[fixture.team_b_id];
   const isLive = fixture.status === "live";
+  const isCompleted = fixture.status === "completed";
+  const [editingAwards, setEditingAwards] = useState(false);
   return (
     <div data-testid={`fixture-card-${fixture.id}`} className={`rounded-sm border bg-[#141414] p-5 hover-lift ${isLive ? "border-[#FF3B30]/50" : "border-white/10"}`}>
       <div className="flex items-center justify-between mb-3">
@@ -355,9 +372,21 @@ function FixtureCard({ fixture, event, teamMap, canScore, onScore }) {
       <TeamRow team={a} score={renderScore(event.sport, fixture.score?.team_a)} winner={fixture.winner_id === a?.id} />
       <div className="text-[10px] font-mono text-neutral-600 my-1.5 text-center">VS</div>
       <TeamRow team={b} score={renderScore(event.sport, fixture.score?.team_b)} winner={fixture.winner_id === b?.id} />
+      <FixtureAwardsBanner fixture={fixture} />
       {canScore && a && b && (
         <Button data-testid={`score-fixture-${fixture.id}`} size="sm" onClick={() => onScore(fixture)} className="mt-3 w-full bg-white/5 hover:bg-[#84CC16] text-white rounded-sm border border-white/10">
           Update score
+        </Button>
+      )}
+      {isCompleted && canManage && (
+        <Button
+          data-testid={`fixture-awards-btn-${fixture.id}`}
+          size="sm"
+          variant="outline"
+          onClick={() => setEditingAwards(true)}
+          className="mt-2 w-full bg-transparent hover:bg-[#F59E0B]/10 text-[#F59E0B] rounded-sm border-[#F59E0B]/40"
+        >
+          {fixture.hero_image_url || fixture.awards ? "Edit highlights" : "Add hero image & awards"}
         </Button>
       )}
       {a && b && (
@@ -368,6 +397,15 @@ function FixtureCard({ fixture, event, teamMap, canScore, onScore }) {
         >
           ▶ Open live scorecard
         </Link>
+      )}
+      {editingAwards && (
+        <FixtureAwardsEditor
+          fixture={fixture}
+          sport={event.sport}
+          open={editingAwards}
+          onClose={() => setEditingAwards(false)}
+          onSaved={onAwardsSaved}
+        />
       )}
     </div>
   );

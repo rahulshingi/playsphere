@@ -344,6 +344,16 @@ class Event(BaseModel):
     contact_name: Optional[str] = ""
     contact_email: Optional[str] = ""
     contact_phone: Optional[str] = ""
+    # ---- Player-hosted local matches ----
+    # `is_local_match=True` means a regular player created this informal
+    # neighborhood tournament. `listed_publicly=False` keeps it hidden from
+    # the public /events list — accessible only via direct link + on the
+    # creator's PlayerProfile. Owner/admin always see it regardless.
+    is_local_match: bool = False
+    listed_publicly: bool = True
+    # Post-tournament photo gallery. Creator uploads via
+    # POST /api/events/{id}/photos.
+    photos: List[str] = Field(default_factory=list)
     # ---- Sponsorship marketplace ----
     accept_sponsorships: bool = False
     sponsorship_requirements: Dict[str, Any] = Field(default_factory=dict)
@@ -386,6 +396,10 @@ class EventCreate(BaseModel):
     # UI can render a distinct badge and keep public marketplace surfaces
     # curated to organiser/HR/admin events.
     is_local_match: bool = False
+    # Player controls whether the local match appears on the public /events
+    # listing. Even when hidden, the event remains reachable via direct link
+    # and the creator's PlayerProfile.
+    listed_publicly: bool = True
     # Post-tournament gallery — creator uploads photos after wrap-up. Rendered
     # in a lightbox on the public event page.
     photos: List[str] = Field(default_factory=list)
@@ -963,6 +977,10 @@ def _gen_temp_password(length: int = 10) -> str:
 async def _can_manage_event(user: dict, event: dict) -> bool:
     role = user.get("role")
     if role in ("platform_admin", "admin"):
+        return True
+    # Creator always manages their own event. Enables player-hosted local
+    # matches without granting a broader role escalation.
+    if event.get("created_by") and event.get("created_by") == user.get("id"):
         return True
     if role in ("company_admin", "organiser"):
         cid = user.get("company_id")

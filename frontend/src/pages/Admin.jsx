@@ -15,6 +15,7 @@ import { useSports, getPlayerFormat } from "@/hooks/useSports";
 import { toast } from "sonner";
 import { Trash2, Plus } from "lucide-react";
 import VenuePicker from "@/components/VenuePicker";
+import ImageUpload from "@/components/ImageUpload";
 import SuggestVenueButton from "@/components/event/SuggestVenueButton";
 
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
@@ -125,7 +126,10 @@ export default function Admin() {
                 </div>
               )}
               <Input data-testid="player-event-venue" placeholder="Venue (ground, court, backyard…)" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
-              <Input data-testid="player-event-banner" placeholder="Banner image URL (optional)" value={newEvent.banner_url} onChange={(e) => setNewEvent({ ...newEvent, banner_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <div>
+                <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Banner image (optional)</div>
+                <ImageUpload value={newEvent.banner_url} onChange={(v) => setNewEvent({ ...newEvent, banner_url: v })} testid="player-event-banner" placeholder="Paste image URL or click Upload →" />
+              </div>
 
               <label className="flex items-start gap-3 border border-white/10 rounded-sm bg-black/30 p-3 cursor-pointer" data-testid="player-event-public-wrap">
                 <input
@@ -266,7 +270,10 @@ export default function Admin() {
                   <SuggestVenueButton onPick={(label) => setNewEvent({ ...newEvent, venue: label })} />
                 </div>
                 <div className="text-[10px] font-mono text-neutral-500 -mt-1">Can&apos;t find your venue? Click <span className="text-[#84CC16]">Suggest new venue</span> — Kreeda Nation admin will reach out to onboard it.</div>
-                <Input data-testid="admin-event-banner" placeholder="Banner image URL" value={newEvent.banner_url} onChange={(e) => setNewEvent({ ...newEvent, banner_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                <div>
+                  <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Banner image</div>
+                  <ImageUpload value={newEvent.banner_url} onChange={(v) => setNewEvent({ ...newEvent, banner_url: v })} testid="admin-event-banner" placeholder="Paste image URL or click Upload →" />
+                </div>
                 <Input data-testid="admin-event-stream" placeholder="Live stream URL (YouTube / Twitch / any)" value={newEvent.stream_url} onChange={(e) => setNewEvent({ ...newEvent, stream_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 <div className="border border-white/10 rounded-sm bg-black/30 p-3 space-y-2">
                   <div className="text-[10px] font-mono uppercase tracking-widest text-[#EC4899]">/ Organiser contact (public on event page)</div>

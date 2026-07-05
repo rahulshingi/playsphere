@@ -382,6 +382,13 @@ class EventCreate(BaseModel):
     contact_name: Optional[str] = ""
     contact_email: Optional[str] = ""
     contact_phone: Optional[str] = ""
+    # Player-created tournaments are tagged as informal "local matches" so the
+    # UI can render a distinct badge and keep public marketplace surfaces
+    # curated to organiser/HR/admin events.
+    is_local_match: bool = False
+    # Post-tournament gallery — creator uploads photos after wrap-up. Rendered
+    # in a lightbox on the public event page.
+    photos: List[str] = Field(default_factory=list)
     companies: List[str] = Field(default_factory=list)
 
 
@@ -450,6 +457,11 @@ class Fixture(BaseModel):
     score: dict = Field(default_factory=dict)
     winner_id: Optional[str] = None
     bracket_position: Optional[str] = None  # for knockout
+    # Post-match visuals + auto-computed awards. Populated by the scorer /
+    # score-update route when a match transitions to "completed"; also
+    # manually editable by the event creator.
+    hero_image_url: Optional[str] = ""
+    awards: Optional[Dict[str, Any]] = None  # {mom, best_batter, best_bowler, top_scorer, …}
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 

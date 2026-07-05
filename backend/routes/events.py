@@ -211,7 +211,13 @@ def register(api, db, deps):
         return Event(**doc)
 
     @api.post("/events", response_model=Event)
-    async def create_event(body: EventCreate, user: dict = Depends(require_admin)):
+    async def create_event(body: EventCreate, user: dict = Depends(get_current_user)):
+        # Allow platform_admin, admin, company_admin, organiser AND player. When
+        # a player creates it, flag it as a "local match" so public marketplace
+        # surfaces keep organiser/HR events curated.
+        role = user.get("role")
+        if role not in ("player", "company_admin", "organiser", "platform_admin", "admin"):
+            raise HTTPException(403, "Not allowed to create events")
         payload = body.model_dump()
         # ---- Sport enrichment --------------------------------------------
         # Look up the sport doc to auto-populate `scoring_pattern` +
@@ -237,7 +243,13 @@ def register(api, db, deps):
         if user.get("role") in ("company_admin", "organiser"):
             payload["company_id"] = user.get("company_id")
         payload["created_by"] = user.get("id")
-        if user.get("role") == "organiser":
+        # Player-created → tag as local match; auto-approve (no HQ review) so
+        # they can start using it immediately.
+        if role == "player":
+            payload["is_local_match"] = True
+            payload["approval_status"] = "approved"
+            payload["approved_at"] = datetime.now(timezone.utc).isoformat()
+        elif user.get("role") == "organiser":
             payload["approval_status"] = "pending_organiser_ack"
         else:
             payload["approval_status"] = "approved"
@@ -245,6 +257,80 @@ def register(api, db, deps):
         ev = Event(**payload)
         await db.events.insert_one(ev.model_dump())
         return ev
+
+    # -------- Event photo gallery --------
+    @api.post("/events/{event_id}/photos")
+    async def add_event_photo(event_id: str, body: dict, user: dict = Depends(get_current_user)):
+        ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+        if not ev:
+            raise HTTPException(404, "Event not found")
+        # Creator OR platform admin can upload.
+        if ev.get("created_by") != user.get("id") and user.get("role") not in ("platform_admin", "admin"):
+            raise HTTPException(403, "Only the event creator can add photos")
+        url = (body.get("url") or "").strip()
+        if not url:
+            raise HTTPException(400, "url required")
+        photos = list(ev.get("photos") or [])
+        photos.append(url)
+        await db.events.update_one({"id": event_id}, {"$set": {"photos": photos}})
+        return {"ok": True, "photos": photos}
+
+    @api.delete("/events/{event_id}/photos")
+    async def remove_event_photo(event_id: str, url: str, user: dict = Depends(get_current_user)):
+        ev = await db.events.find_one({"id": event_id}, {"_id": 0})
+        if not ev:
+            raise HTTPException(404, "Event not found")
+        if ev.get("created_by") != user.get("id") and user.get("role") not in ("platform_admin", "admin"):
+            raise HTTPException(403, "Not allowed")
+        photos = [p for p in (ev.get("photos") or []) if p != url]
+        await db.events.update_one({"id": event_id}, {"$set": {"photos": photos}})
+        return {"ok": True, "photos": photos}
+
+    # -------- Tournaments a player participated in --------
+    @api.get("/players/{player_id}/tournaments")
+    async def player_tournaments(player_id: str):
+        # A player's participation is derived from team rosters. Match against
+        # both player.id and player.user_id so we don't miss legacy rows.
+        rosters = await db.teams.find(
+            {"$or": [
+                {"player_ids": player_id},
+                {"players.id": player_id},
+                {"players.user_id": player_id},
+                {"players.player_id": player_id},
+            ]},
+            {"_id": 0, "id": 1, "name": 1, "event_id": 1, "sport": 1}
+        ).to_list(500)
+        event_ids = list({t["event_id"] for t in rosters if t.get("event_id")})
+        if not event_ids:
+            return []
+        events = await db.events.find(
+            {"id": {"$in": event_ids}},
+            {"_id": 0, "id": 1, "name": 1, "sport": 1, "start_date": 1, "end_date": 1, "banner_url": 1,
+             "is_local_match": 1, "created_by": 1, "approval_status": 1}
+        ).to_list(500)
+        # Contribution stats — pull match awards from db.matches for this player
+        matches = await db.matches.find(
+            {"event_id": {"$in": event_ids}, "status": "completed"},
+            {"_id": 0, "event_id": 1, "awards": 1}
+        ).to_list(2000)
+        by_event: dict = {eid: {"matches": 0, "mom": 0, "best_batter": 0, "best_bowler": 0, "top_scorer": 0} for eid in event_ids}
+        for m in matches:
+            awards = m.get("awards") or {}
+            eid = m["event_id"]
+            for key in ("mom", "best_batter", "best_bowler", "top_scorer"):
+                who = awards.get(key)
+                # award value may be {player_id, name} or a plain player_id string
+                pid = who.get("player_id") if isinstance(who, dict) else who
+                if pid == player_id:
+                    by_event.setdefault(eid, {"matches": 0, "mom": 0, "best_batter": 0, "best_bowler": 0, "top_scorer": 0})[key] += 1
+            if eid in by_event:
+                by_event[eid]["matches"] += 1
+        out = []
+        for ev in events:
+            stats = by_event.get(ev["id"], {})
+            out.append({**ev, "contribution": stats})
+        out.sort(key=lambda e: (e.get("start_date") or "", e.get("name") or ""), reverse=True)
+        return out
 
     # ---------- Approval workflow ----------
     @api.post("/events/{event_id}/acknowledge-instructions", response_model=Event)

@@ -180,6 +180,48 @@ def register(api, app, db, ws_manager, deps):
         }
         return {"fixture": fx, "event": pub_event, "teams": teams}
 
+    def _compute_awards(sport: str, score: dict) -> dict:
+        """Best-effort auto-awards from the final score dict. Works cross-sport
+        by scanning both sides for the highest-contributing player. Cricket has
+        richer awards (best batter + best bowler) when batter/bowler stats are
+        available in the score payload."""
+        awards: dict = {}
+        try:
+            sides = score.get("sides") or {}
+            a_side = sides.get("a") or score.get("a") or {}
+            b_side = sides.get("b") or score.get("b") or {}
+            if sport == "cricket":
+                # Aggregate batters + bowlers from both innings.
+                batters, bowlers = [], []
+                for s in (a_side, b_side):
+                    batters += (s.get("batters") or [])
+                    bowlers += (s.get("bowlers") or [])
+                if batters:
+                    top_bat = max(batters, key=lambda p: (p.get("runs") or 0))
+                    if top_bat.get("runs"):
+                        awards["best_batter"] = {"player_id": top_bat.get("player_id") or top_bat.get("id"), "name": top_bat.get("name"), "runs": top_bat.get("runs")}
+                if bowlers:
+                    top_bowl = max(bowlers, key=lambda p: (p.get("wickets") or 0))
+                    if top_bowl.get("wickets") is not None:
+                        awards["best_bowler"] = {"player_id": top_bowl.get("player_id") or top_bowl.get("id"), "name": top_bowl.get("name"), "wickets": top_bowl.get("wickets")}
+                # MoM = best batter unless a bowler took 3+ wickets.
+                if awards.get("best_bowler") and (awards["best_bowler"].get("wickets") or 0) >= 3:
+                    awards["mom"] = awards["best_bowler"]
+                elif awards.get("best_batter"):
+                    awards["mom"] = awards["best_batter"]
+            else:
+                # Generic: highest-scoring individual across both sides.
+                players = (a_side.get("scorers") or []) + (b_side.get("scorers") or [])
+                if players:
+                    top = max(players, key=lambda p: (p.get("points") or p.get("goals") or p.get("score") or 0))
+                    metric = top.get("points") or top.get("goals") or top.get("score") or 0
+                    if metric:
+                        awards["top_scorer"] = {"player_id": top.get("player_id") or top.get("id"), "name": top.get("name"), "score": metric}
+                        awards["mom"] = awards["top_scorer"]
+        except Exception:
+            pass
+        return awards
+
     @api.patch("/fixtures/{fixture_id}", response_model=Fixture)
     async def update_fixture_score(fixture_id: str, body: ScoreUpdate, user: dict = Depends(get_current_user)):
         existing = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
@@ -193,6 +235,12 @@ def register(api, app, db, ws_manager, deps):
             upd["status"] = body.status
         if body.winner_id:
             upd["winner_id"] = body.winner_id
+        # Auto-compute awards when the match transitions to `completed` (and no
+        # manual overrides have already been set).
+        if body.status == "completed" and not existing.get("awards"):
+            awards = _compute_awards(ev.get("sport"), body.score or {})
+            if awards:
+                upd["awards"] = awards
         await db.fixtures.update_one({"id": fixture_id}, {"$set": upd})
         doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
         if not doc:
@@ -201,6 +249,27 @@ def register(api, app, db, ws_manager, deps):
             await propagate_knockout_winner(doc)
             doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
         await ws_manager.broadcast({"type": "fixture_update", "event_id": doc["event_id"], "fixture": doc})
+        return Fixture(**doc)
+
+    @api.patch("/fixtures/{fixture_id}/media")
+    async def set_fixture_media(fixture_id: str, body: dict, user: dict = Depends(get_current_user)):
+        """Set hero image + manual award overrides for a match."""
+        fx = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+        if not fx:
+            raise HTTPException(404, "Fixture not found")
+        ev = await get_event_or_404(fx["event_id"])
+        # Event creator OR platform admin (scorer scores, doesn't edit media).
+        if ev.get("created_by") != user.get("id") and user.get("role") not in ("platform_admin", "admin"):
+            raise HTTPException(403, "Only the event creator can set the hero image")
+        upd = {}
+        if "hero_image_url" in body:
+            upd["hero_image_url"] = (body.get("hero_image_url") or "").strip()
+        if "awards" in body and isinstance(body["awards"], dict):
+            upd["awards"] = body["awards"]
+        if not upd:
+            raise HTTPException(400, "hero_image_url or awards required")
+        await db.fixtures.update_one({"id": fixture_id}, {"$set": upd})
+        doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
         return Fixture(**doc)
 
     @api.post("/fixtures/{fixture_id}/init-score")

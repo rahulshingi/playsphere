@@ -20,7 +20,7 @@ import SuggestVenueButton from "@/components/event/SuggestVenueButton";
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
 
 export default function Admin() {
-  const { user, ready, isAdmin, isPlatformAdmin, companyId } = useAuth();
+  const { user, ready, isAdmin, isPlatformAdmin, isPlayer, companyId } = useAuth();
   const { sports } = useSports();
   const onSportChange = (current, value) => {
     const fmt = getPlayerFormat(sports, value);

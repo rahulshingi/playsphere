@@ -1248,6 +1248,12 @@ async def add_team_member(event_id: str, team_id: str, body: dict, user: dict = 
     if not await db.player_profiles.find_one({"id": pid}):
         raise HTTPException(404, "Player not found")
     await db.teams.update_one({"id": team_id}, {"$addToSet": {"members": pid}})
+    # Auto-tag the sport onto the player's interested_sports so their profile
+    # starts showing stats for sports they've actually played. The player can
+    # still remove it manually from profile settings.
+    sport = (ev.get("sport") or "").strip().lower()
+    if sport:
+        await db.player_profiles.update_one({"id": pid}, {"$addToSet": {"interested_sports": sport}})
     return {"ok": True, "player_id": pid, "temp_password": temp_password}
 
 

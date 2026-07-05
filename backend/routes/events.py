@@ -338,9 +338,11 @@ def register(api, db, deps):
     @api.get("/players/{player_id}/tournaments")
     async def player_tournaments(player_id: str):
         # A player's participation is derived from team rosters. Match against
-        # both player.id and player.user_id so we don't miss legacy rows.
+        # all shapes we've stored historically: legacy `player_ids` / `players[].*`
+        # and the current `members: [player_id]` array.
         rosters = await db.teams.find(
             {"$or": [
+                {"members": player_id},
                 {"player_ids": player_id},
                 {"players.id": player_id},
                 {"players.user_id": player_id},
@@ -356,28 +358,149 @@ def register(api, db, deps):
             {"_id": 0, "id": 1, "name": 1, "sport": 1, "start_date": 1, "end_date": 1, "banner_url": 1,
              "is_local_match": 1, "created_by": 1, "approval_status": 1}
         ).to_list(500)
-        # Contribution stats — pull match awards from db.matches for this player
-        matches = await db.matches.find(
+        # Contribution stats — pull awards from db.fixtures (NOT db.matches — earlier
+        # copy-paste bug meant this always returned zeros).
+        fixtures = await db.fixtures.find(
             {"event_id": {"$in": event_ids}, "status": "completed"},
             {"_id": 0, "event_id": 1, "awards": 1}
         ).to_list(2000)
         by_event: dict = {eid: {"matches": 0, "mom": 0, "best_batter": 0, "best_bowler": 0, "top_scorer": 0} for eid in event_ids}
-        for m in matches:
+        for m in fixtures:
             awards = m.get("awards") or {}
             eid = m["event_id"]
+            if eid in by_event:
+                by_event[eid]["matches"] += 1
             for key in ("mom", "best_batter", "best_bowler", "top_scorer"):
                 who = awards.get(key)
-                # award value may be {player_id, name} or a plain player_id string
                 pid = who.get("player_id") if isinstance(who, dict) else who
                 if pid == player_id:
                     by_event.setdefault(eid, {"matches": 0, "mom": 0, "best_batter": 0, "best_bowler": 0, "top_scorer": 0})[key] += 1
-            if eid in by_event:
-                by_event[eid]["matches"] += 1
         out = []
         for ev in events:
             stats = by_event.get(ev["id"], {})
             out.append({**ev, "contribution": stats})
         out.sort(key=lambda e: (e.get("start_date") or "", e.get("name") or ""), reverse=True)
+        return out
+
+    # -------- Fixture-level match history (per-match cards) --------
+    @api.get("/players/{player_id}/match-history")
+    async def player_match_history(player_id: str):
+        """Every fixture the player was rostered on, with a score card payload
+        the frontend can render directly. Only returns fixtures with status in
+        {live, completed} — a scheduled fixture has no score yet.
+
+        Shape (one item per fixture):
+        ```
+        {
+          fixture_id, event_id, event_name, sport, is_local_match, banner_url,
+          match_number, status, played_at,
+          my_team: {id, name, score_display, is_winner},
+          opp_team: {id, name, score_display},
+          result: 'won'|'lost'|'draw',
+          my_awards: ['mom', 'best_batter', ...],  # awards this player won
+          hero_image_url
+        }
+        ```
+        """
+        # 1. Every team this player was rostered on.
+        rosters = await db.teams.find(
+            {"$or": [
+                {"members": player_id},
+                {"player_ids": player_id},
+                {"players.id": player_id},
+                {"players.user_id": player_id},
+                {"players.player_id": player_id},
+            ]},
+            {"_id": 0, "id": 1, "name": 1, "event_id": 1}
+        ).to_list(500)
+        if not rosters:
+            return []
+        team_ids = {t["id"] for t in rosters}
+        team_by_id = {t["id"]: t for t in rosters}
+        event_ids = list({t["event_id"] for t in rosters if t.get("event_id")})
+
+        # 2. Fixtures involving any of those teams, with a score to show.
+        fixtures = await db.fixtures.find(
+            {
+                "event_id": {"$in": event_ids},
+                "status": {"$in": ["live", "completed"]},
+                "$or": [{"team_a_id": {"$in": list(team_ids)}}, {"team_b_id": {"$in": list(team_ids)}}],
+            },
+            {"_id": 0},
+        ).sort("match_number", -1).to_list(2000)
+        if not fixtures:
+            return []
+
+        # 3. Event + opponent team metadata in bulk.
+        events = await db.events.find(
+            {"id": {"$in": list({f["event_id"] for f in fixtures})}},
+            {"_id": 0, "id": 1, "name": 1, "sport": 1, "banner_url": 1, "is_local_match": 1}
+        ).to_list(500)
+        ev_by_id = {e["id"]: e for e in events}
+        opp_ids = list({f["team_b_id"] if f["team_a_id"] in team_ids else f["team_a_id"] for f in fixtures})
+        opp_teams = await db.teams.find({"id": {"$in": opp_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
+        opp_by_id = {t["id"]: t for t in opp_teams}
+
+        def _display(score_side: dict, sport: str) -> str:
+            """Render a compact score string. Falls back to raw totals per sport."""
+            if not isinstance(score_side, dict):
+                return "—"
+            if sport == "cricket":
+                total = score_side.get("total") or score_side.get("runs") or 0
+                wkts = score_side.get("wickets")
+                overs = score_side.get("overs")
+                out = f"{total}"
+                if wkts is not None:
+                    out += f"/{wkts}"
+                if overs:
+                    out += f" ({overs})"
+                return out
+            for k in ("total", "goals", "points", "score"):
+                if k in score_side:
+                    return str(score_side.get(k) or 0)
+            return "—"
+
+        out = []
+        for f in fixtures:
+            ev = ev_by_id.get(f["event_id"])
+            if not ev:
+                continue
+            my_side_key = "team_a" if f["team_a_id"] in team_ids else "team_b"
+            my_team_id = f["team_a_id"] if my_side_key == "team_a" else f["team_b_id"]
+            opp_team_id = f["team_b_id"] if my_side_key == "team_a" else f["team_a_id"]
+            my_team = team_by_id.get(my_team_id) or {"name": "My team"}
+            opp_team = opp_by_id.get(opp_team_id) or {"name": "Opponent"}
+            score = f.get("score") or {}
+            my_score = _display(score.get(my_side_key) or {}, ev.get("sport") or "")
+            opp_score = _display(score.get("team_b" if my_side_key == "team_a" else "team_a") or {}, ev.get("sport") or "")
+            winner_id = f.get("winner_id")
+            if not winner_id:
+                result = "live" if f["status"] == "live" else "draw"
+            elif winner_id == my_team_id:
+                result = "won"
+            else:
+                result = "lost"
+            my_awards = []
+            for key in ("mom", "best_batter", "best_bowler", "top_scorer"):
+                who = (f.get("awards") or {}).get(key)
+                pid = who.get("player_id") if isinstance(who, dict) else who
+                if pid == player_id:
+                    my_awards.append(key)
+            out.append({
+                "fixture_id": f["id"],
+                "event_id": ev["id"],
+                "event_name": ev.get("name") or "",
+                "sport": ev.get("sport") or "",
+                "is_local_match": bool(ev.get("is_local_match")),
+                "banner_url": ev.get("banner_url") or "",
+                "match_number": f.get("match_number"),
+                "status": f["status"],
+                "my_team": {"id": my_team_id, "name": my_team.get("name") or "My team", "score_display": my_score, "is_winner": winner_id == my_team_id},
+                "opp_team": {"id": opp_team_id, "name": opp_team.get("name") or "Opponent", "score_display": opp_score},
+                "result": result,
+                "my_awards": my_awards,
+                "hero_image_url": f.get("hero_image_url") or "",
+            })
         return out
 
     # ---------- Approval workflow ----------

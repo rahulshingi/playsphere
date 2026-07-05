@@ -4,19 +4,24 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Trophy, Calendar, Award, MapPin, Plus } from "lucide-react";
 import { resolveImageUrl } from "@/lib/imageUrl";
+import MatchScoreCard from "@/components/player/MatchScoreCard";
 
 /**
- * Player tournaments dashboard — shows both events the player HOSTED (their
- * local matches) AND events they participated in (from team rosters). Renders
- * on their own profile edit page + on the public profile view.
+ * Player tournaments dashboard — renders three sections in order:
+ *
+ *   1. MY LOCAL MATCHES         — events they hosted (creator)
+ *   2. LOCAL MATCH SCORES       — per-match score cards for local tournaments
+ *                                 they played in (auto-added, iter35)
+ *   3. TOURNAMENTS PLAYED       — non-local corporate/organiser tournaments
+ *                                 they participated in (aggregated card view)
  *
  * profileId: PlayerProfile.id
- * isOwner:  true when the currently-signed-in user owns this profile — enables
- *           the "Host a local match" CTA.
+ * isOwner: enables the "Host a local match" CTA + shows hidden hosted events.
  */
 export default function PlayerTournamentsSection({ profileId, isOwner }) {
   const [hosted, setHosted] = useState([]);
   const [played, setPlayed] = useState([]);
+  const [matches, setMatches] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,17 +30,22 @@ export default function PlayerTournamentsSection({ profileId, isOwner }) {
     Promise.all([
       api.get(`/players/${profileId}/hosted-tournaments`).catch(() => ({ data: [] })),
       api.get(`/players/${profileId}/tournaments`).catch(() => ({ data: [] })),
-    ]).then(([h, p]) => {
+      api.get(`/players/${profileId}/match-history`).catch(() => ({ data: [] })),
+    ]).then(([h, p, m]) => {
       if (cancelled) return;
       setHosted(h.data || []);
       setPlayed(p.data || []);
+      setMatches(m.data || []);
       setLoading(false);
     });
     return () => { cancelled = true; };
   }, [profileId]);
 
   if (loading) return null;
-  if (!isOwner && hosted.length === 0 && played.length === 0) return null;
+  const localMatches = matches.filter((m) => m.is_local_match);
+  const nonLocalPlayed = played.filter((e) => !e.is_local_match);
+
+  if (!isOwner && hosted.length === 0 && localMatches.length === 0 && nonLocalPlayed.length === 0) return null;
 
   return (
     <div className="space-y-8 mt-10" data-testid="player-tournaments-section">
@@ -67,15 +77,30 @@ export default function PlayerTournamentsSection({ profileId, isOwner }) {
         )}
       </section>
 
-      {/* PLAYED */}
-      {played.length > 0 && (
-        <section className="border border-white/10 rounded-sm bg-[#141414] p-5">
+      {/* LOCAL MATCH SCORES — per-match cards for local tournaments played */}
+      {localMatches.length > 0 && (
+        <section className="border border-white/10 rounded-sm bg-[#141414] p-5" data-testid="local-match-scores-section">
           <div className="mb-4">
-            <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#06B6D4]">/ Played tournaments</div>
-            <div className="font-display tracking-wider text-2xl mt-1">MATCHES PLAYED ({played.length})</div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Local match scores</div>
+            <div className="font-display tracking-wider text-2xl mt-1">LOCAL MATCH SCORES ({localMatches.length})</div>
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            {played.map((e) => (
+            {localMatches.map((m) => (
+              <MatchScoreCard key={m.fixture_id} match={m} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* NON-LOCAL TOURNAMENTS PLAYED */}
+      {nonLocalPlayed.length > 0 && (
+        <section className="border border-white/10 rounded-sm bg-[#141414] p-5">
+          <div className="mb-4">
+            <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#06B6D4]">/ Tournaments played</div>
+            <div className="font-display tracking-wider text-2xl mt-1">TOURNAMENTS PLAYED ({nonLocalPlayed.length})</div>
+          </div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {nonLocalPlayed.map((e) => (
               <TournamentCard key={e.id} event={e} contribution={e.contribution} />
             ))}
           </div>

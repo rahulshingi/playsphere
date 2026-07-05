@@ -22,6 +22,14 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 24, 2026 — Iteration 35) Player match history + auto-tag sports
+- **New endpoint** `GET /api/players/{id}/match-history` — returns fixture-level score cards for every match the player was rostered on. Payload includes team names, per-side score_display, result (won/lost/draw/live), award chips the player won on that match, and event link. Only status live/completed are returned.
+- **PlayerProfile** now renders three sections in order: 🟢 **MY LOCAL MATCHES** (hosted) → 🟢 **LOCAL MATCH SCORES** (per-match cards from local tournaments played, iter35 NEW) → 🔵 **TOURNAMENTS PLAYED** (non-local corporate/organiser events).
+- **Auto-tag interested_sports**: `POST /events/{event_id}/teams/{team_id}/members` now `$addToSet`s the event's sport into the player's `interested_sports` array. First time a player joins a badminton match → badminton stats card appears on their profile. Player can still remove manually via profile edit.
+- **Bug fix** in `GET /api/players/{id}/tournaments`: was querying `db.matches` (nonexistent collection). Now queries `db.fixtures` → contribution counts (MOM / best_batter / best_bowler / top_scorer / matches) actually populate.
+- **New tests**: `tests/test_match_history_iter35.py` (5/5). Aggregate regression 38/38 green.
+
+
 ## Implemented (Feb 24, 2026 — Iteration 34) Match completion lock + auto-awards + blank-page fix
 - **Bug fix — Save highlights blank page** (reported on production kreedanation.com): `FixtureAwardsEditor` was calling `PATCH /fixtures/{id}` (score endpoint expecting a full `ScoreUpdate` body) instead of `PATCH /fixtures/{id}/media`. The 422 response cascaded into a UI blank. Fixed by pointing the editor to the correct route + hardened the media endpoint's contract.
 - **Auto-populate winner + awards** on `status=completed` transition. Winner = team with higher total. Cricket: MoM = winning team's top batter (fallback to bowler with 3+ wickets, else overall top batter); Best Batter = highest individual runs across both innings; Best Bowler = most wickets, tiebreak by best economy. Other sports: top_scorer picked from the winning team (fallback: overall top scorer).

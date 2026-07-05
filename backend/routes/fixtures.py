@@ -6,7 +6,7 @@ on `app` directly (not on the `/api` APIRouter) so the path remains `/api/ws`.
 import uuid
 import random
 from datetime import datetime, timezone
-from typing import List
+from typing import List, Optional
 from fastapi import Depends, HTTPException, WebSocket, WebSocketDisconnect
 
 
@@ -180,43 +180,100 @@ def register(api, app, db, ws_manager, deps):
         }
         return {"fixture": fx, "event": pub_event, "teams": teams}
 
-    def _compute_awards(sport: str, score: dict) -> dict:
-        """Best-effort auto-awards from the final score dict. Works cross-sport
-        by scanning both sides for the highest-contributing player. Cricket has
-        richer awards (best batter + best bowler) when batter/bowler stats are
-        available in the score payload."""
+    def _compute_totals(score: dict) -> tuple[float, float]:
+        """Return (team_a_total, team_b_total) from the score dict. Handles the
+        common shapes we support: `{team_a:{total},team_b:{total}}` and the
+        newer `{sides:{a:{total},b:{total}}}` shape."""
+        try:
+            a = (score.get("team_a") or (score.get("sides") or {}).get("a") or score.get("a") or {}) or {}
+            b = (score.get("team_b") or (score.get("sides") or {}).get("b") or score.get("b") or {}) or {}
+            fa = float(a.get("total") or a.get("score") or a.get("runs") or a.get("goals") or a.get("points") or 0)
+            fb = float(b.get("total") or b.get("score") or b.get("runs") or b.get("goals") or b.get("points") or 0)
+            return fa, fb
+        except Exception:
+            return 0.0, 0.0
+
+    def _compute_winner_id(fixture: dict, score: dict) -> Optional[str]:
+        """Higher-total wins. On ties → None (draw)."""
+        fa, fb = _compute_totals(score or {})
+        if fa == fb:
+            return None
+        return fixture.get("team_a_id") if fa > fb else fixture.get("team_b_id")
+
+    def _compute_awards(sport: str, score: dict, fixture: Optional[dict] = None) -> dict:
+        """Best-effort auto-awards from the final score dict.
+
+        Rules (Feb 24, 2026 update):
+        * **Cricket** — Best Batter = highest individual runs across both innings.
+          Best Bowler = most wickets; tie-breaker = best economy (runs conceded ÷ overs).
+          Player of the Match = top run-scorer from the **winning** team; falls back to
+          the best bowler if they took 3+ wickets.
+        * **Other sports** — Top Scorer picked from the **winning** team only.
+          Falls back to the overall top scorer if the winning team has no scorer list.
+        """
         awards: dict = {}
         try:
-            sides = score.get("sides") or {}
-            a_side = sides.get("a") or score.get("a") or {}
-            b_side = sides.get("b") or score.get("b") or {}
+            fa, fb = _compute_totals(score or {})
+            winner_side = "a" if fa > fb else ("b" if fb > fa else None)
+            a_side = score.get("team_a") or (score.get("sides") or {}).get("a") or score.get("a") or {}
+            b_side = score.get("team_b") or (score.get("sides") or {}).get("b") or score.get("b") or {}
+            winning_side = a_side if winner_side == "a" else (b_side if winner_side == "b" else {})
+
             if sport == "cricket":
-                # Aggregate batters + bowlers from both innings.
                 batters, bowlers = [], []
                 for s in (a_side, b_side):
                     batters += (s.get("batters") or [])
                     bowlers += (s.get("bowlers") or [])
                 if batters:
                     top_bat = max(batters, key=lambda p: (p.get("runs") or 0))
-                    if top_bat.get("runs"):
-                        awards["best_batter"] = {"player_id": top_bat.get("player_id") or top_bat.get("id"), "name": top_bat.get("name"), "runs": top_bat.get("runs")}
+                    if (top_bat.get("runs") or 0) > 0:
+                        awards["best_batter"] = {
+                            "player_id": top_bat.get("player_id") or top_bat.get("id"),
+                            "name": top_bat.get("name") or "",
+                            "runs": top_bat.get("runs"),
+                        }
                 if bowlers:
-                    top_bowl = max(bowlers, key=lambda p: (p.get("wickets") or 0))
-                    if top_bowl.get("wickets") is not None:
-                        awards["best_bowler"] = {"player_id": top_bowl.get("player_id") or top_bowl.get("id"), "name": top_bowl.get("name"), "wickets": top_bowl.get("wickets")}
-                # MoM = best batter unless a bowler took 3+ wickets.
-                if awards.get("best_bowler") and (awards["best_bowler"].get("wickets") or 0) >= 3:
+                    # Sort by wickets desc, then economy asc (lower = better).
+                    def _bowler_key(p):
+                        wickets = p.get("wickets") or 0
+                        overs = float(p.get("overs") or 0) or 1
+                        runs = p.get("runs_conceded") or p.get("runs") or 0
+                        economy = float(runs) / overs
+                        return (-wickets, economy)
+                    top_bowl = min(bowlers, key=_bowler_key)
+                    if (top_bowl.get("wickets") or 0) > 0:
+                        awards["best_bowler"] = {
+                            "player_id": top_bowl.get("player_id") or top_bowl.get("id"),
+                            "name": top_bowl.get("name") or "",
+                            "wickets": top_bowl.get("wickets"),
+                        }
+                # MoM: winner's top run-scorer first; fall back to best bowler with 3+ wickets.
+                winning_batters = winning_side.get("batters") or []
+                if winning_batters:
+                    top_win_bat = max(winning_batters, key=lambda p: (p.get("runs") or 0))
+                    if (top_win_bat.get("runs") or 0) > 0:
+                        awards["mom"] = {
+                            "player_id": top_win_bat.get("player_id") or top_win_bat.get("id"),
+                            "name": top_win_bat.get("name") or "",
+                            "runs": top_win_bat.get("runs"),
+                        }
+                if not awards.get("mom") and awards.get("best_bowler") and (awards["best_bowler"].get("wickets") or 0) >= 3:
                     awards["mom"] = awards["best_bowler"]
-                elif awards.get("best_batter"):
+                if not awards.get("mom") and awards.get("best_batter"):
                     awards["mom"] = awards["best_batter"]
             else:
-                # Generic: highest-scoring individual across both sides.
-                players = (a_side.get("scorers") or []) + (b_side.get("scorers") or [])
-                if players:
-                    top = max(players, key=lambda p: (p.get("points") or p.get("goals") or p.get("score") or 0))
+                # Prefer the winning team's top scorer; fall back to overall.
+                winners_scorers = winning_side.get("scorers") or []
+                pool = winners_scorers or ((a_side.get("scorers") or []) + (b_side.get("scorers") or []))
+                if pool:
+                    top = max(pool, key=lambda p: (p.get("points") or p.get("goals") or p.get("score") or 0))
                     metric = top.get("points") or top.get("goals") or top.get("score") or 0
                     if metric:
-                        awards["top_scorer"] = {"player_id": top.get("player_id") or top.get("id"), "name": top.get("name"), "score": metric}
+                        awards["top_scorer"] = {
+                            "player_id": top.get("player_id") or top.get("id"),
+                            "name": top.get("name") or "",
+                            "score": metric,
+                        }
                         awards["mom"] = awards["top_scorer"]
         except Exception:
             pass
@@ -230,22 +287,35 @@ def register(api, app, db, ws_manager, deps):
         ev = await get_event_or_404(existing["event_id"])
         if not await can_score_fixture(user, existing, ev):
             raise HTTPException(403, "You are not allowed to score this match")
+        # A completed match is locked. Only the event creator or platform admin
+        # can reopen it (via POST /fixtures/{id}/reopen) — the scorer can't
+        # accidentally clobber the final score.
+        if existing.get("status") == "completed":
+            raise HTTPException(
+                409,
+                "This match is marked completed. Ask the event organiser to "
+                "reopen it before editing the score.",
+            )
         upd = {"score": body.score}
         if body.status:
             upd["status"] = body.status
         if body.winner_id:
             upd["winner_id"] = body.winner_id
-        # Auto-compute awards when the match transitions to `completed` (and no
-        # manual overrides have already been set).
-        if body.status == "completed" and not existing.get("awards"):
-            awards = _compute_awards(ev.get("sport"), body.score or {})
-            if awards:
-                upd["awards"] = awards
+        # On transition → completed: auto-fill winner + awards if not passed.
+        if body.status == "completed":
+            if not body.winner_id and not existing.get("winner_id"):
+                auto_winner = _compute_winner_id(existing, body.score or {})
+                if auto_winner:
+                    upd["winner_id"] = auto_winner
+            if not existing.get("awards"):
+                awards = _compute_awards(ev.get("sport"), body.score or {}, existing)
+                if awards:
+                    upd["awards"] = awards
         await db.fixtures.update_one({"id": fixture_id}, {"$set": upd})
         doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Fixture not found")
-        if body.winner_id and doc.get("bracket_position"):
+        if (upd.get("winner_id") or body.winner_id) and doc.get("bracket_position"):
             await propagate_knockout_winner(doc)
             doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
         await ws_manager.broadcast({"type": "fixture_update", "event_id": doc["event_id"], "fixture": doc})
@@ -253,14 +323,24 @@ def register(api, app, db, ws_manager, deps):
 
     @api.patch("/fixtures/{fixture_id}/media")
     async def set_fixture_media(fixture_id: str, body: dict, user: dict = Depends(get_current_user)):
-        """Set hero image + manual award overrides for a match."""
+        """Set hero image + manual award overrides for a match.
+
+        Only usable while the fixture is NOT completed — once completed, awards
+        are locked and the organiser must reopen the fixture first. Event
+        creator OR platform admin only.
+        """
         fx = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
         if not fx:
             raise HTTPException(404, "Fixture not found")
         ev = await get_event_or_404(fx["event_id"])
-        # Event creator OR platform admin (scorer scores, doesn't edit media).
         if ev.get("created_by") != user.get("id") and user.get("role") not in ("platform_admin", "admin"):
             raise HTTPException(403, "Only the event creator can set the hero image")
+        if fx.get("status") == "completed" and "awards" in body:
+            raise HTTPException(
+                409,
+                "Awards are locked on completed matches. Reopen the match "
+                "to edit awards — the hero image is still editable anytime.",
+            )
         upd = {}
         if "hero_image_url" in body:
             upd["hero_image_url"] = (body.get("hero_image_url") or "").strip()
@@ -270,6 +350,28 @@ def register(api, app, db, ws_manager, deps):
             raise HTTPException(400, "hero_image_url or awards required")
         await db.fixtures.update_one({"id": fixture_id}, {"$set": upd})
         doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+        return Fixture(**doc)
+
+    @api.post("/fixtures/{fixture_id}/reopen", response_model=Fixture)
+    async def reopen_fixture(fixture_id: str, user: dict = Depends(get_current_user)):
+        """Escape hatch: creator/admin can unlock a completed match to fix the
+        score, winner, or awards. Sets status back to `live` (score preserved
+        so the scorer picks up where they left off). Clears winner_id +
+        auto-computed awards so they're recomputed on the next completion."""
+        fx = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+        if not fx:
+            raise HTTPException(404, "Fixture not found")
+        ev = await get_event_or_404(fx["event_id"])
+        if ev.get("created_by") != user.get("id") and user.get("role") not in ("platform_admin", "admin"):
+            raise HTTPException(403, "Only the event organiser can reopen a match")
+        if fx.get("status") != "completed":
+            raise HTTPException(400, "Match is not marked completed")
+        await db.fixtures.update_one(
+            {"id": fixture_id},
+            {"$set": {"status": "live"}, "$unset": {"winner_id": "", "awards": ""}},
+        )
+        doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+        await ws_manager.broadcast({"type": "fixture_update", "event_id": doc["event_id"], "fixture": doc})
         return Fixture(**doc)
 
     @api.post("/fixtures/{fixture_id}/init-score")

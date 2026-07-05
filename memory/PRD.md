@@ -22,6 +22,15 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 24, 2026 — Iteration 34) Match completion lock + auto-awards + blank-page fix
+- **Bug fix — Save highlights blank page** (reported on production kreedanation.com): `FixtureAwardsEditor` was calling `PATCH /fixtures/{id}` (score endpoint expecting a full `ScoreUpdate` body) instead of `PATCH /fixtures/{id}/media`. The 422 response cascaded into a UI blank. Fixed by pointing the editor to the correct route + hardened the media endpoint's contract.
+- **Auto-populate winner + awards** on `status=completed` transition. Winner = team with higher total. Cricket: MoM = winning team's top batter (fallback to bowler with 3+ wickets, else overall top batter); Best Batter = highest individual runs across both innings; Best Bowler = most wickets, tiebreak by best economy. Other sports: top_scorer picked from the winning team (fallback: overall top scorer).
+- **Lock policy**: after completion, `PATCH /fixtures/{id}` (score edits) returns 409, and `PATCH /fixtures/{id}/media` with `awards` returns 409. The hero image remains editable so organisers can swap in a better post-match photo anytime.
+- **Escape hatch**: new `POST /fixtures/{id}/reopen` — event creator + platform admin only. Flips status back to `live`, clears `winner_id` + `awards` so the scorer can re-score cleanly. Broadcasts a WebSocket update so open scorecards refresh.
+- **Frontend UX**: FixtureAwardsEditor dialog shows a "Locked" chip + explanatory note when the match is completed. Award inputs become read-only. A red "Reopen match" button appears (with a confirm prompt). FixtureCard button label switched to "Edit hero image · view awards" post-completion.
+- **Tests**: `tests/test_fixture_completion_iter34.py` (10/10 pass) covers auto-fill on completion, media/score lock behavior, reopen permissions, and the blank-page regression itself.
+
+
 ## Implemented (Feb 22, 2026 — Iteration 33) Auth + business helper refactor (P1)
 - **`routes/auth.py` refactor** — the 321-line `register()` closure is now a 20-line orchestrator delegating to four thematic module-level helpers: `_register_core_auth` (`/auth/*`), `_register_signup_otp` (4× `/*/signup/request-otp`), `_register_signup` (company + organiser signup + `/companies/*`), and `_register_password_reset` (forgot + reset). Shared logic `_issue_signup_otp` and `_unique_company_slug` are now module-level + individually testable. Behaviour verified by 66/66 existing OTP + signup + tournament tests.
 - **`routes/business.py` helpers extracted** — `vendor_for_user`, `ensure_vendor_owner`, `staff_can` moved to module level (each takes `db` as first arg). In-closure wrappers `_vendor_for_user`, `_ensure_vendor_owner`, `_staff_can` preserved so all 52 call sites remain untouched. Helpers now importable + unit-testable in isolation without spinning up a FastAPI app.

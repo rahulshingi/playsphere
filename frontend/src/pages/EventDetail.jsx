@@ -386,7 +386,7 @@ function FixtureCard({ fixture, event, teamMap, canManage, canScore, onScore, on
           onClick={() => setEditingAwards(true)}
           className="mt-2 w-full bg-transparent hover:bg-[#F59E0B]/10 text-[#F59E0B] rounded-sm border-[#F59E0B]/40"
         >
-          {fixture.hero_image_url || fixture.awards ? "Edit highlights" : "Add hero image & awards"}
+          {fixture.hero_image_url ? "Edit hero image · view awards" : "Add hero image · view awards"}
         </Button>
       )}
       {a && b && (

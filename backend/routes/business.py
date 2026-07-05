@@ -317,6 +317,51 @@ class VendorCheckIn(BaseModel):
     extra_invoice_id: Optional[str] = None
 
 
+# ============================================================================
+# Module-level vendor helpers (moved out of the register() closure in iter33
+# so they're importable + unit-testable in isolation). Each takes `db` as its
+# first positional so the closure inside register() just delegates to these.
+# ============================================================================
+async def vendor_for_user(db, user: dict) -> dict:
+    """Fetches the vendor doc owned by a `vendor` role user. Raises 403/404."""
+    if user.get("role") != "vendor":
+        raise HTTPException(403, "Only vendors can manage offline subscriptions")
+    vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+    if not vendor:
+        raise HTTPException(404, "Vendor record not found")
+    return vendor
+
+
+async def ensure_vendor_owner(db, user: dict) -> dict:
+    """Vendor OR vendor_staff — returns the vendor doc with an attached `_staff`
+    meta blob when the caller is a sub-user so permission checks work."""
+    if user.get("role") == "vendor":
+        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(404, "Vendor not found")
+        return vendor
+    if user.get("role") == "vendor_staff":
+        staff = await db.vendor_staff.find_one({"user_id": user["id"], "active": True}, {"_id": 0})
+        if not staff:
+            raise HTTPException(403, "Not a vendor staff")
+        vendor = await db.vendors.find_one({"id": staff["vendor_id"]}, {"_id": 0})
+        if not vendor:
+            raise HTTPException(404, "Vendor not found")
+        vendor["_staff"] = staff
+        return vendor
+    raise HTTPException(403, "Vendor only")
+
+
+def staff_can(vendor: dict, perm: str) -> bool:
+    """True when the current caller (owner or sub-user) has `perm`."""
+    staff = vendor.get("_staff")
+    if not staff:
+        return True  # owner
+    if staff.get("role") == "owner":
+        return True
+    return perm in (staff.get("permissions") or [])
+
+
 def register(api, db, deps):
     get_current_user = deps.get_current_user
     require_platform_admin = deps.require_platform_admin
@@ -375,12 +420,7 @@ def register(api, db, deps):
     # Vendor offline-mode subscription (Phase 5C)
     # ============================================================
     async def _vendor_for_user(user: dict) -> dict:
-        if user.get("role") != "vendor":
-            raise HTTPException(403, "Only vendors can manage offline subscriptions")
-        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
-        if not vendor:
-            raise HTTPException(404, "Vendor record not found")
-        return vendor
+        return await vendor_for_user(db, user)
 
     async def _site_settings_doc() -> dict:
         # settings.py persists with `id: 'site'` (NOT MongoDB's `_id`), so we must
@@ -1093,32 +1133,10 @@ def register(api, db, deps):
     # =========================================================================
 
     async def _ensure_vendor_owner(user: dict) -> dict:
-        """The endpoints below run under either the vendor themselves or a
-        VendorStaff sub-user with matching vendor_id. Returns the vendor doc."""
-        if user.get("role") == "vendor":
-            vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
-            if not vendor:
-                raise HTTPException(404, "Vendor not found")
-            return vendor
-        if user.get("role") == "vendor_staff":
-            staff = await db.vendor_staff.find_one({"user_id": user["id"], "active": True}, {"_id": 0})
-            if not staff:
-                raise HTTPException(403, "Not a vendor staff")
-            vendor = await db.vendors.find_one({"id": staff["vendor_id"]}, {"_id": 0})
-            if not vendor:
-                raise HTTPException(404, "Vendor not found")
-            # Attach staff meta so downstream can check permissions
-            vendor["_staff"] = staff
-            return vendor
-        raise HTTPException(403, "Vendor only")
+        return await ensure_vendor_owner(db, user)
 
     def _staff_can(vendor: dict, perm: str) -> bool:
-        staff = vendor.get("_staff")
-        if not staff:
-            return True  # owner
-        if staff.get("role") == "owner":
-            return True
-        return perm in (staff.get("permissions") or [])
+        return staff_can(vendor, perm)
 
     # -------- Slot blocks --------
     @api.post("/vendor/slot-blocks", response_model=SlotBlock)

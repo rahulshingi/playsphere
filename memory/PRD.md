@@ -22,6 +22,12 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 22, 2026 — Iteration 33) Auth + business helper refactor (P1)
+- **`routes/auth.py` refactor** — the 321-line `register()` closure is now a 20-line orchestrator delegating to four thematic module-level helpers: `_register_core_auth` (`/auth/*`), `_register_signup_otp` (4× `/*/signup/request-otp`), `_register_signup` (company + organiser signup + `/companies/*`), and `_register_password_reset` (forgot + reset). Shared logic `_issue_signup_otp` and `_unique_company_slug` are now module-level + individually testable. Behaviour verified by 66/66 existing OTP + signup + tournament tests.
+- **`routes/business.py` helpers extracted** — `vendor_for_user`, `ensure_vendor_owner`, `staff_can` moved to module level (each takes `db` as first arg). In-closure wrappers `_vendor_for_user`, `_ensure_vendor_owner`, `_staff_can` preserved so all 52 call sites remain untouched. Helpers now importable + unit-testable in isolation without spinning up a FastAPI app.
+- **New tests**: `tests/test_refactor_iter33.py` (9/9 pass) covers auth login/logout/me, free-domain gating, companies list gating, password-reset shape, meta endpoint. Zero behavioural regressions detected in the existing test suite.
+
+
 ## Implemented (Feb 22, 2026 — Iteration 31/32) Player Tournaments MVP (Local Matches)
 - **Backend**: `Event` + `EventCreate` models extended with `is_local_match`, `listed_publicly`, `photos`. `Fixture` carries `hero_image_url` + `awards`. `POST /api/events` allows role=player (auto-tags `is_local_match=True`, honours `listed_publicly` toggle). `PATCH /api/events/{id}` widened to the event **creator** (any role, not just admins) with protected fields whitelist. `_can_manage_event` now returns True when `event.created_by == user.id`, unlocking fixture generation + teams management + photo uploads for player-hosts. New `GET /api/players/{id}/hosted-tournaments` endpoint (hides hidden events from strangers, always visible to creator + admin). Existing `POST/DELETE /api/events/{id}/photos` used for gallery uploads (owner-only).
 - **Anonymous public profile fix (iter32)**: `GET /api/players/profiles/{id}` now uses `get_current_user_optional`; strips `mobile`/`email`/`dob` for anonymous viewers, returns `mobile_masked` instead. `PlayerDirectory.jsx` no longer redirects anonymous viewers to `/players/login`.

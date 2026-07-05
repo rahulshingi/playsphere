@@ -361,6 +361,27 @@ player_sections = [
         ("p", "If you’re a <b>captain</b>, the event’s Teams tab is visible to you and you can add members to <i>your</i> team — same Pick / Quick-add options HR sees."),
         ("warn", "Tournament teams are managed by HR / captain. If you joined the wrong company by mistake, fix it under /players/me — your roster card on existing teams stays where HR placed it."),
     ]},
+    {"title": "6b. Host your OWN local match (new)",
+     "intro": "You don't need to wait for HR to run a tournament. Any player can create informal neighborhood matches from the top-nav <b>Host match</b> link.",
+     "blocks": [
+        ("num", [
+            "Open <b>/admin</b> (or tap <b>Host match</b> in the top nav).",
+            "Fill in the match name, sport, format (round-robin or knockout), venue.",
+            "Toggle <b>Show on the public events page</b> — leave ON if you want random players to find and join, or turn OFF for a private match reachable only via the direct link or your profile.",
+            "Click <b>Create local match</b>. You land on <b>/events/{id}</b> with full manage rights (add teams, invite members, generate fixtures, run live scoring — same tools HR uses).",
+        ]),
+        ("h3", "Add players who aren't on Kreeda Nation yet"),
+        ("p", "Open the <b>Teams</b> tab → <b>Add member</b> → <b>Quick add</b>. Enter their name + mobile. We create a real player profile for them (they can log in later with the auto-generated credentials shown to you) — no stub accounts, they inherit the same profile all other players use."),
+        ("h3", "After the match — hero image, awards &amp; photo gallery"),
+        ("num", [
+            "When a fixture is <b>completed</b>, the fixture card shows an <b>Add hero image &amp; awards</b> button. Click it to upload a photo of the winning moment and record awards (Player of the Match, Best Batter, Best Bowler, Top Scorer).",
+            "Scroll to the bottom of the event page and use <b>Upload photo</b> in the <b>PHOTOS</b> section to add tournament highlights. Tap any tile for a lightbox view.",
+            "Both hero images and photos are visible to everyone who opens the event — great for sharing back to your group chat.",
+        ]),
+        ("h3", "Your hosted matches on your profile"),
+        ("p", "Every local match you host appears on <b>/players/me</b> under <b>MY LOCAL MATCHES</b>. Public matches also appear on your public profile page for recruiters and captains to see."),
+        ("tip", "Local matches are marked with a green <b>LOCAL MATCH</b> badge on the event page and events listing so viewers know it's an informal, non-corporate tournament."),
+    ]},
     {"title": "7. Watching matches live",
      "blocks": [
         ("p", "Every fixture in a live tournament has a <b>public scorecard URL</b> — <b>/live/&lt;fixture_id&gt;</b>. Share it with friends and family who don't have Kreeda Nation accounts; they'll see ball-by-ball updates streaming in real time without needing to log in."),
@@ -830,6 +851,17 @@ def task_recipes(role: str) -> dict:
             ]),
         ],
         "player": [
+            ("h3", "How to host your own local match (new)"),
+            ("num", [
+                "Open <b>/admin</b> (or tap <b>Host match</b> in the top nav).",
+                "Fill in the match name, sport, format (round-robin / knockout) and venue.",
+                "Toggle <b>Show on the public events page</b> ON to let random players discover it, or OFF for a private match reachable only via direct link + your profile.",
+                "Click <b>Create local match</b> — you're taken to the event page with full manage rights.",
+                "In the <b>Teams</b> tab click <b>+ Team</b> to create teams, then <b>Add member</b> → <b>Quick add</b> to invite players who aren't on Kreeda Nation yet (we create a real profile they can log into later).",
+                "Click <b>Generate fixtures</b> to build the schedule. Open a fixture to run live scoring.",
+                "After a match completes, click <b>Add hero image &amp; awards</b> on the fixture card to upload a winning-moment photo + record Player of the Match / Best Batter / Best Bowler.",
+                "Scroll to the <b>PHOTOS</b> section at the bottom and click <b>Upload photo</b> to build a post-tournament gallery — anyone opening the event sees it in a lightbox.",
+            ]),
             ("h3", "How to sign up (no company email required)"),
             ("num", [
                 "Open <b>/players/signup</b>.",
@@ -1028,6 +1060,15 @@ def whats_new(role: str) -> dict:
             ("tip", "Pro tip: bulk-invite regulars → get commission-free bookings AND you get eligible for the platform's <b>Top Referrer</b> promo (20% off your next subscription). Win-win."),
         ],
         "player": [
+            ("h3", "🆕 Host your own local matches"),
+            ("p", "You can now run informal neighborhood tournaments directly from <b>/admin</b> (or the new <b>Host match</b> nav link). Set up teams, generate fixtures, run live scoring — the exact same tools HR teams use, no approval needed. Toggle <b>Show on public events page</b> to control whether random players can find and join, or keep the match private to a direct link."),
+            ("bul", [
+                "<b>Quick-add non-members</b> — teammates without an account get a real player profile they can later log in and edit.",
+                "<b>Photo gallery per event</b> — upload highlights via the <b>PHOTOS</b> section on the event page; anyone can view in a lightbox.",
+                "<b>Hero image &amp; awards per fixture</b> — when a match completes, add a photo of the winning moment plus Player of the Match / Best Batter / Best Bowler / Top Scorer.",
+                "<b>Local matches on your profile</b> — both matches you HOSTED and matches you PLAYED appear on <b>/players/me</b> with contribution chips (matches, MOM count, etc.).",
+                "Look for the green <b>LOCAL MATCH</b> badge on any event page or on the events list to tell them apart from corporate/organiser tournaments.",
+            ]),
             ("h3", "You can now hire vendors too"),
             ("p", "You no longer need a company account to book a ground or coach. Head to <b>/hire</b> and browse venues + coaches in your city — <b>no sign-in required to browse</b>. You only sign in when you tap <b>Book this venue</b>. Bookings appear under <b>My bookings</b> on your dashboard."),
             ("bul", [

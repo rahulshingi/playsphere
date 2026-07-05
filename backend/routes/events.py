@@ -92,6 +92,9 @@ def register(api, db, deps):
     require_admin = deps.require_admin
     require_company_admin = deps.require_company_admin
     _can_manage_event = deps.can_manage_event
+    # Sport metadata defaults — passed in via deps so we don't reach across
+    # modules for a private symbol.
+    _SPORT_DEFAULTS = getattr(deps, "SPORT_DEFAULTS", None) or {}
 
     # ---------- Events ----------
     @api.get("/events", response_model=List[Event])
@@ -210,11 +213,30 @@ def register(api, db, deps):
     @api.post("/events", response_model=Event)
     async def create_event(body: EventCreate, user: dict = Depends(require_admin)):
         payload = body.model_dump()
+        # ---- Sport enrichment --------------------------------------------
+        # Look up the sport doc to auto-populate `scoring_pattern` +
+        # `player_format`. Falls back to `_SPORT_DEFAULTS` for well-known
+        # slugs so events keep working even when db.sports is empty.
+        sport_slug = (payload.get("sport") or "").strip().lower()
+        payload["sport"] = sport_slug
+        sport_doc = await db.sports.find_one({"value": sport_slug, "active": True}, {"_id": 0})
+        defaults = _SPORT_DEFAULTS.get(sport_slug, {"scoring_pattern": "generic", "player_format": "team"})
+        sport_scoring = (sport_doc or {}).get("scoring_pattern") or defaults["scoring_pattern"]
+        sport_pf = (sport_doc or {}).get("player_format") or defaults["player_format"]
+        # Explicit user pick wins (e.g. "doubles" for badminton), else inherit from sport.
+        if not payload.get("scoring_pattern"):
+            payload["scoring_pattern"] = sport_scoring
+        if not payload.get("player_format"):
+            # For "both" sports, require the creator to pick singles/doubles.
+            if sport_pf == "both":
+                raise HTTPException(400, f"{sport_slug} supports both singles and doubles — pick one via `player_format`")
+            payload["player_format"] = sport_pf
+        elif sport_pf == "both" and payload["player_format"] not in ("singles", "doubles"):
+            raise HTTPException(400, "player_format must be 'singles' or 'doubles' for racket sports")
+
         if user.get("role") in ("company_admin", "organiser"):
             payload["company_id"] = user.get("company_id")
         payload["created_by"] = user.get("id")
-        # Organiser-created events must go through the acknowledgement +
-        # platform-admin approval workflow. HRs/admins skip it.
         if user.get("role") == "organiser":
             payload["approval_status"] = "pending_organiser_ack"
         else:

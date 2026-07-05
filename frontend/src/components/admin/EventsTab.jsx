@@ -7,32 +7,41 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2 } from "lucide-react";
-import { SPORTS } from "@/lib/sports";
+import { useSports, getPlayerFormat } from "@/hooks/useSports";
 import ImageUpload from "@/components/ImageUpload";
 import VenuePicker from "@/components/VenuePicker";
 import SuggestVenueButton from "@/components/event/SuggestVenueButton";
 
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
-const BLANK_EVENT = { name: "", sport: "cricket", format: "round_robin", event_type: "playsphere_organized", description: "", venue: "", banner_url: "", stream_url: "" };
-const onSportChange = (current, value) => ({
-  ...current,
-  sport: value,
-  format: INDIVIDUAL_SPORTS.has(value) ? "knockout" : current.format,
-});
+const BLANK_EVENT = { name: "", sport: "cricket", format: "round_robin", event_type: "playsphere_organized", description: "", venue: "", banner_url: "", stream_url: "", player_format: "" };
+const onSportChange = (current, value, sports) => {
+  const fmt = getPlayerFormat(sports, value);
+  return {
+    ...current,
+    sport: value,
+    format: INDIVIDUAL_SPORTS.has(value) ? "knockout" : current.format,
+    // Racket sport with singles/doubles support → default to singles.
+    // Team / individual sports → clear the pick (backend derives from sport).
+    player_format: fmt === "both" ? "singles" : "",
+  };
+};
 
 export default function EventsTab({ events, companies = [], reload, canManage }) {
   const nav = useNavigate();
+  const { sports } = useSports();
   const [newEvent, setNewEvent] = useState(BLANK_EVENT);
   const [venuePickerOpen, setVenuePickerOpen] = useState(false);
-  // Build a quick lookup so each event row can show the organising company / organiser name
-  // without an extra round-trip. PlatformAdmin already loads companies in the same fetch.
   const companyMap = Object.fromEntries((companies || []).map((c) => [c.id, c]));
+  const currentPF = getPlayerFormat(sports, newEvent.sport);
 
   const createEvent = async (e) => {
     e.preventDefault();
     if (!newEvent.name) return toast.error("Event name required");
     try {
-      await api.post("/events", newEvent);
+      // Only include player_format when the sport supports both singles + doubles.
+      const payload = { ...newEvent };
+      if (currentPF !== "both") delete payload.player_format;
+      await api.post("/events", payload);
       toast.success("Event created");
       setNewEvent(BLANK_EVENT);
       reload();
@@ -55,10 +64,10 @@ export default function EventsTab({ events, companies = [], reload, canManage })
         <Input data-testid="pa-event-name" placeholder="Event name (e.g. Kreeda Nation Cricket League 2026)" value={newEvent.name} onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })} required className="bg-black/40 border-white/10 text-white" />
         <Textarea data-testid="pa-event-desc" placeholder="Description" value={newEvent.description} onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })} className="bg-black/40 border-white/10 text-white" />
         <div className="grid grid-cols-2 gap-2">
-          <Select value={newEvent.sport} onValueChange={(v) => setNewEvent(onSportChange(newEvent, v))}>
+          <Select value={newEvent.sport} onValueChange={(v) => setNewEvent(onSportChange(newEvent, v, sports))}>
             <SelectTrigger data-testid="pa-event-sport" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
             <SelectContent className="bg-[#141414] text-white border-white/10">
-              {SPORTS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+              {sports.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <Select value={newEvent.format} onValueChange={(v) => setNewEvent({ ...newEvent, format: v })}>
@@ -69,6 +78,21 @@ export default function EventsTab({ events, companies = [], reload, canManage })
             </SelectContent>
           </Select>
         </div>
+        {currentPF === "both" && (
+          <div data-testid="pa-event-pf-wrap">
+            <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Player format · {newEvent.sport}</div>
+            <Select value={newEvent.player_format || "singles"} onValueChange={(v) => setNewEvent({ ...newEvent, player_format: v })}>
+              <SelectTrigger data-testid="pa-event-player-format" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
+              <SelectContent className="bg-[#141414] text-white border-white/10">
+                <SelectItem value="singles">Singles (1 vs 1)</SelectItem>
+                <SelectItem value="doubles">Doubles (2 vs 2)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-[#06B6D4] mt-1">
+              This is a racket sport — pick the tournament format. Scoring pattern follows the sport&apos;s racket-scoring template (set-based).
+            </p>
+          </div>
+        )}
         {INDIVIDUAL_SPORTS.has(newEvent.sport) && (
           <p data-testid="pa-event-format-hint" className="text-[11px] text-[#06B6D4]">
             {newEvent.sport.charAt(0).toUpperCase() + newEvent.sport.slice(1)} is an individual sport — knockout selected by default. Switch to round-robin if you want everyone to play everyone.

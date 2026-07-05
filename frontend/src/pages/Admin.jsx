@@ -11,29 +11,35 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { SPORTS } from "@/lib/sports";
+import { useSports, getPlayerFormat } from "@/hooks/useSports";
 import { toast } from "sonner";
 import { Trash2, Plus } from "lucide-react";
 import VenuePicker from "@/components/VenuePicker";
 import SuggestVenueButton from "@/components/event/SuggestVenueButton";
 
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
-const onSportChange = (current, value) => ({
-  ...current,
-  sport: value,
-  format: INDIVIDUAL_SPORTS.has(value) ? "knockout" : current.format,
-});
 
 export default function Admin() {
   const { user, ready, isAdmin, isPlatformAdmin, companyId } = useAuth();
+  const { sports } = useSports();
+  const onSportChange = (current, value) => {
+    const fmt = getPlayerFormat(sports, value);
+    return {
+      ...current,
+      sport: value,
+      format: INDIVIDUAL_SPORTS.has(value) ? "knockout" : current.format,
+      player_format: fmt === "both" ? "singles" : "",
+    };
+  };
   const nav = useNavigate();
   const [stats, setStats] = useState({});
   const [events, setEvents] = useState([]);
   const [venuePickerOpen, setVenuePickerOpen] = useState(false);
   const [teams, setTeams] = useState([]);
   const [sponsors, setSponsors] = useState([]);
-  const [newEvent, setNewEvent] = useState({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "" });
+  const [newEvent, setNewEvent] = useState({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "", player_format: "" });
   const [newSponsor, setNewSponsor] = useState({ name: "", tier: "bronze", logo_url: "", website: "", description: "", show_in_banner: true });
+  const currentPF = getPlayerFormat(sports, newEvent.sport);
 
   const loadAll = async () => {
     const eventsUrl = companyId ? `/events?company_id=${companyId}` : "/events";
@@ -52,11 +58,13 @@ export default function Admin() {
   const createEvent = async (e) => {
     e.preventDefault();
     try {
-      await api.post("/events", newEvent);
+      const payload = { ...newEvent };
+      if (currentPF !== "both") delete payload.player_format;
+      await api.post("/events", payload);
       toast.success("Event created");
-      setNewEvent({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "" });
+      setNewEvent({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "", player_format: "" });
       loadAll();
-    } catch (err) { toast.error("Failed to create event"); }
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed to create event"); }
   };
 
   const createSponsor = async (e) => {
@@ -107,7 +115,7 @@ export default function Admin() {
                   <Select value={newEvent.sport} onValueChange={(v) => setNewEvent(onSportChange(newEvent, v))}>
                     <SelectTrigger data-testid="admin-event-sport" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
                     <SelectContent className="bg-[#141414] text-white border-white/10">
-                      {SPORTS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                      {sports.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <Select value={newEvent.format} onValueChange={(v) => setNewEvent({ ...newEvent, format: v })}>
@@ -118,6 +126,21 @@ export default function Admin() {
                     </SelectContent>
                   </Select>
                 </div>
+                {currentPF === "both" && (
+                  <div data-testid="admin-event-pf-wrap">
+                    <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Player format · {newEvent.sport}</div>
+                    <Select value={newEvent.player_format || "singles"} onValueChange={(v) => setNewEvent({ ...newEvent, player_format: v })}>
+                      <SelectTrigger data-testid="admin-event-player-format" className="bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
+                      <SelectContent className="bg-[#141414] text-white border-white/10">
+                        <SelectItem value="singles">Singles (1 vs 1)</SelectItem>
+                        <SelectItem value="doubles">Doubles (2 vs 2)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[10px] text-[#06B6D4] mt-1">
+                      Racket sport — pick tournament format. Scoring uses the set-based racket template.
+                    </p>
+                  </div>
+                )}
                 {INDIVIDUAL_SPORTS.has(newEvent.sport) && (
                   <p data-testid="admin-event-format-hint" className="text-[11px] text-[#06B6D4]">
                     {newEvent.sport.charAt(0).toUpperCase() + newEvent.sport.slice(1)} is an individual sport — knockout selected by default. Switch to round-robin if you want everyone to play everyone.

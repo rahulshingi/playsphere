@@ -255,6 +255,11 @@ SportType = Literal[
     "cricket", "football", "badminton", "tabletennis", "basketball",
     "volleyball", "chess", "quiz", "hackathon", "other"
 ]
+# Legacy hardcoded whitelist above is kept for other schemas that need to
+# validate incoming payloads strictly. Events (which the platform admin can
+# extend at runtime with `/api/sports`) now accept ANY lower-case sport slug —
+# validated at the router level against `db.sports`.
+SportSlug = str
 FixtureFormat = Literal["round_robin", "knockout"]
 EventStatus = Literal["upcoming", "ongoing", "completed"]
 EventType = Literal["single_company", "inter_company", "playsphere_organized"]
@@ -313,7 +318,15 @@ class Event(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
-    sport: SportType
+    sport: SportSlug  # any admin-configured sport value
+    # Populated automatically at create-time from db.sports lookup. Falls back
+    # to `_SPORT_DEFAULTS` for well-known sports. Read by the frontend scorer +
+    # `renderScore()` — drives which scoreboard UI to render for this event.
+    scoring_pattern: Optional[str] = None  # cricket|football|basketball|racket|chess|quiz|hackathon|generic
+    # Racket sports (badminton/tennis/pickleball/…) support both singles and
+    # doubles. The creator picks one at event-creation time. `null` for team
+    # sports where the concept doesn't apply.
+    player_format: Optional[str] = None  # singles|doubles|team|individual|None
     description: Optional[str] = ""
     format: FixtureFormat = "round_robin"
     event_type: EventType = "single_company"
@@ -349,7 +362,9 @@ class Event(BaseModel):
 
 class EventCreate(BaseModel):
     name: str
-    sport: SportType
+    sport: SportSlug
+    scoring_pattern: Optional[str] = None
+    player_format: Optional[str] = None
     description: Optional[str] = ""
     format: FixtureFormat = "round_robin"
     event_type: EventType = "single_company"
@@ -3767,11 +3782,51 @@ async def seed_sports():
             await db.sports.update_one({"value": s["value"]}, {"$set": {"active": True}})
 
 
+# Built-in sport metadata — used to auto-populate scoring_pattern + player_format
+# for well-known sports (so admin doesn't have to configure them manually) AND
+# to backfill legacy sport rows on-the-fly during list_sports().
+#   scoring_pattern → drives which scorer UI + `renderScore()` branch runs.
+#   player_format:
+#     "team"       → team sport (cricket / football / basketball / volleyball / hackathon).
+#     "individual" → 1v1 sport with a single player per side (chess / quiz).
+#     "both"       → racket-sport that supports singles AND doubles — the event
+#                    creator picks one at event creation time.
+_SPORT_DEFAULTS = {
+    "cricket":    {"scoring_pattern": "cricket",    "player_format": "team"},
+    "football":   {"scoring_pattern": "football",   "player_format": "team"},
+    "basketball": {"scoring_pattern": "basketball", "player_format": "team"},
+    "volleyball": {"scoring_pattern": "racket",     "player_format": "team"},
+    "badminton":  {"scoring_pattern": "racket",     "player_format": "both"},
+    "tabletennis": {"scoring_pattern": "racket",    "player_format": "both"},
+    "tennis":     {"scoring_pattern": "racket",     "player_format": "both"},
+    "lawntennis": {"scoring_pattern": "racket",     "player_format": "both"},
+    "pickleball": {"scoring_pattern": "racket",     "player_format": "both"},
+    "squash":     {"scoring_pattern": "racket",     "player_format": "both"},
+    "chess":      {"scoring_pattern": "chess",      "player_format": "individual"},
+    "quiz":       {"scoring_pattern": "quiz",       "player_format": "individual"},
+    "hackathon":  {"scoring_pattern": "hackathon",  "player_format": "team"},
+}
+
+
+def _enrich_sport(doc: dict) -> dict:
+    """Ensure a sport doc has scoring_pattern + player_format set, using
+    _SPORT_DEFAULTS as a fallback for well-known sports; otherwise defaults to
+    generic team scoring."""
+    if not doc:
+        return doc
+    defaults = _SPORT_DEFAULTS.get(doc.get("value", "").lower(), {"scoring_pattern": "generic", "player_format": "team"})
+    if not doc.get("scoring_pattern"):
+        doc["scoring_pattern"] = defaults["scoring_pattern"]
+    if not doc.get("player_format"):
+        doc["player_format"] = defaults["player_format"]
+    return doc
+
+
 @api.get("/sports")
 async def list_sports(include_inactive: bool = False):
     flt = {} if include_inactive else {"active": True}
     docs = await db.sports.find(flt, {"_id": 0}).sort("sort_order", 1).to_list(200)
-    return docs
+    return [_enrich_sport(d) for d in docs]
 
 
 @api.post("/sports")
@@ -3782,10 +3837,13 @@ async def create_sport(body: dict, _: dict = Depends(require_platform_admin)):
         raise HTTPException(400, "value and label required")
     if await db.sports.find_one({"value": value}):
         raise HTTPException(400, "Sport with this value already exists")
+    defaults = _SPORT_DEFAULTS.get(value, {"scoring_pattern": "generic", "player_format": "team"})
     doc = {
         "id": str(uuid.uuid4()),
         "value": value, "label": label, "active": True,
         "sort_order": int(body.get("sort_order", 999)),
+        "scoring_pattern": (body.get("scoring_pattern") or defaults["scoring_pattern"]),
+        "player_format": (body.get("player_format") or defaults["player_format"]),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.sports.insert_one(doc)
@@ -3795,14 +3853,14 @@ async def create_sport(body: dict, _: dict = Depends(require_platform_admin)):
 
 @api.patch("/sports/{sport_id}")
 async def update_sport(sport_id: str, body: dict, _: dict = Depends(require_platform_admin)):
-    allowed = {k: v for k, v in body.items() if k in ("label", "active", "sort_order")}
+    allowed = {k: v for k, v in body.items() if k in ("label", "active", "sort_order", "scoring_pattern", "player_format")}
     if not allowed:
         raise HTTPException(400, "No allowed fields")
     await db.sports.update_one({"id": sport_id}, {"$set": allowed})
     doc = await db.sports.find_one({"id": sport_id}, {"_id": 0})
     if not doc:
         raise HTTPException(404)
-    return doc
+    return _enrich_sport(doc)
 
 
 @api.delete("/sports/{sport_id}")
@@ -4185,6 +4243,7 @@ events_routes.register(api, db, SimpleNamespace(
     require_admin=require_admin,
     require_company_admin=require_company_admin,
     can_manage_event=_can_manage_event,
+    SPORT_DEFAULTS=_SPORT_DEFAULTS,
 ))
 
 # Fixtures + WebSocket (extracted into routes/fixtures.py)

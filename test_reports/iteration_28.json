@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 28 — Sports enrichment + player_format picker regression suite. Backend enrichment logic (create/list/get_sport, event creation auto-fills scoring_pattern/player_format, 400 when 'both' sport is picked without pf) verified via pytest: 12/12 passed. UI verified end-to-end for /platform-admin Events tab and /admin: Pickleball loads from /api/sports (proving no hardcoded fallback), pa-event-player-format + admin-event-player-format pickers reveal Singles/Doubles for racket sports (pickleball, badminton) and stay hidden for team sports (cricket, football). BUT — Tennis and Lawn Tennis are MISSING from the sport dropdown, contradicting the review request that explicitly asks to verify badminton/tennis/lawn-tennis. Also a duplicate legacy 'Pickle Ball' row exists alongside 'Pickleball'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "EventsTab / Admin.jsx sport dropdown",
+        "issue": "Tennis and Lawn Tennis MISSING from sport dropdown on both /platform-admin -> Events tab and /admin. useSports() prefers /api/sports over the local fallback whenever the API returns any results, and db.sports contains 12 sports but NOT tennis/lawntennis. Users cannot create tennis or lawntennis events from the UI, even though backend accepts them (verified via curl).",
+        "selector": "[data-testid=pa-event-sport], [data-testid=admin-event-sport]",
+        "priority": "HIGH"
+      },
+      {
+        "component": "SportsManager seed / db.sports",
+        "issue": "Duplicate rows: dropdown shows both 'Pickle Ball' (value likely 'pickle_ball' or 'pickle-ball') AND 'Pickleball' (value 'pickleball'). Only the 'pickleball' slug is wired to _SPORT_DEFAULTS — the other slug will get generic scoring. Cleanup needed.",
+        "selector": "[data-testid=pa-event-sport]",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_sports_enrichment_iter28.py",
+    "/app/test_reports/pytest/iter28_sports.xml"
+  ],
+  "action_items": [
+    "Seed db.sports with tennis + lawntennis rows on backend startup (SPORTS_SEED list in server.py) OR have useSports() MERGE API results with the FALLBACK_SPORTS list, de-duped by `value`, so admin-added sports stay AND built-in fallbacks always render.",
+    "Delete or rename the duplicate 'Pickle Ball' sport row (value != 'pickleball') so the dropdown shows only one Pickleball entry.",
+    "Optional: enforce lower-case-no-space canonicalisation of `value` when the admin creates a sport (currently 'pickle ball' entered by admin is stored as-is, producing the duplicate)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 4353 lines — should be split further (sports, sponsorship, memberships, etc. into separate route modules). Currently exceeds the 700-line guideline by ~6x.",
+    "useSports() cache is process-wide but does not invalidate when the admin creates a new sport via SportsManager. Newly created sports won't appear in Event forms already-mounted in another tab until the TTL (60s) expires or the page reloads. Consider exposing a cache-bust function called by createSport().",
+    "backend/routes/events.py::create_event mutates payload['sport'] to lower-case but does not enforce that the slug actually exists in db.sports — an event can be created with sport='rugby' (typo) which never appears in db.sports and gets scoring_pattern='generic'. Consider strict validation once db.sports is treated as source-of-truth.",
+    "Frontend fallback logic (`useSports` in /app/frontend/src/hooks/useSports.js line 27) — `list.length > 0 ? list : FALLBACK_SPORTS` prevents fallbacks from being merged in. If admin only seeded 3 sports, the other 9 built-ins vanish. Merge-by-value is the safer default.",
+    "SPORT_DEFAULTS + FALLBACK_SPORTS + SPORT_SCHEMAS (frontend) are three duplicate sources of sport metadata. Consider generating one from the other or serving from a single /api/sports endpoint."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_sports_enrichment_iter28.py (NEW)"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "80%"
+  },
+  "test_credentials": "admin@kreedanation.com / admin123",
+  "seed_data_creation": "test_sports_enrichment_iter28.py idempotently creates 'pickleball' sport (POST /api/sports); 400 'already exists' is treated as success. All test events are prefixed TEST_ and deleted at test end.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend enrichment logic is solid — 12 pytest cases all green. Frontend issue is data-driven: db.sports is missing tennis+lawntennis rows, so despite the fallback list containing them, they never render (because useSports uses API-first with an empty-fallback strategy instead of merge). Duplicate 'Pickle Ball' row exists. After main agent fixes the merge-vs-replace strategy OR seeds the missing sports, re-run this pytest file + rerun the Playwright dropdown enumeration for pa-event-sport and admin-event-sport.",
+  "rca of the issue": "Root cause of missing Tennis/Lawn Tennis in UI: /app/frontend/src/hooks/useSports.js line 27 `const list = Array.isArray(r.data) && r.data.length > 0 ? r.data : FALLBACK_SPORTS;` — this REPLACES the fallback with the API result whenever any items come back. Since db.sports has 12 rows (cricket, football, basketball, badminton, tabletennis, volleyball, chess, quiz, hackathon, other, pickle ball, pickleball) but NO tennis or lawntennis, the API list wins and tennis/lawntennis are absent from the dropdown. Reproduction: 1) Login as admin. 2) Go to /platform-admin -> Events tab. 3) Open sport dropdown. 4) Observe Tennis + Lawn Tennis missing. Mitigation options: (A) Change useSports to merge API results with FALLBACK_SPORTS de-duped by `value`, (B) In seed_sports on startup, ensure tennis, lawntennis, pickleball rows are seeded (and dedupe existing 'pickle ball' -> 'pickleball')."
+}

@@ -2,12 +2,13 @@ import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 
 export default function SportsManager() {
   const [items, setItems] = useState([]);
-  const [form, setForm] = useState({ value: "", label: "" });
+  const [form, setForm] = useState({ value: "", label: "", scoring_pattern: "generic", player_format: "team" });
 
   const load = () => api.get("/sports?include_inactive=true").then((r) => setItems(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -18,7 +19,7 @@ export default function SportsManager() {
     try {
       await api.post("/sports", form);
       toast.success("Sport added");
-      setForm({ value: "", label: "" });
+      setForm({ value: "", label: "", scoring_pattern: "generic", player_format: "team" });
       load();
     } catch (e2) { toast.error(e2.response?.data?.detail || "Failed"); }
   };
@@ -34,11 +35,35 @@ export default function SportsManager() {
 
   return (
     <div data-testid="sports-manager" className="space-y-4">
-      <form onSubmit={create} className="border border-white/10 rounded-sm bg-[#141414] p-5 grid md:grid-cols-3 gap-2">
-        <div className="md:col-span-3 font-display tracking-wider text-xl flex items-center gap-2"><Plus className="w-4 h-4 text-[#84CC16]" /> ADD SPORT</div>
-        <Input data-testid="sport-value" placeholder="value (slug, e.g. tennis)" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} className="bg-black/40 border-white/10 text-white" />
-        <Input data-testid="sport-label" placeholder="label (display, e.g. Tennis)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="bg-black/40 border-white/10 text-white" />
-        <Button data-testid="sport-add" type="submit" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Add</Button>
+      <form onSubmit={create} className="border border-white/10 rounded-sm bg-[#141414] p-5 grid md:grid-cols-4 gap-2">
+        <div className="md:col-span-4 font-display tracking-wider text-xl flex items-center gap-2"><Plus className="w-4 h-4 text-[#84CC16]" /> ADD SPORT</div>
+        <Input data-testid="sport-value" placeholder="value (slug, e.g. pickleball)" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value.toLowerCase().replace(/\s+/g, "") })} className="bg-black/40 border-white/10 text-white" />
+        <Input data-testid="sport-label" placeholder="label (display, e.g. Pickleball)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+        <Select value={form.scoring_pattern} onValueChange={(v) => setForm({ ...form, scoring_pattern: v })}>
+          <SelectTrigger data-testid="sport-scoring" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="scoring pattern" /></SelectTrigger>
+          <SelectContent className="bg-[#141414] text-white border-white/10">
+            <SelectItem value="cricket">Cricket (runs/wickets/overs)</SelectItem>
+            <SelectItem value="football">Football (goals)</SelectItem>
+            <SelectItem value="basketball">Basketball (points)</SelectItem>
+            <SelectItem value="racket">Racket / set-based (badminton, tennis, pickleball, tabletennis, volleyball)</SelectItem>
+            <SelectItem value="chess">Chess (points)</SelectItem>
+            <SelectItem value="quiz">Quiz (points)</SelectItem>
+            <SelectItem value="hackathon">Hackathon (score)</SelectItem>
+            <SelectItem value="generic">Generic score</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={form.player_format} onValueChange={(v) => setForm({ ...form, player_format: v })}>
+          <SelectTrigger data-testid="sport-playerformat" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="player format" /></SelectTrigger>
+          <SelectContent className="bg-[#141414] text-white border-white/10">
+            <SelectItem value="team">Team (11-a-side, 5-a-side…)</SelectItem>
+            <SelectItem value="individual">Individual (1 person per side)</SelectItem>
+            <SelectItem value="both">Both singles &amp; doubles (racket)</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button data-testid="sport-add" type="submit" className="md:col-span-4 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Add sport</Button>
+        <p className="md:col-span-4 text-[10px] font-mono text-neutral-500">
+          Well-known slugs (cricket, football, badminton, tennis, pickleball…) get sensible defaults automatically — you can still override them.
+        </p>
       </form>
       <div className="space-y-2">
         {items.map((s) => (
@@ -46,6 +71,8 @@ export default function SportsManager() {
             <div>
               <span className="font-semibold">{s.label}</span>
               <span className="ml-2 font-mono text-[10px] uppercase text-neutral-500">{s.value}</span>
+              {s.scoring_pattern && <span className="ml-2 font-mono text-[10px] uppercase text-[#06B6D4]">· {s.scoring_pattern}</span>}
+              {s.player_format && <span className="ml-2 font-mono text-[10px] uppercase text-[#EC4899]">· {s.player_format}</span>}
               {!s.active && <span className="ml-2 text-[10px] font-mono uppercase text-[#F59E0B]">INACTIVE</span>}
             </div>
             <div className="flex gap-2">

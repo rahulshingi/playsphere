@@ -1,0 +1,26 @@
+{
+  "summary": "Iteration 32 retest of the anonymous public player profile flow (the sole gap from iter31). Both the backend and frontend fixes are validated. GET /api/players/profiles/{id} now returns 200 for anonymous callers with `mobile_masked` present and raw `mobile`/`email`/`dob` stripped. /players/profiles/{id} no longer redirects to /players/login for anonymous viewers — page renders player name, avatar, sport cards, and player-tournaments-section. Hidden hosted events remain filtered out for anonymous viewers; public hosted events appear. Regression: all 11 iter31 pytest tests still green. New 3-test suite `test_public_profile_iter32.py` also 3/3 green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_public_profile_iter32.py",
+    "/app/backend/tests/test_player_tournaments_iter31.py",
+    "/app/test_reports/pytest/iter32_retest.xml",
+    "/app/test_reports/pytest/iter32_public_profile.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py::get_player_profile now uses get_current_user_optional — correct. Mobile masked with bullet char, email/dob stripped for anon. Nice minimal fix.",
+    "PlayerDirectory.jsx::PlayerProfileView effect now runs regardless of auth state — correct. Consider gating the /players/{id}/tournaments call inside PlayerTournamentsSection when anonymous to avoid an extra 404/empty call, but this is cosmetic.",
+    "server.py is still ~4400 lines. Continuing route-file extraction (routes/player_profiles.py) would help long-term maintainability — not blocking.",
+    "GET /api/events/{id} still returns hidden events when accessed directly by URL for anonymous callers (verified with hidden event page rendering HIDDEN + LOCAL badges without auth). This is expected for owner sharing via link but worth documenting — if 'hidden' should be strictly private, consider gating detail-by-id too."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (11/11 iter31 pytest + 3/3 new iter32 anonymous-profile pytest)", "frontend": "100% for the anonymous profile flow (case #1). Hidden event detail page renders LOCAL MATCH + HIDDEN badges correctly (part of case #3)."},
+  "test_credentials": "testplayer@example.com/player123 (or mobile +919000000001 / player123); admin@kreedanation.com/admin123. Player profile id: cecc6f8c-f894-4edd-b827-1e17d4f35343",
+  "seed_data_creation": "Seeded 1 public + 1 hidden local match under testplayer for the anonymous Playwright run (TEST_ITER32_public_local, TEST_ITER32_hidden_local). Both DELETED via authenticated DELETE /api/events/{id} at teardown — verified 0 hosted events remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "The anonymous public profile gap from iter31 is now closed. If future work needs to test /admin's Host-a-local-match form via Playwright, note that Playwright fill() on the /login page's email input sometimes fails to trigger React state updates in this preview; use the backend /api/auth/login curl to obtain a session cookie or emulate typing via page.type() instead of page.fill(). The WelcomeModal (data-testid=welcome-dismiss, z-[60]) still intercepts first-visit clicks — dismiss before interacting. Iter31 already fully validated the /admin form → hidden event → LOCAL+HIDDEN badges flow; this iter32 re-confirmed the badges portion by directly loading the event detail page.",
+  "rca of the issue": "N/A — bug fix successfully verified. Root cause was two-layer auth guard (FE PlayerDirectory redirect + BE 401), both fixed with minimal deltas. FE effect now unconditionally calls the API once auth state is ready; BE endpoint now depends on get_current_user_optional and redacts sensitive fields when caller is anonymous or non-owner."
+}

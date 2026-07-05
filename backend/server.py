@@ -1827,16 +1827,21 @@ async def player_lifetime_stats(profile_id: str, _: dict = Depends(get_current_u
 
 
 @api.get("/players/profiles/{profile_id}")
-async def get_player_profile(profile_id: str, user: dict = Depends(get_current_user)):
+async def get_player_profile(profile_id: str, user: Optional[dict] = Depends(get_current_user_optional)):
     doc = await db.player_profiles.find_one({"id": profile_id}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Profile not found")
-    if user.get("id") != doc.get("user_id"):
+    is_self = user and user.get("id") == doc.get("user_id")
+    if not is_self:
         await db.player_profiles.update_one({"id": profile_id}, {"$inc": {"view_count": 1}})
         doc["view_count"] = (doc.get("view_count", 0) or 0) + 1
         m = doc.get("mobile") or ""
         doc["mobile_masked"] = "•••• " + m[-4:] if len(m) >= 4 else m
         doc.pop("mobile", None)
+        # Extra privacy for logged-out viewers.
+        if not user:
+            doc.pop("email", None)
+            doc.pop("dob", None)
     return doc
 
 

@@ -113,9 +113,9 @@ export function PlayerProfileView() {
   const [p, setP] = useState(null);
 
   useEffect(() => {
-    if (ready && !user) { nav("/players/login"); return; }
-    if (ready) api.get(`/players/profiles/${id}`).then((r) => setP(r.data));
-  }, [ready, user, id]);
+    // Public profile — anonymous viewers welcome (backend redacts mobile/email).
+    if (ready) api.get(`/players/profiles/${id}`).then((r) => setP(r.data)).catch(() => setP(null));
+  }, [ready, id]);
 
   if (!p) return <div className="bg-[#0a0a0a] min-h-screen text-white"><Nav /><div className="p-20 text-center">Loading…</div></div>;
 

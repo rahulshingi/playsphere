@@ -22,6 +22,12 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 24, 2026 — Iteration 36) Local match visibility + share cards
+- **Platform admin dashboard**: three new stat cards on `/platform-admin` → `local_matches_total`, `local_matches_public`, `local_matches_hidden`. Backend `/dashboard/admin` extended. The "Local matches" card links to `/events?is_local_match=true` for a filtered listing; each row already deep-links to the event.
+- **Public /events page**: added a `LOCAL MATCH` badge (⚡ icon, green) on player-hosted event cards, plus a dedicated **"LOCAL MATCHES"** section that separates informal player-hosted tournaments from corporate/organiser tournaments. Reads a `?is_local_match=true` query-param filter for admin drill-downs.
+- **Share match card**: new `/lib/shareMatchImage.js` uses HTML canvas to generate a 1080×1350 Instagram-story-ready PNG per match card. Payload: hero image, sport/LOCAL/M# chips, WON/LOST chip, big score with 🏆 WINNER accent, orange award chips, Kreeda Nation branded footer with player name. Wire-up: `Share2` button on every `MatchScoreCard`. Uses `navigator.canShare` on mobile (native sheet → WhatsApp/Instagram/Telegram) and falls back to a browser download on desktop. Zero server dependency; runs entirely client-side.
+
+
 ## Implemented (Feb 24, 2026 — Iteration 35) Player match history + auto-tag sports
 - **New endpoint** `GET /api/players/{id}/match-history` — returns fixture-level score cards for every match the player was rostered on. Payload includes team names, per-side score_display, result (won/lost/draw/live), award chips the player won on that match, and event link. Only status live/completed are returned.
 - **PlayerProfile** now renders three sections in order: 🟢 **MY LOCAL MATCHES** (hosted) → 🟢 **LOCAL MATCH SCORES** (per-match cards from local tournaments played, iter35 NEW) → 🔵 **TOURNAMENTS PLAYED** (non-local corporate/organiser events).

@@ -765,3 +765,24 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Each recipe is a `("num", [...])` block — sequential, jump-to-the-page, click-this-button style. Every step names the exact route (`/hire`, `/bookings`, `/my-memberships`, etc.) and the button label (Cancel, Reschedule, Export CSV, WhatsApp share, Mark paid…).
 - Injected in **all 7 build() calls** immediately after the welcome section and before the "What's new" section, so a first-time reader lands on task recipes without scrolling.
 - 7 PDFs regenerated (Feb 2026); sizes grew ~1-3 KB each — confirms new content shipped.
+
+## Feb 2026 — Sport dropdown, auto-enrichment + singles/doubles picker (bug fix)
+### Bug
+Admin-added sports (e.g. pickleball) weren't showing up in HR event-creation dropdowns. Also: badminton/tennis/pickleball needed a Singles-vs-Doubles selector with matching scoring pattern.
+
+### Backend
+- **Event model**: `Event.sport: SportSlug=str` (was `Literal`). Added `Event.scoring_pattern: str` and `Event.player_format: str` — populated at create-time from `db.sports` lookup with `_SPORT_DEFAULTS` fallback for well-known slugs (cricket/football/basketball/badminton/tabletennis/tennis/lawntennis/pickleball/squash/volleyball/chess/quiz/hackathon).
+- **`_enrich_sport()`** helper auto-backfills scoring_pattern + player_format on GET/PATCH so legacy sport rows work too.
+- **`POST /api/sports`** accepts `scoring_pattern` + `player_format` (auto-defaults for known slugs); slug value is canonicalised (`''.join(strip().lower().split())`) → prevents `Pickle Ball` producing a duplicate row.
+- **`POST /api/events`** enriches from `db.sports`. When the sport has `player_format='both'`, the client MUST supply `player_format` in ("singles","doubles") or the server returns 400 "singles and doubles".
+- Cleaned the pre-existing duplicate `pickle ball` row from `db.sports`.
+
+### Frontend
+- **New `useSports()` hook** (`/app/frontend/src/hooks/useSports.js`) — fetches `/api/sports` once (60s cache) and MERGES the API list with the fallback `SPORTS` array (deduped by `value`, API wins on collision). Guarantees built-in fallbacks (tennis/lawntennis) always render even when the DB row is absent.
+- Extended `FALLBACK_SPORTS` in `/app/frontend/src/lib/sports.js` with tennis/lawntennis/pickleball + `scoring_pattern` + `player_format` on every row. `renderScore()` now accepts either a sport slug OR an event object with `scoring_pattern` (racket pattern shared between badminton/tennis/pickleball/…).
+- `Admin.jsx` and `components/admin/EventsTab.jsx` swapped hardcoded `SPORTS` for `useSports()` and added a Singles/Doubles `Select` (`data-testid=admin-event-player-format` and `pa-event-player-format`) that appears only for sports with `player_format=='both'`.
+- `components/SportsManager.jsx` — admin add-sport form now includes `scoring_pattern` + `player_format` dropdowns and canonicalises the slug on input.
+
+### Verification (Feb 2026)
+- **iteration_28.json** — backend 12/12 pytest pass; frontend 80% (tennis/lawntennis missing + duplicate 'Pickle Ball').
+- **iteration_29.json** — after `useSports()` merge fix + slug canonicalisation + DB cleanup → **backend 100% + frontend 100%**. Tennis, Lawn Tennis, Pickleball all render in the dropdown (13 options vs 11 in DB), no duplicate row, singles/doubles picker works for racket sports and hides for team sports.

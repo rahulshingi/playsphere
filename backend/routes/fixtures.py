@@ -182,14 +182,35 @@ def register(api, app, db, ws_manager, deps):
 
     def _compute_totals(score: dict) -> tuple[float, float]:
         """Return (team_a_total, team_b_total) from the score dict. Handles the
-        common shapes we support: `{team_a:{total},team_b:{total}}` and the
-        newer `{sides:{a:{total},b:{total}}}` shape."""
+        common shapes we support: `{team_a:{total},team_b:{total}}`, the newer
+        `{sides:{a:{total},b:{total}}}` shape, AND racket-sport `sets` arrays."""
         try:
             a = (score.get("team_a") or (score.get("sides") or {}).get("a") or score.get("a") or {}) or {}
             b = (score.get("team_b") or (score.get("sides") or {}).get("b") or score.get("b") or {}) or {}
-            fa = float(a.get("total") or a.get("score") or a.get("runs") or a.get("goals") or a.get("points") or 0)
-            fb = float(b.get("total") or b.get("score") or b.get("runs") or b.get("goals") or b.get("points") or 0)
-            return fa, fb
+
+            def _score_of(side: dict) -> float:
+                for k in ("total", "score", "runs", "goals", "points"):
+                    v = side.get(k)
+                    if v is not None:
+                        return float(v)
+                sets_arr = side.get("sets")
+                if isinstance(sets_arr, list) and sets_arr:
+                    # Racket sports: total sets won by this side is the "score".
+                    # We can only tell that by comparing head-to-head — done below.
+                    return float(sum(x or 0 for x in sets_arr))
+                return 0.0
+
+            # For racket sets, a fairer "total" is the number of sets won
+            # (comparing set-by-set) rather than the sum of set points.
+            a_sets = a.get("sets") if isinstance(a.get("sets"), list) else None
+            b_sets = b.get("sets") if isinstance(b.get("sets"), list) else None
+            if a_sets is not None and b_sets is not None:
+                a_sets_won = sum(1 for i in range(min(len(a_sets), len(b_sets))) if (a_sets[i] or 0) > (b_sets[i] or 0))
+                b_sets_won = sum(1 for i in range(min(len(a_sets), len(b_sets))) if (b_sets[i] or 0) > (a_sets[i] or 0))
+                # Tie-break: fall through to raw point sum if the set counts are tied.
+                if a_sets_won != b_sets_won:
+                    return float(a_sets_won), float(b_sets_won)
+            return _score_of(a), _score_of(b)
         except Exception:
             return 0.0, 0.0
 
@@ -309,6 +330,23 @@ def register(api, app, db, ws_manager, deps):
                     upd["winner_id"] = auto_winner
             if not existing.get("awards"):
                 awards = _compute_awards(ev.get("sport"), body.score or {}, existing)
+                # Fallback: no per-player stats (e.g. badminton `{sets: [...]}`)
+                # → credit the winning team's captain / first-member as MoM.
+                winner_id = upd.get("winner_id") or body.winner_id or existing.get("winner_id")
+                if not awards and winner_id:
+                    wteam = await db.teams.find_one({"id": winner_id}, {"_id": 0, "captain_player_id": 1, "members": 1})
+                    if wteam:
+                        rep = wteam.get("captain_player_id")
+                        members = wteam.get("members") or []
+                        if not rep and members:
+                            rep = members[0]
+                        if rep:
+                            prof = await db.player_profiles.find_one({"id": rep}, {"_id": 0, "name": 1})
+                            representative = {"player_id": rep, "name": (prof or {}).get("name") or ""}
+                            awards = {"mom": representative}
+                            # For individual sports also crown top_scorer with the same rep.
+                            if (ev.get("sport") or "") in ("badminton", "tennis", "table_tennis", "squash", "chess", "quiz", "hackathon"):
+                                awards["top_scorer"] = representative
                 if awards:
                     upd["awards"] = awards
         await db.fixtures.update_one({"id": fixture_id}, {"$set": upd})

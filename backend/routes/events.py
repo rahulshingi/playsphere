@@ -441,12 +441,32 @@ def register(api, db, deps):
         opp_teams = await db.teams.find({"id": {"$in": opp_ids}}, {"_id": 0, "id": 1, "name": 1}).to_list(500)
         opp_by_id = {t["id"]: t for t in opp_teams}
 
+        # Fetch full team docs so we can (a) render captain/first-member as MoM
+        # for individual-sport matches without per-player stats, and (b) list
+        # opponent teams. We need `members` for backfill, so re-query without
+        # the projection restriction on my_team as well.
+        all_team_ids = list(set(team_ids) | set(opp_ids))
+        full_teams = await db.teams.find(
+            {"id": {"$in": all_team_ids}},
+            {"_id": 0, "id": 1, "name": 1, "members": 1, "captain_player_id": 1}
+        ).to_list(500)
+        full_by_id = {t["id"]: t for t in full_teams}
+        # Refresh opp_by_id + team_by_id so downstream loops read consistent
+        # full docs (fall back to the projection docs if a team was deleted).
+        for tid, doc in full_by_id.items():
+            if tid in opp_by_id:
+                opp_by_id[tid] = doc
+
         def _display(score_side: dict, sport: str) -> str:
-            """Render a compact score string. Falls back to raw totals per sport."""
+            """Render a compact score string. Handles all score shapes we've
+            shipped: cricket `total/wkts (overs)`, other-team-sport totals, and
+            racket-sport `sets: [a, b, c]` arrays."""
             if not isinstance(score_side, dict):
                 return "—"
             if sport == "cricket":
-                total = score_side.get("total") or score_side.get("runs") or 0
+                total = score_side.get("total") if score_side.get("total") is not None else score_side.get("runs")
+                if total is None:
+                    total = 0
                 wkts = score_side.get("wickets")
                 overs = score_side.get("overs")
                 out = f"{total}"
@@ -456,9 +476,51 @@ def register(api, db, deps):
                     out += f" ({overs})"
                 return out
             for k in ("total", "goals", "points", "score"):
-                if k in score_side:
+                if score_side.get(k) is not None:
                     return str(score_side.get(k) or 0)
+            # Racket / set-based sports (badminton, tennis, table tennis, squash).
+            sets_arr = score_side.get("sets")
+            if isinstance(sets_arr, list) and sets_arr:
+                # Show the sets list joined by ·, e.g. "1 · 0 · 3".
+                return " · ".join(str(int(x) if x is not None else 0) for x in sets_arr)
             return "—"
+
+        def _my_awards_for_fixture(f: dict, winning_team_id: str) -> list:
+            """Which award keys did THIS player win on this fixture?
+
+            Reads stored `awards` first (populated by _compute_awards on match
+            completion). If stored awards are empty AND the player is on the
+            winning team of an individual/racket sport, we synthesise 'mom' +
+            'top_scorer' — a badminton singles winner has no `scorers` list
+            to compute from, so this fallback ensures they still get credit.
+            """
+            awards = f.get("awards") or {}
+            keys_won = []
+            for key in ("mom", "best_batter", "best_bowler", "top_scorer"):
+                who = awards.get(key)
+                pid = who.get("player_id") if isinstance(who, dict) else who
+                if pid == player_id:
+                    keys_won.append(key)
+            if keys_won or not winning_team_id:
+                return keys_won
+            # Fallback path: awards empty. Give the win credit to the winning
+            # team's captain (or, if there's no captain, first roster member).
+            wteam = full_by_id.get(winning_team_id)
+            if not wteam:
+                return keys_won
+            captain = wteam.get("captain_player_id")
+            members = wteam.get("members") or []
+            representative = captain if captain in members or captain else (members[0] if members else None)
+            if representative == player_id:
+                # Racket/individual sports: crown MoM + top_scorer.
+                # Team sports: only 'mom' — a single field goal wouldn't
+                # crown a "top scorer" without stats.
+                sport = (ev_by_id.get(f.get("event_id")) or {}).get("sport") or ""
+                if sport in ("badminton", "tennis", "table_tennis", "squash",
+                              "chess", "quiz", "hackathon"):
+                    return ["mom", "top_scorer"]
+                return ["mom"]
+            return keys_won
 
         out = []
         for f in fixtures:
@@ -468,7 +530,7 @@ def register(api, db, deps):
             my_side_key = "team_a" if f["team_a_id"] in team_ids else "team_b"
             my_team_id = f["team_a_id"] if my_side_key == "team_a" else f["team_b_id"]
             opp_team_id = f["team_b_id"] if my_side_key == "team_a" else f["team_a_id"]
-            my_team = team_by_id.get(my_team_id) or {"name": "My team"}
+            my_team = full_by_id.get(my_team_id) or team_by_id.get(my_team_id) or {"name": "My team"}
             opp_team = opp_by_id.get(opp_team_id) or {"name": "Opponent"}
             score = f.get("score") or {}
             my_score = _display(score.get(my_side_key) or {}, ev.get("sport") or "")
@@ -480,12 +542,7 @@ def register(api, db, deps):
                 result = "won"
             else:
                 result = "lost"
-            my_awards = []
-            for key in ("mom", "best_batter", "best_bowler", "top_scorer"):
-                who = (f.get("awards") or {}).get(key)
-                pid = who.get("player_id") if isinstance(who, dict) else who
-                if pid == player_id:
-                    my_awards.append(key)
+            my_awards = _my_awards_for_fixture(f, winner_id or "")
             out.append({
                 "fixture_id": f["id"],
                 "event_id": ev["id"],

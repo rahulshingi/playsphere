@@ -1,0 +1,35 @@
+{
+  "summary": "Iteration 29 retest of the two frontend flaws + backend regression flagged in iter28. Both frontend flaws are FIXED: (1) Tennis, Lawn Tennis and Pickleball now all appear in the sport dropdown on /platform-admin Events tab AND /admin — useSports() correctly merges FALLBACK_SPORTS with /api/sports (13 options rendered vs 11 in DB). (2) The duplicate 'Pickle Ball' (with space) row is gone — GET /api/sports returns exactly one pickleball row, and POST /api/sports with value='Pickle Ball' (or 'PICKLEBALL') canonicalises to 'pickleball' and returns 400 'already exists'. Regressions on the singles/doubles picker still pass: pickleball/badminton/tennis/lawntennis reveal the pa-event-player-format & admin-event-player-format Select, cricket/football hide it. Backend pytest test_sports_enrichment_iter28.py 12/12 pass unchanged.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_sports_enrichment_iter28.py",
+    "/app/test_reports/pytest/iter29_sports.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "useSports() cache is still process-wide (60s TTL). Playwright's fresh context bypasses this, but a live user who adds a new sport via Platform Admin > Sports tab won't see it in the Events tab dropdown for up to 60s unless the page is reloaded. Consider exposing a `invalidateSportsCache()` helper that SportsManager can call after createSport() to force a refetch.",
+    "server.py still 4353+ lines — split into route modules (sports.py, events.py, sponsorship.py) to comply with the 700-line guideline.",
+    "SPORT_DEFAULTS (backend) + FALLBACK_SPORTS (frontend/lib/sports.js) + useSports merge logic are three sources of truth. A subtle drift is possible: FALLBACK_SPORTS still contains 'other' with player_format='team' while backend _SPORT_DEFAULTS may differ — recommend serving a single canonical /api/sports/defaults endpoint that both DB seed AND frontend fallback consume.",
+    "backend/routes/events.py create_event lower-cases the sport slug but does not enforce membership in db.sports. Once db.sports is treated as source-of-truth, add strict validation to reject typos (e.g. 'rugby' silently gets scoring_pattern='generic').",
+    "Frontend fallback resurrection: because useSports merges FALLBACK_SPORTS in, a sport that admin explicitly deactivates in db.sports (active=false) will STILL appear in the dropdown if its `value` is in FALLBACK_SPORTS. Recommend either filtering out inactive rows from the API list before merge OR removing the fallback merge when API returns >0 rows."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "admin@kreedanation.com / admin123",
+  "seed_data_creation": "No new seed data — POST /api/sports 'Pickle Ball' returned 400 'already exists' (canonicalises to existing pickleball). All test events created by pytest are prefixed TEST_ and cleaned up in-suite.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter28 flaws are fully resolved. Backend enrichment pytest suite (12 cases in test_sports_enrichment_iter28.py) remains the canonical regression — always run with REACT_APP_BACKEND_URL exported from frontend/.env. Both /platform-admin Events tab (pa-event-*) and /admin (admin-event-*) use useSports() and render the merged 13-sport list. Note: an orientation modal ('Welcome to Kreeda Nation HQ') intercepts clicks on first visit — Playwright must dismiss it via button:has-text(\"Got it\") before touching the Events form. All UI selectors verified: pa-tab-events, pa-event-sport, pa-event-player-format, admin-event-sport, admin-event-player-format.",
+  "rca of the issue": "Both iter28 flaws were addressed in iter29 code changes: (1) useSports.js now uses Map-based merge of FALLBACK_SPORTS + API list deduped by value (API wins on collision) — verified by observing 13 dropdown options (11 API + tennis + lawntennis from fallback). (2) POST /api/sports canonicalises value via ''.join(value.strip().lower().split()), so 'Pickle Ball' and 'PICKLEBALL' both resolve to 'pickleball' and hit the uniqueness check — verified via two curl POST attempts, both returned 400 'already exists' and GET /api/sports still shows exactly one pickleball row. Legacy dup row was already deleted from db.sports by main agent in iter29. No further mitigation needed."
+}

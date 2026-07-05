@@ -3831,7 +3831,9 @@ async def list_sports(include_inactive: bool = False):
 
 @api.post("/sports")
 async def create_sport(body: dict, _: dict = Depends(require_platform_admin)):
-    value = (body.get("value") or "").strip().lower()
+    # Canonicalise the slug — strip spaces + lower-case so "Pickle Ball" and
+    # "pickleball" don't produce duplicate rows. Admin can still set any label.
+    value = "".join((body.get("value") or "").strip().lower().split())
     label = (body.get("label") or "").strip()
     if not (value and label):
         raise HTTPException(400, "value and label required")

@@ -24,7 +24,15 @@ export function useSports() {
     api.get("/sports")
       .then((r) => {
         if (!alive) return;
-        const list = Array.isArray(r.data) && r.data.length > 0 ? r.data : FALLBACK_SPORTS;
+        // Merge API results with the built-in fallback list, deduped by
+        // `value` (API row wins on collision). This guarantees that a) any
+        // admin-added sport (pickleball) shows up, AND b) any built-in
+        // (tennis, lawntennis) that isn't yet in the DB still renders.
+        const apiList = Array.isArray(r.data) ? r.data : [];
+        const byValue = new Map();
+        for (const s of FALLBACK_SPORTS) byValue.set(s.value, s);
+        for (const s of apiList) byValue.set(s.value, { ...byValue.get(s.value), ...s });
+        const list = Array.from(byValue.values());
         _cache = list;
         _cachedAt = Date.now();
         setSports(list);

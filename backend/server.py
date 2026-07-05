@@ -3947,6 +3947,11 @@ async def dashboard_admin(_: dict = Depends(require_platform_admin)):
         "vendor_bookings_confirmed": await db.vendor_bookings.count_documents({"status": "confirmed"}),
         "players": await db.player_profiles.count_documents({}),
         "teams": await db.teams.count_documents({}),
+        # Player-hosted local matches — split by visibility so the admin can spot
+        # abuse (spam events) vs healthy usage at a glance.
+        "local_matches_total": await db.events.count_documents({"is_local_match": True}),
+        "local_matches_public": await db.events.count_documents({"is_local_match": True, "listed_publicly": {"$ne": False}}),
+        "local_matches_hidden": await db.events.count_documents({"is_local_match": True, "listed_publicly": False}),
     }
 
 

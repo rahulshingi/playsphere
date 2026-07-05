@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
-import { Activity, TrendingUp, Calendar, Users, MapPin, ShoppingCart } from "lucide-react";
+import { Activity, TrendingUp, Calendar, Users, MapPin, ShoppingCart, Zap } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const STAT_GROUPS = {
   admin: [
     { key: "events_total", label: "Events", icon: Calendar, accent: "#84CC16" },
     { key: "events_ongoing", label: "Ongoing", icon: Activity, accent: "#06B6D4" },
+    { key: "local_matches_total", label: "Local matches", icon: Zap, accent: "#84CC16", href: "/events?is_local_match=true", testid: "stat-local-matches" },
+    { key: "local_matches_public", label: "Local · public", icon: Zap, accent: "#06B6D4", href: "/events?is_local_match=true&listed_publicly=true" },
+    { key: "local_matches_hidden", label: "Local · hidden", icon: Zap, accent: "#525252" },
     { key: "companies", label: "Companies", icon: TrendingUp, accent: "#EC4899" },
     { key: "organisers", label: "Organisers", icon: TrendingUp, accent: "#06B6D4" },
     { key: "vendors_total", label: "Vendors", icon: ShoppingCart, accent: "#F59E0B" },
@@ -61,14 +65,23 @@ export default function DashboardPanel({ role }) {
       {groups.map((g) => {
         const Icon = g.icon;
         const value = stats[g.key] ?? 0;
-        return (
-          <div key={g.key} data-testid={`stat-${g.key}`} className="border border-white/10 rounded-sm bg-[#141414] p-4">
+        const inner = (
+          <>
             <div className="flex items-center justify-between">
               <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">{g.label}</div>
               <Icon className="w-3.5 h-3.5" style={{ color: g.accent }} />
             </div>
             <div className="font-display text-4xl mt-2" style={{ color: g.accent }}>{value}</div>
-          </div>
+          </>
+        );
+        const commonProps = {
+          "data-testid": g.testid || `stat-${g.key}`,
+          className: `border border-white/10 rounded-sm bg-[#141414] p-4 ${g.href ? "hover:border-white/30 transition cursor-pointer" : ""}`,
+        };
+        return g.href ? (
+          <Link key={g.key} to={g.href} {...commonProps}>{inner}</Link>
+        ) : (
+          <div key={g.key} {...commonProps}>{inner}</div>
         );
       })}
     </div>

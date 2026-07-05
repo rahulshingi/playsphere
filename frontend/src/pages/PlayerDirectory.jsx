@@ -170,7 +170,7 @@ export function PlayerProfileView() {
             </div>
 
             {/* Tournaments hosted + played */}
-            <PlayerTournamentsSection profileId={p.id} isOwner={false} />
+            <PlayerTournamentsSection profileId={p.id} isOwner={false} playerName={p.name || ""} />
 
             {p.bio && <p className="mt-6 text-neutral-300 leading-relaxed">{p.bio}</p>}
 

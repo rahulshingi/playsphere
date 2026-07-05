@@ -1,10 +1,32 @@
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import { resolveImageUrl } from "@/lib/imageUrl";
-import { Award, TrendingUp, Trophy } from "lucide-react";
+import { Award, TrendingUp, Trophy, Share2 } from "lucide-react";
+import { shareMatchImage } from "@/lib/shareMatchImage";
+import { toast } from "sonner";
 
 /** Per-match score card. Rendered inside a "LOCAL MATCH SCORES" or generic
  *  "MATCH SCORES" section on PlayerProfile / public PlayerDirectory pages. */
-export default function MatchScoreCard({ match }) {
+export default function MatchScoreCard({ match, playerName = "" }) {
+  const [sharing, setSharing] = useState(false);
+
+  const onShare = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSharing(true);
+    try {
+      const result = await shareMatchImage(match, { playerName });
+      if (result.ok) {
+        toast.success(result.mode === "native" ? "Ready to share" : "Match card downloaded");
+      } else {
+        toast.error("Couldn't create share image");
+      }
+    } catch (err) {
+      toast.error(err.message || "Share failed");
+    } finally {
+      setSharing(false);
+    }
+  };
   const resultAccent = {
     won: { color: "#84CC16", bg: "bg-[#84CC16]/10", border: "border-[#84CC16]/30", label: "WON" },
     lost: { color: "#FF3B30", bg: "bg-[#FF3B30]/10", border: "border-[#FF3B30]/30", label: "LOST" },
@@ -59,8 +81,19 @@ export default function MatchScoreCard({ match }) {
           <img src={resolveImageUrl(match.hero_image_url)} alt="" className="w-full h-full object-cover opacity-80 hover:opacity-100 transition" />
         </div>
       )}
-      <div className="mt-2 text-[10px] font-mono text-[#06B6D4] uppercase tracking-widest flex items-center gap-1">
-        <TrendingUp className="w-3 h-3" /> View match →
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="text-[10px] font-mono text-[#06B6D4] uppercase tracking-widest flex items-center gap-1">
+          <TrendingUp className="w-3 h-3" /> View match →
+        </div>
+        <button
+          type="button"
+          onClick={onShare}
+          disabled={sharing}
+          data-testid={`match-share-btn-${match.fixture_id}`}
+          className="text-[10px] font-mono uppercase tracking-widest text-[#84CC16] hover:text-white flex items-center gap-1 border border-[#84CC16]/30 hover:border-[#84CC16] px-2 py-1 rounded-sm bg-[#84CC16]/5 disabled:opacity-60"
+        >
+          <Share2 className="w-3 h-3" /> {sharing ? "Building…" : "Share"}
+        </button>
       </div>
     </Link>
   );

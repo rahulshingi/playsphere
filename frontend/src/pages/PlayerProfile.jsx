@@ -165,7 +165,7 @@ export default function PlayerProfile() {
         ) : (
           <>
             <ViewMode profile={profile} companyName={companyName} interested={interested} />
-            {profile.id && <PlayerTournamentsSection profileId={profile.id} isOwner />}
+            {profile.id && <PlayerTournamentsSection profileId={profile.id} isOwner playerName={profile.name || ""} />}
           </>
         )}
 

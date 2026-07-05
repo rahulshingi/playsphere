@@ -18,7 +18,7 @@ import MatchScoreCard from "@/components/player/MatchScoreCard";
  * profileId: PlayerProfile.id
  * isOwner: enables the "Host a local match" CTA + shows hidden hosted events.
  */
-export default function PlayerTournamentsSection({ profileId, isOwner }) {
+export default function PlayerTournamentsSection({ profileId, isOwner, playerName = "" }) {
   const [hosted, setHosted] = useState([]);
   const [played, setPlayed] = useState([]);
   const [matches, setMatches] = useState([]);
@@ -86,7 +86,7 @@ export default function PlayerTournamentsSection({ profileId, isOwner }) {
           </div>
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {localMatches.map((m) => (
-              <MatchScoreCard key={m.fixture_id} match={m} />
+              <MatchScoreCard key={m.fixture_id} match={m} playerName={playerName} />
             ))}
           </div>
         </section>

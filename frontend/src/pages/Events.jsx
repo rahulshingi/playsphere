@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { sportColor } from "@/lib/sports";
 import { useAuth } from "@/context/AuthContext";
-import { Megaphone } from "lucide-react";
+import { Megaphone, Zap } from "lucide-react";
 
 export default function Events() {
   const { ready, isCompanyAdmin, canSponsor } = useAuth();
@@ -13,6 +13,9 @@ export default function Events() {
   const [filter, setFilter] = useState("all");
   const [mineOnly, setMineOnly] = useState(false);
   const [sponsorshipOnly, setSponsorshipOnly] = useState(false);
+  const [searchParams] = useSearchParams();
+  // ?is_local_match=true filters to only local matches (used by admin dashboard links).
+  const localOnly = searchParams.get("is_local_match") === "true";
 
   useEffect(() => { if (ready) setMineOnly(isCompanyAdmin); }, [ready, isCompanyAdmin]);
 
@@ -24,8 +27,14 @@ export default function Events() {
   const filtered = useMemo(() => {
     let xs = filter === "all" ? events : events.filter((e) => e.status === filter);
     if (sponsorshipOnly) xs = xs.filter((e) => e.accept_sponsorships);
+    if (localOnly) xs = xs.filter((e) => e.is_local_match);
     return xs;
-  }, [events, filter, sponsorshipOnly]);
+  }, [events, filter, sponsorshipOnly, localOnly]);
+
+  // Split into local (player-hosted) and corporate/organiser events so each
+  // group gets its own section on the page.
+  const localMatches = useMemo(() => filtered.filter((e) => e.is_local_match), [filtered]);
+  const corporate = useMemo(() => filtered.filter((e) => !e.is_local_match), [filtered]);
 
   return (
     <div className="bg-[#0a0a0a] text-white min-h-screen">
@@ -67,58 +76,96 @@ export default function Events() {
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 mt-8">
-          {filtered.map((e) => {
-            const oppCount = (e.sponsorship_opportunities || []).length;
-            const minPrice = oppCount > 0 ? Math.min(...e.sponsorship_opportunities.map((o) => o.price || 0).filter((p) => p > 0)) : 0;
-            return (
-              <Link
-                to={`/events/${e.id}`}
-                key={e.id}
-                data-testid={`event-card-${e.id}`}
-                className="group relative overflow-hidden rounded-sm border border-white/10 bg-[#141414] hover-lift"
-              >
-                <div className="h-44 relative">
-                  <img src={e.banner_url || "https://images.pexels.com/photos/1657324/pexels-photo-1657324.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"} className="w-full h-full object-cover opacity-70 group-hover:opacity-90" alt="" />
-                  <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
-                    <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm border bg-black/60" style={{ borderColor: sportColor(e.sport), color: sportColor(e.sport) }}>
-                      {e.sport}
-                    </span>
-                    <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-sm bg-black/60 text-neutral-300">{e.format.replace("_", " ")}</span>
-                    {e.accept_sponsorships && (
-                      <span data-testid={`event-sponsorship-badge-${e.id}`} className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-sm bg-[#FACC15] text-black flex items-center gap-1">
-                        <Megaphone className="w-2.5 h-2.5" /> Sponsorship-ready
-                      </span>
-                    )}
-                  </div>
-                  {e.status === "ongoing" && (
-                    <span className="absolute top-3 right-3 flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#FF3B30] text-white text-[10px] font-mono">
-                      <span className="w-1.5 h-1.5 rounded-full bg-white live-pulse" /> LIVE
-                    </span>
-                  )}
-                </div>
-                <div className="p-5">
-                  <h3 className="text-xl font-semibold group-hover:text-[#84CC16]">{e.name}</h3>
-                  <p className="text-sm text-neutral-400 mt-2 line-clamp-2">{e.description}</p>
-                  <div className="flex items-center justify-between mt-4 text-xs font-mono text-neutral-500 uppercase">
-                    <span>{e.venue || "TBD"}</span>
-                    <span>{e.status}</span>
-                  </div>
-                  {e.accept_sponsorships && oppCount > 0 && (
-                    <div className="mt-3 pt-3 border-t border-white/10 text-[11px] font-mono text-[#FACC15] flex items-center justify-between">
-                      <span>{oppCount} sponsorship{oppCount === 1 ? "" : "s"}</span>
-                      {minPrice > 0 && <span>from ₹{minPrice.toLocaleString()}</span>}
-                    </div>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
-          {filtered.length === 0 && (
-            <div className="col-span-full text-center text-neutral-500 py-20">No events to show.</div>
-          )}
+          {/* Rendered below in two sections; keep grid classes only when there's just one bucket to render. */}
         </div>
+
+        {corporate.length > 0 && (
+          <section className="mt-8" data-testid="events-corporate-section">
+            {!localOnly && localMatches.length > 0 && (
+              <div className="mb-4">
+                <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#06B6D4]">/ Corporate &amp; organiser tournaments</div>
+                <div className="font-display tracking-wider text-2xl mt-1">TOURNAMENTS ({corporate.length})</div>
+              </div>
+            )}
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {corporate.map((e) => <EventCard key={e.id} e={e} />)}
+            </div>
+          </section>
+        )}
+
+        {localMatches.length > 0 && (
+          <section className="mt-10" data-testid="events-local-section">
+            <div className="mb-4 flex items-center gap-2 flex-wrap">
+              <div>
+                <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Local matches</div>
+                <div className="font-display tracking-wider text-2xl mt-1">LOCAL MATCHES ({localMatches.length})</div>
+                <div className="text-xs text-neutral-500 mt-1">Informal neighborhood tournaments hosted directly by players. No sign-up required — turn up and play.</div>
+              </div>
+            </div>
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+              {localMatches.map((e) => <EventCard key={e.id} e={e} />)}
+            </div>
+          </section>
+        )}
+
+        {filtered.length === 0 && (
+          <div className="text-center text-neutral-500 py-20" data-testid="events-empty">
+            {localOnly ? "No local matches yet." : "No events to show."}
+          </div>
+        )}
       </div>
       <Footer />
     </div>
+  );
+}
+
+function EventCard({ e }) {
+  const oppCount = (e.sponsorship_opportunities || []).length;
+  const minPrice = oppCount > 0 ? Math.min(...e.sponsorship_opportunities.map((o) => o.price || 0).filter((p) => p > 0)) : 0;
+  return (
+    <Link
+      to={`/events/${e.id}`}
+      data-testid={`event-card-${e.id}`}
+      className="group relative overflow-hidden rounded-sm border border-white/10 bg-[#141414] hover-lift block"
+    >
+      <div className="h-44 relative">
+        <img src={e.banner_url || "https://images.pexels.com/photos/1657324/pexels-photo-1657324.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"} className="w-full h-full object-cover opacity-70 group-hover:opacity-90" alt="" />
+        <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
+          <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm border bg-black/60" style={{ borderColor: sportColor(e.sport), color: sportColor(e.sport) }}>
+            {e.sport}
+          </span>
+          <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-sm bg-black/60 text-neutral-300">{e.format.replace("_", " ")}</span>
+          {e.is_local_match && (
+            <span data-testid={`event-local-badge-${e.id}`} className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm bg-[#84CC16] text-black flex items-center gap-1">
+              <Zap className="w-2.5 h-2.5" /> LOCAL MATCH
+            </span>
+          )}
+          {e.accept_sponsorships && (
+            <span data-testid={`event-sponsorship-badge-${e.id}`} className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-sm bg-[#FACC15] text-black flex items-center gap-1">
+              <Megaphone className="w-2.5 h-2.5" /> Sponsorship-ready
+            </span>
+          )}
+        </div>
+        {e.status === "ongoing" && (
+          <span className="absolute top-3 right-3 flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#FF3B30] text-white text-[10px] font-mono">
+            <span className="w-1.5 h-1.5 rounded-full bg-white live-pulse" /> LIVE
+          </span>
+        )}
+      </div>
+      <div className="p-5">
+        <h3 className="text-xl font-semibold group-hover:text-[#84CC16]">{e.name}</h3>
+        <p className="text-sm text-neutral-400 mt-2 line-clamp-2">{e.description}</p>
+        <div className="flex items-center justify-between mt-4 text-xs font-mono text-neutral-500 uppercase">
+          <span>{e.venue || "TBD"}</span>
+          <span>{e.status}</span>
+        </div>
+        {e.accept_sponsorships && oppCount > 0 && (
+          <div className="mt-3 pt-3 border-t border-white/10 text-[11px] font-mono text-[#FACC15] flex items-center justify-between">
+            <span>{oppCount} sponsorship{oppCount === 1 ? "" : "s"}</span>
+            {minPrice > 0 && <span>from ₹{minPrice.toLocaleString()}</span>}
+          </div>
+        )}
+      </div>
+    </Link>
   );
 }

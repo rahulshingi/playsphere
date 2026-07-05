@@ -757,6 +757,231 @@ admin_sections = [
 
 
 # ─────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────
+# Task recipes — "How to X" step-by-step guides, grouped by outcome
+# instead of by feature. Every role manual gets a tailored recipe
+# section right after the welcome page so readers can jump to the
+# task they actually want to perform.
+# ─────────────────────────────────────────────────────────────────────
+def task_recipes(role: str) -> dict:
+    common_intro = ("Quick recipes for the tasks you'll do every week. "
+                    "Each recipe lists the exact steps — from which page to open, to which button to click. "
+                    "Bookmark this section and share it with your team.")
+    R = {
+        "vendor": [
+            ("h3", "How to list a new ground / court / coach"),
+            ("num", [
+                "Sign in and go to <b>/vendor/dashboard</b>.",
+                "Click the yellow <b>+ New listing</b> button (top right).",
+                "Fill title, vendor type (ground/court/coach/gym/studio), sport tags, city, description, price and price-unit (per hour / per session / per month).",
+                "Upload 1–5 photos. First photo is the cover.",
+                "Save. The listing goes into <i>Pending admin approval</i>. Kreeda Nation HQ typically reviews within a few business hours.",
+                "Once approved, share its public link (<b>/vendor-listing/&lt;id&gt;</b>) — see the sharing recipe below.",
+            ]),
+            ("h3", "How to share a listing with customers"),
+            ("num", [
+                "From <b>/vendor/dashboard</b>, find the listing and click the yellow <b>QR poster</b> button — a printable poster opens.",
+                "Print, laminate and mount it at your reception. Anyone scanning it lands on your public listing page.",
+                "Or click the listing thumbnail on <b>/hire</b> → <b>View details →</b> to open the public page directly, then use the <b>WhatsApp / X / Copy</b> buttons in the Share row to blast it out.",
+            ]),
+            ("h3", "How to convert a walk-in into a Kreeda Nation user (with zero commission)"),
+            ("num", [
+                "Open <b>Offline business → Dashboard</b>.",
+                "Copy the URL in the pink <b>Share your invite link</b> card, or tap <b>WhatsApp share</b> / <b>Print QR poster</b>.",
+                "Send it to the customer. They sign up via <b>/players/signup?ref_vendor=&lt;you&gt;</b>. From that moment they're your offline-source player — future bookings between you two skip the platform commission.",
+            ]),
+            ("h3", "How to record an offline (private) booking"),
+            ("num", [
+                "Open <b>Offline business → Bookings &amp; calendar</b>.",
+                "Click <b>+ New booking</b>. Type customer name + phone — the directory auto-suggests existing ones.",
+                "Pick the listing, sport, date, start time, hours (end-time auto-computed).",
+                "Choose rate type — <i>hourly</i> (fee auto-computed) or <i>flat total</i>.",
+                "Save. It shows immediately on your Calendar sub-tab (cyan pill). Platform bookings appear as yellow pills so double-bookings are impossible.",
+                "When the customer arrives, use <b>Check-in</b> tab. When they leave, hit <b>Check out</b> — if they overran, the app auto-mints an overrun invoice at your hourly rate.",
+            ]),
+            ("h3", "How to check-in a customer in under 5 seconds"),
+            ("num", [
+                "Open <b>Offline business → Check-in</b>.",
+                "Scan the customer's booking QR (or type booking-id / phone).",
+                "If the customer has both an active booking AND a batch enrolment, a picker appears — tap the correct context.",
+                "The row appears in <b>Currently on premises</b> with a live countdown to slot-end. It turns red at &le;5 min or when overdue.",
+                "Tap <b>Check out</b> to close. Overrun (if any) auto-invoices at the same hourly rate.",
+            ]),
+            ("h3", "How to sell a membership pass"),
+            ("num", [
+                "Open <b>Marketplace tab → Memberships</b> (or the vendor's own /memberships page).",
+                "Click <b>+ New plan</b>. Name it (e.g. Monthly Cricket Pass), pick per-hour discount or bundled hours, currency and price.",
+                "Save — the plan appears on your public listing page. Players click <b>Buy</b>, choose online / offline payment, and once paid you'll see them in <b>Marketplace → Members</b>.",
+                "On next booking checkout the player sees <b>Apply your membership</b> and gets the discounted / free slot automatically.",
+            ]),
+            ("h3", "How to create a batch and enrol students"),
+            ("num", [
+                "Open <b>Offline business → Coaches &amp; batches</b>.",
+                "Click <b>+ New</b> under Coaches, save.",
+                "Click <b>+ New</b> under Batches, pick the coach + timings + capacity + monthly fee, save.",
+                "Click <b>Roster</b> on the batch row. Pick a customer from your directory dropdown → <b>Enrol</b>. When the batch is full, the row turns red <b>FULL</b> and the owner email is auto-notified.",
+            ]),
+            ("h3", "How to export your customer list"),
+            ("num", [
+                "Open <b>Offline business → Bookings &amp; calendar → Customers</b>.",
+                "Click <b>Export CSV</b> — the file downloads with name, phone, email, visits, total paid, outstanding.",
+                "Open in Excel / Google Sheets for pivot analysis or bulk WhatsApp lists.",
+            ]),
+        ],
+        "player": [
+            ("h3", "How to sign up (no company email required)"),
+            ("num", [
+                "Open <b>/players/signup</b>.",
+                "Enter your mobile, a strong password and pick any sports you play.",
+                "Verify the OTP that lands in your inbox.",
+                "You're in — profile lives at <b>/players/me</b>, share it publicly at <b>/players/&lt;you&gt;</b>.",
+            ]),
+            ("h3", "How to book a venue (one-off)"),
+            ("num", [
+                "Open <b>/hire</b>. Pick your city + sport chips at the top — no login needed to browse.",
+                "Tap the listing card that suits you. If you're not signed in you'll be bounced to <b>/login</b> here.",
+                "Fill the booking form: date, start time, hours (end-time auto-fills). If you have a matching membership, tick <b>Apply your membership</b>.",
+                "Click <b>Request booking</b>. Vendor gets notified; you land on <b>/bookings</b> where the row shows status <i>pending</i>.",
+                "When the venue confirms it turns <b>Approved</b>. You'll get an email + it shows in the schedule on your dashboard.",
+            ]),
+            ("h3", "How to book weekly (every Saturday for a month)"),
+            ("num", [
+                "Follow the booking recipe above, then tick <b>Book this weekly</b> in the modal.",
+                "Pick an end date (e.g. 4 weeks later). The system creates ONE booking per week automatically (up to 52 occurrences).",
+                "In <b>/bookings</b> every occurrence appears as its own row with a <b>Weekly series</b> badge — cancel or reschedule any single week without touching the rest.",
+            ]),
+            ("h3", "How to cancel or reschedule a booking"),
+            ("num", [
+                "Open <b>/bookings</b>. Find the row you want to change (only bookings still in <i>pending / approved</i> can be modified — completed ones are read-only).",
+                "Click <b>Cancel</b> to drop the slot (refund follows the venue's policy).",
+                "Or click <b>Reschedule</b> — pick a new date + time + hours, submit. The vendor's calendar updates in real time.",
+            ]),
+            ("h3", "How to renew your membership"),
+            ("num", [
+                "Open <b>/my-memberships</b>.",
+                "Active passes ≤7 days from expiry show a <b>Renew now</b> button; already-expired ones show <b>Renew pass</b>.",
+                "Tap it → you jump straight to that venue's public listing page → complete checkout to extend.",
+            ]),
+            ("h3", "How to share a venue with your team"),
+            ("num", [
+                "On <b>/hire</b>, tap the yellow <b>View details →</b> link on any listing card.",
+                "The public detail page opens. Scroll to <b>Share this venue</b> and tap WhatsApp, X or Copy.",
+                "The recipient gets a preview card (photo + city + price) inside the chat app — one tap and they're on the venue page.",
+            ]),
+        ],
+        "company": [
+            ("h3", "How to create an internal tournament"),
+            ("num", [
+                "Sign in as HR at <b>/login</b>, land on <b>/dashboard</b>.",
+                "Click <b>+ New tournament</b>. Pick sport + format (round-robin / knockout / league).",
+                "Add tournament name, dates, venue and (optionally) a description. Save.",
+                "For a corporate account the event goes public immediately — no admin approval needed.",
+                "Add teams (invite players from the directory or type new names), generate fixtures, invite scorers, and open sponsorship slots.",
+            ]),
+            ("h3", "How to edit an event after creating it"),
+            ("num", [
+                "Open the event page, click <b>Edit event</b> at the top.",
+                "Change name / description / venue / start-date / end-date. (Sport &amp; format stay locked — changing them would break existing fixtures &amp; standings.)",
+                "Save — everyone with the event's public link sees the updated info instantly.",
+            ]),
+            ("h3", "How to hire a venue or coach for your team"),
+            ("num", [
+                "Open <b>/hire</b> from the top nav.",
+                "Filter by city + sport + type (ground / court / coach / gym).",
+                "Tap a card, book the slot (see the player recipe above — same modal).",
+                "Track it under <b>/bookings</b> and reschedule / cancel per venue policy.",
+            ]),
+            ("h3", "How to invite a sponsor to your event"),
+            ("num", [
+                "Open the event, go to the <b>Sponsorships</b> tab.",
+                "Click <b>+ New sponsorship slot</b>. Set tier name, price, deliverables (logo placement, jersey space, MC mentions).",
+                "Save — the slot appears on <b>/sponsorships</b> for any sponsor to express interest.",
+                "Interested sponsors show in the same tab; approve them to lock the sponsorship.",
+            ]),
+        ],
+        "organiser": [
+            ("h3", "How to submit your first event for approval"),
+            ("num", [
+                "Sign up at <b>/signup-organiser</b> with any email + verify the 6-digit OTP.",
+                "On <b>/dashboard</b>, click <b>+ New tournament</b>, fill in details, save.",
+                "The event lands in status <i>Pending your acknowledgement</i> — private, not public.",
+                "Open the event; read the platform instructions banner.",
+                "If a fee is configured, click <b>I agree — pay ₹XXX &amp; submit</b> and pick <b>Pay online</b> or <b>Pay offline</b>. Free events skip this step.",
+                "Kreeda Nation HQ reviews within a few business hours. You'll get an <b>approval email</b> when done.",
+                "If rejected, the email tells you why. Edit the event using the <b>Edit event</b> button and click <b>Resubmit for approval</b>.",
+            ]),
+            ("h3", "How to edit an event after creating it"),
+            ("num", [
+                "Open the event and click <b>Edit event</b> next to the stream-link button.",
+                "Change name / description / venue / dates. (Sport &amp; format are locked to protect fixtures &amp; standings.)",
+                "Save — the changes are live immediately.",
+            ]),
+        ],
+        "admin": [
+            ("h3", "How to approve or reject a pending event"),
+            ("num", [
+                "Open <b>/platform-admin</b> → <b>Pending approvals</b> tab.",
+                "Each row shows the event, organiser, submission timestamp and a payment pill (paid_online / paid_offline / pending_offline).",
+                "For an offline payment, click <b>Mark paid</b> after receiving funds.",
+                "Click <b>Approve</b> to publish it, or <b>Reject</b> with a reason (the organiser gets an email + can edit + resubmit).",
+            ]),
+            ("h3", "How to configure the organiser event fee"),
+            ("num", [
+                "Open <b>/platform-admin → Settings</b> tab.",
+                "Scroll to <b>ORGANISER EVENT FEE</b>.",
+                "Enter amount + currency. Set 0 to make submissions free (payment picker is skipped entirely).",
+                "Click <b>Save event fee</b>. New organiser submissions immediately reflect the new price.",
+            ]),
+            ("h3", "How to enable or disable a service on /services"),
+            ("num", [
+                "Open <b>/platform-admin → Services</b> tab.",
+                "Every row has a <b>Disable / Enable</b> button. Disabled services drop off public listings but stay editable.",
+                "Use disable when a partner is temporarily unavailable so leads don't come in.",
+            ]),
+            ("h3", "How to update the organiser instructions block"),
+            ("num", [
+                "<b>Platform admin → Settings tab → ORGANISER EVENT INSTRUCTIONS</b>. Edit the rich-text block.",
+                "Save. Every subsequent event submission shows the updated text.",
+            ]),
+        ],
+        "sponsor": [
+            ("h3", "How to browse sponsorship opportunities"),
+            ("num", [
+                "Open <b>/sponsorships</b> — no login needed to browse.",
+                "Filter by sport, city, budget, tier. Tap any card to see the full offer, deliverables and expected audience.",
+                "Click <b>Express interest</b>. The organiser gets notified and follows up in your inbox at <b>/dashboard</b>.",
+            ]),
+            ("h3", "How to complete your brand profile"),
+            ("num", [
+                "Open <b>/dashboard → Brand profile</b>.",
+                "Upload logo, add a description, brochure link, industry, primary market.",
+                "This info is what organisers see when they receive your interest — a complete profile converts far better.",
+            ]),
+        ],
+        "scorer": [
+            ("h3", "How to score a live match"),
+            ("num", [
+                "Sign in at <b>/login</b> — you'll land on <b>/scorer/dashboard</b>.",
+                "Pick the assigned event and match from your list.",
+                "Tap balls / points as they happen — the scorecard updates live and syncs to the public event page instantly.",
+                "Handle wickets, overs, wides, no-balls (cricket) / fouls, timeouts (football / basketball) using the panel buttons — no typing needed.",
+            ]),
+            ("h3", "How to fix a scoring mistake"),
+            ("num", [
+                "Every action has an <b>Undo</b> button next to the running commentary.",
+                "For older corrections, open the event page → click the ball / point in the timeline → edit the outcome.",
+                "Audience-facing scoreboard updates immediately.",
+            ]),
+        ],
+    }
+    return {
+        "title": "2. HOW TO — task recipes",
+        "intro": common_intro,
+        "blocks": R.get(role, []),
+    }
+
+
 # "What's new" cross-cutting sections — updated Mar 2026.
 # One tailored block per role is prepended right after the welcome
 # section so every reader immediately sees the latest capabilities.
@@ -869,17 +1094,17 @@ def whats_new(role: str) -> dict:
 build("kreeda-nation-vendor-manual.pdf", "VENDOR", PINK,
       "Vendor manual",
       "Everything you need to list grounds, courts, coaches and other on-ground services.",
-      [vendor_sections[0], whats_new("vendor"), *vendor_sections[1:]])
+      [vendor_sections[0], task_recipes("vendor"), whats_new("vendor"), *vendor_sections[1:]])
 
 build("kreeda-nation-player-manual.pdf", "PLAYER", CYAN,
       "Player manual",
       "Your portable corporate-sports profile — set it up once, carry it across employers.",
-      [player_sections[0], whats_new("player"), *player_sections[1:]])
+      [player_sections[0], task_recipes("player"), whats_new("player"), *player_sections[1:]])
 
 build("kreeda-nation-company-manual.pdf", "HR / COMPANY", LIME_D,
       "Company HR manual",
       "Run end-to-end internal tournaments and hire services from one dashboard.",
-      [company_sections[0], whats_new("company"), *company_sections[1:]])
+      [company_sections[0], task_recipes("company"), whats_new("company"), *company_sections[1:]])
 
 # Organisers share the company workflow but onboard as independent brands.
 # Build them a dedicated PDF that emphasises that distinction.
@@ -916,13 +1141,13 @@ organiser_intro_sections = [
 build("kreeda-nation-organiser-manual.pdf", "ORGANISER", "#06B6D4",
       "Organiser manual",
       "Run open tournaments, book vendors, score matches live — without needing a company.",
-      [organiser_intro_sections[0], whats_new("organiser"), *organiser_intro_sections[1:]])
+      [organiser_intro_sections[0], task_recipes("organiser"), whats_new("organiser"), *organiser_intro_sections[1:]])
 
 
 build("kreeda-nation-platform-admin-manual.pdf", "PLATFORM HQ", RED,
       "Platform admin manual",
       "Curate the marketplace, approve vendors, and oversee every company.",
-      [admin_sections[0], whats_new("admin"), *admin_sections[1:]])
+      [admin_sections[0], task_recipes("admin"), whats_new("admin"), *admin_sections[1:]])
 
 # ---------- SPONSOR MANUAL ----------
 GOLD = HexColor("#FACC15")
@@ -1029,7 +1254,7 @@ sponsor_sections = [
 build("kreeda-nation-sponsor-manual.pdf", "SPONSOR", GOLD,
       "Sponsor manual",
       "Discover sponsorship-ready tournaments, apply to slots in one click, get your brand on every public surface.",
-      [sponsor_sections[0], whats_new("sponsor"), *sponsor_sections[1:]])
+      [sponsor_sections[0], task_recipes("sponsor"), whats_new("sponsor"), *sponsor_sections[1:]])
 
 # ---------- SCORER MANUAL ----------
 scorer_sections = [
@@ -1099,6 +1324,6 @@ scorer_sections = [
 build("kreeda-nation-scorer-manual.pdf", "SCORER", CYAN,
       "Scorer manual",
       "Keep live scores for the matches you've been invited to — nothing more, nothing less.",
-      [scorer_sections[0], whats_new("scorer"), *scorer_sections[1:]])
+      [scorer_sections[0], task_recipes("scorer"), whats_new("scorer"), *scorer_sections[1:]])
 
 print("ALL DONE")

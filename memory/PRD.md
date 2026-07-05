@@ -751,3 +751,17 @@ Phase 2 (next session): sponsor marketplace browse + filters, sponsor "I'm inter
 - Curl: `POST /vendor-bookings` for phase5b listing → vendor sees count=1 in `/vendor-bookings`.
 - Playwright: vendor login → Offline business → Bookings & calendar → Calendar sub-tab → **yellow platform pill visible on 6 July**. Invite card renders with URL `.../players/signup?ref_vendor=p5b_vendor_1`.
 - Lint clean.
+
+## Feb 2026 — Manuals reorganised task-first ("HOW TO" recipes)
+- **New `task_recipes(role)` helper** in `scripts/generate_manuals.py` — generates a fresh **"2. HOW TO — task recipes"** section per role that groups content by *outcome* (booking, event, sharing, membership renewal, checkin) instead of by feature.
+- Recipes tailored per role, e.g.:
+  - **Vendor**: List a listing / Share it / Convert a walk-in / Record offline booking / Check-in / Sell membership / Create batch + enrol / Export CSV.
+  - **Player**: Sign up / Book venue / Book weekly / Cancel or reschedule / Renew membership / Share venue.
+  - **Company HR**: Create tournament / Edit event / Hire venue / Invite sponsor.
+  - **Organiser**: Submit event for approval (with pay online/offline step) / Edit event.
+  - **Platform admin**: Approve/reject events / Configure event fee / Enable/disable services / Update instructions.
+  - **Sponsor**: Browse opportunities / Complete brand profile.
+  - **Scorer**: Score a live match / Fix a mistake.
+- Each recipe is a `("num", [...])` block — sequential, jump-to-the-page, click-this-button style. Every step names the exact route (`/hire`, `/bookings`, `/my-memberships`, etc.) and the button label (Cancel, Reschedule, Export CSV, WhatsApp share, Mark paid…).
+- Injected in **all 7 build() calls** immediately after the welcome section and before the "What's new" section, so a first-time reader lands on task recipes without scrolling.
+- 7 PDFs regenerated (Feb 2026); sizes grew ~1-3 KB each — confirms new content shipped.

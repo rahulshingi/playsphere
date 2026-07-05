@@ -14,7 +14,7 @@ const COLOR_OPTIONS = ["#84CC16", "#EC4899", "#06B6D4", "#F59E0B", "#A855F7", "#
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
 
 export default function EventTeamsManager({ event, teams, reload }) {
-  const { isPlatformAdmin, isCompanyAdmin, isPlayer, companyId } = useAuth();
+  const { user, isPlatformAdmin, isCompanyAdmin, isPlayer, companyId } = useAuth();
   const [myPlayerId, setMyPlayerId] = useState(null);
   const [companies, setCompanies] = useState([]);
   const [allPlayers, setAllPlayers] = useState([]);
@@ -31,9 +31,16 @@ export default function EventTeamsManager({ event, teams, reload }) {
     [teams, myPlayerId]
   );
 
-  const canManageEvent = isPlatformAdmin || (isCompanyAdmin && (event.company_id === companyId || (event.companies || []).includes(companyId)));
+  // Player-hosted local matches: the event creator gets the same manage rights
+  // as a platform admin on their own event.
+  const isEventCreator = !!user && event.created_by === user.id;
+
+  const canManageEvent = isPlatformAdmin
+    || isEventCreator
+    || (isCompanyAdmin && (event.company_id === companyId || (event.companies || []).includes(companyId)));
   const canManageTeam = (t) => {
     if (isPlatformAdmin) return true;
+    if (isEventCreator) return true;
     if (isCompanyAdmin && event.event_type === "inter_company") return t.company_id === companyId;
     if (isCompanyAdmin) return event.company_id === companyId;
     if (isPlayer && myCaptainTeamIds.includes(t.id)) return true;
@@ -45,7 +52,7 @@ export default function EventTeamsManager({ event, teams, reload }) {
   const visibleTeams = useMemo(() => {
     if (!canSeeTab) return [];
     return teams.filter((t) => {
-      if (isPlatformAdmin) return true;
+      if (isPlatformAdmin || isEventCreator) return true;
       if (isCompanyAdmin) {
         if (event.event_type === "inter_company") return t.company_id === companyId;
         return event.company_id === companyId;
@@ -53,7 +60,7 @@ export default function EventTeamsManager({ event, teams, reload }) {
       if (isPlayer) return myCaptainTeamIds.includes(t.id);
       return false;
     });
-  }, [teams, canSeeTab, isPlatformAdmin, isCompanyAdmin, isPlayer, event.event_type, event.company_id, companyId, myCaptainTeamIds]);
+  }, [teams, canSeeTab, isPlatformAdmin, isEventCreator, isCompanyAdmin, isPlayer, event.event_type, event.company_id, companyId, myCaptainTeamIds]);
 
   if (!canSeeTab) return null;
 

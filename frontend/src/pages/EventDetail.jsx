@@ -204,13 +204,17 @@ export default function EventDetail() {
                   <Edit3 className="w-3.5 h-3.5 mr-1" /> {event.stream_url ? "Edit stream link" : "Add stream link"}
                 </Button>
               )}
-              <Button data-testid="event-edit-btn" size="sm" variant="outline" onClick={() => { setEventDraft({ name: event.name, description: event.description || "", venue: event.venue || "", start_date: event.start_date || "", end_date: event.end_date || "" }); setEditingEvent(true); }} className="rounded-sm border-white/10 text-white">
+              <Button data-testid="event-edit-btn" size="sm" variant="outline" onClick={() => { setEventDraft({ name: event.name, description: event.description || "", venue: event.venue || "", start_date: event.start_date || "", end_date: event.end_date || "", contact_name: event.contact_name || "", contact_email: event.contact_email || "", contact_phone: event.contact_phone || "" }); setEditingEvent(true); }} className="rounded-sm border-white/10 text-white">
                 <Edit3 className="w-3.5 h-3.5 mr-1" /> Edit event
               </Button>
             </div>
           )}
         </div>
       </section>
+
+      <div className="max-w-7xl mx-auto px-6 pt-6">
+        <EventShareAndContact event={event} />
+      </div>
 
       <div className="max-w-7xl mx-auto px-6 pb-24">
         <Tabs defaultValue="fixtures">
@@ -287,6 +291,14 @@ export default function EventDetail() {
             <div className="grid grid-cols-2 gap-2">
               <div><Label className="text-xs font-mono uppercase text-neutral-500">Start date</Label><Input data-testid="event-edit-start" type="date" value={eventDraft.start_date || ""} onChange={(e) => setEventDraft({ ...eventDraft, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white mt-1" /></div>
               <div><Label className="text-xs font-mono uppercase text-neutral-500">End date</Label><Input data-testid="event-edit-end" type="date" value={eventDraft.end_date || ""} onChange={(e) => setEventDraft({ ...eventDraft, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white mt-1" /></div>
+            </div>
+            <div className="border-t border-white/10 pt-2 mt-2">
+              <div className="text-[10px] font-mono uppercase tracking-widest text-[#EC4899] mb-2">/ Organiser contact (public)</div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div><Label className="text-xs font-mono uppercase text-neutral-500">Contact name</Label><Input data-testid="event-edit-cname" value={eventDraft.contact_name || ""} onChange={(e) => setEventDraft({ ...eventDraft, contact_name: e.target.value })} className="bg-black/40 border-white/10 text-white mt-1" /></div>
+                <div><Label className="text-xs font-mono uppercase text-neutral-500">Phone / WhatsApp</Label><Input data-testid="event-edit-cphone" value={eventDraft.contact_phone || ""} onChange={(e) => setEventDraft({ ...eventDraft, contact_phone: e.target.value })} className="bg-black/40 border-white/10 text-white mt-1" /></div>
+              </div>
+              <div><Label className="text-xs font-mono uppercase text-neutral-500">Contact email</Label><Input data-testid="event-edit-cemail" value={eventDraft.contact_email || ""} onChange={(e) => setEventDraft({ ...eventDraft, contact_email: e.target.value })} className="bg-black/40 border-white/10 text-white mt-1" /></div>
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
@@ -611,6 +623,60 @@ function EventSponsors({ event, sponsors, isAdmin, reload }) {
           <input placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="bg-black/40 border border-white/10 rounded-sm px-3 py-2 text-white text-sm" />
           <Button data-testid="event-sponsor-add" type="submit" className="md:col-span-2 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Add sponsor</Button>
         </form>
+      )}
+    </div>
+  );
+}
+
+
+// Universal Share row + Organiser contact card.
+// Anyone (even anonymous visitors) can share the event via WhatsApp / X / Copy;
+// when contact fields are set, they render a compact contact card so teams can
+// reach out to participate.
+function EventShareAndContact({ event }) {
+  const url = typeof window !== "undefined" ? window.location.href : "";
+  const msg = `Kreeda Nation event: ${event.name}${event.venue ? " · " + event.venue : ""}. ${url}`;
+  const wa = `https://wa.me/?text=${encodeURIComponent(msg)}`;
+  const tx = `https://twitter.com/intent/tweet?text=${encodeURIComponent(msg)}`;
+  const invite = event.contact_phone
+    ? `https://wa.me/${event.contact_phone.replace(/[^0-9]/g, "")}?text=${encodeURIComponent(`Hi${event.contact_name ? " " + event.contact_name : ""}! I'd like my team to participate in "${event.name}" on Kreeda Nation. ${url}`)}`
+    : null;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(url); toast.success("Link copied"); }
+    catch { toast.error("Couldn't copy"); }
+  };
+  const hasContact = !!(event.contact_name || event.contact_email || event.contact_phone);
+
+  return (
+    <div className="grid md:grid-cols-2 gap-3">
+      {/* Share strip — visible to everyone */}
+      <div data-testid="event-share-block" className="border border-white/10 bg-[#141414] rounded-sm p-4">
+        <div className="text-[10px] font-mono uppercase tracking-widest text-[#06B6D4] mb-2">/ Share this event · invite viewers</div>
+        <div className="flex flex-wrap gap-2">
+          <a data-testid="event-share-whatsapp" href={wa} target="_blank" rel="noopener noreferrer" className="inline-flex items-center h-9 px-3 rounded-sm bg-[#25D366] hover:bg-[#1ea855] text-black font-semibold text-xs">WhatsApp</a>
+          <a data-testid="event-share-x" href={tx} target="_blank" rel="noopener noreferrer" className="inline-flex items-center h-9 px-3 rounded-sm bg-white hover:bg-neutral-200 text-black font-semibold text-xs">X / Twitter</a>
+          <button data-testid="event-share-copy" onClick={copy} className="inline-flex items-center h-9 px-3 rounded-sm bg-[#06B6D4] hover:bg-[#0891B2] text-black font-semibold text-xs">Copy link</button>
+        </div>
+        <div className="mt-2 text-[10px] font-mono text-neutral-500 break-all">{url}</div>
+      </div>
+
+      {/* Organiser contact card — visible only when at least one field is set */}
+      {hasContact ? (
+        <div data-testid="event-contact-block" className="border border-[#EC4899]/40 bg-[#EC4899]/5 rounded-sm p-4">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[#EC4899] mb-2">/ Organiser contact · want to participate?</div>
+          {event.contact_name && <div className="text-sm font-semibold">{event.contact_name}</div>}
+          {event.contact_phone && <div className="text-xs font-mono text-neutral-300 mt-0.5">{event.contact_phone}</div>}
+          {event.contact_email && <a href={`mailto:${event.contact_email}`} className="text-xs font-mono text-[#06B6D4] hover:underline break-all">{event.contact_email}</a>}
+          {invite && (
+            <a data-testid="event-contact-wa" href={invite} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center h-9 px-3 rounded-sm bg-[#25D366] hover:bg-[#1ea855] text-black font-semibold text-xs">
+              WhatsApp the organiser
+            </a>
+          )}
+        </div>
+      ) : (
+        <div className="border border-white/10 bg-[#141414] rounded-sm p-4 text-xs text-neutral-500 flex items-center justify-center italic">
+          Organiser hasn&apos;t added public contact details yet.
+        </div>
       )}
     </div>
   );

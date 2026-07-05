@@ -6,9 +6,26 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 
+const SPORT_TEMPLATES = [
+  { value: "kabaddi",   label: "Kabaddi",    scoring_pattern: "generic",    player_format: "team" },
+  { value: "khokho",    label: "Kho-Kho",    scoring_pattern: "generic",    player_format: "team" },
+  { value: "futsal",    label: "Futsal",     scoring_pattern: "football",   player_format: "team" },
+  { value: "padel",     label: "Padel",      scoring_pattern: "racket",     player_format: "both" },
+  { value: "squash",    label: "Squash",     scoring_pattern: "racket",     player_format: "both" },
+  { value: "throwball", label: "Throwball",  scoring_pattern: "racket",     player_format: "team" },
+  { value: "dodgeball", label: "Dodgeball",  scoring_pattern: "generic",    player_format: "team" },
+  { value: "esports",   label: "Esports",    scoring_pattern: "generic",    player_format: "team" },
+  { value: "carrom",    label: "Carrom",     scoring_pattern: "chess",      player_format: "individual" },
+  { value: "snooker",   label: "Snooker",    scoring_pattern: "generic",    player_format: "individual" },
+];
+
 export default function SportsManager() {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState({ value: "", label: "", scoring_pattern: "generic", player_format: "team" });
+  const applyTemplate = (v) => {
+    const tpl = SPORT_TEMPLATES.find((t) => t.value === v);
+    if (tpl) setForm({ ...tpl });
+  };
 
   const load = () => api.get("/sports?include_inactive=true").then((r) => setItems(r.data)).catch(() => {});
   useEffect(() => { load(); }, []);
@@ -37,6 +54,17 @@ export default function SportsManager() {
     <div data-testid="sports-manager" className="space-y-4">
       <form onSubmit={create} className="border border-white/10 rounded-sm bg-[#141414] p-5 grid md:grid-cols-4 gap-2">
         <div className="md:col-span-4 font-display tracking-wider text-xl flex items-center gap-2"><Plus className="w-4 h-4 text-[#84CC16]" /> ADD SPORT</div>
+        <div className="md:col-span-4">
+          <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Prefill from a sport template (optional)</div>
+          <Select value="" onValueChange={applyTemplate}>
+            <SelectTrigger data-testid="sport-template" className="bg-black/40 border-[#84CC16]/40 text-[#84CC16]"><SelectValue placeholder="Pick a template (Kabaddi, Padel, Futsal, Esports…)" /></SelectTrigger>
+            <SelectContent className="bg-[#141414] text-white border-white/10">
+              {SPORT_TEMPLATES.map((t) => (
+                <SelectItem key={t.value} value={t.value}>{t.label} — {t.scoring_pattern} · {t.player_format}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         <Input data-testid="sport-value" placeholder="value (slug, e.g. pickleball)" value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value.toLowerCase().replace(/\s+/g, "") })} className="bg-black/40 border-white/10 text-white" />
         <Input data-testid="sport-label" placeholder="label (display, e.g. Pickleball)" value={form.label} onChange={(e) => setForm({ ...form, label: e.target.value })} className="bg-black/40 border-white/10 text-white" />
         <Select value={form.scoring_pattern} onValueChange={(v) => setForm({ ...form, scoring_pattern: v })}>

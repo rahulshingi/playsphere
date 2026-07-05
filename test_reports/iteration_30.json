@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 30 validates the three new event-organiser features + the sport-templates dropdown. Backend pytest (13/13 pass in /app/backend/tests/test_event_contact_iter30.py): POST /events accepts contact_name/email/phone and persists them; GET returns them intact; PATCH updates them; all 10 sport templates (Kabaddi, Kho-Kho, Futsal, Padel, Squash, Throwball, Dodgeball, Esports, Carrom, Snooker) can be POSTed as sports (200 for new / 400 for pre-existing like squash) and show up in GET /api/sports. iter28 regression suite (test_sports_enrichment_iter28.py) still 12/12 pass. Frontend Playwright verified: pa-event-contact-name/phone/email + admin-event-contact-name/phone/email inputs all render on Events tab and /admin. sport-template dropdown renders exactly 10 items in the documented order; picking 'Kabaddi' prefills sport-value='kabaddi' and sport-label='Kabaddi'. Event page: event-share-block + event-share-whatsapp/x/copy always render (verified anonymously & authenticated); event-contact-block appears only when contact fields are set; event-contact-wa href resolves to https://wa.me/919876543210?text=… with digits-only phone. When contact fields are empty, the placeholder 'Organiser hasn't added public contact details yet.' shows instead (no testid, which matches the spec's 'instead' wording). Edit-event dialog exposes event-edit-cname/cphone/cemail pre-populated with current values; editing 'Rahul Organiser'→'Rahul Updated' saved successfully — GET /api/events/{id} confirms persistence.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_event_contact_iter30.py",
+    "/app/backend/tests/test_sports_enrichment_iter28.py",
+    "/app/test_reports/pytest/iter30_contact.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "EventDetail.jsx EventShareAndContact placeholder branch (line 676-680) does NOT carry the data-testid='event-contact-block'. Spec is ambiguous ('placeholder instead') but automated tests that assert on event-contact-block visibility will get MISSING for empty events. Consider either: (a) applying data-testid='event-contact-block' to the placeholder wrapper too so testers can rely on a single selector regardless of state, or (b) adding data-testid='event-contact-placeholder'.",
+    "server.py is now 4353+ lines with Event, EventCreate, EventUpdate all duplicating the contact_name/email/phone triplet. Extract a shared `ContactFields` mixin (Pydantic BaseModel) and inherit — same pattern applied to organiser signup payload (line 666-681).",
+    "PATCH /events/{id} accepts arbitrary body dict (routes/events.py L349-359). While convenient, this allows callers to overwrite protected fields like created_by, company_id, approval_status. Consider whitelisting editable fields (name, description, venue, banner_url, stream_url, start_date, end_date, contact_name, contact_email, contact_phone) via a Pydantic EventUpdate model.",
+    "SPORT_TEMPLATES (SportsManager.jsx) duplicates _SPORT_DEFAULTS (backend/routes/events.py). Padel + Kho-Kho + Throwball + Dodgeball + Carrom + Snooker have no backend defaults, so events created for these sports will fall back to generic/team enrichment — verify that this matches the template's expected player_format (padel=both, carrom=individual, snooker=individual). Recommend centralising via GET /api/sports/templates instead of hardcoding client-side.",
+    "SportsManager Select uses value='' (empty string) as controlled value. Radix Select rejects empty-string values in newer versions — currently works but flaky if the shadcn/radix update lands. Consider using undefined + onValueChange resetting after applyTemplate."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+  "test_credentials": "admin@kreedanation.com / admin123",
+  "seed_data_creation": "Created and cleaned up TEST_ContactEvent / TEST_NoContact / TEST_PatchContact events via pytest fixture teardown. UI test created event 61bd6ab8-818a-4148-ab74-e5f9a669e1f3 (TEST_ContactUI_Event, football, contact_name='Rahul Updated', +919876543210, rahul@example.com) — DELETED at end of testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 3 features + template dropdown are wired end-to-end. Backend model: Event/EventCreate/EventUpdate all carry contact_name/email/phone (Optional[str], default ''). Frontend flow: Admin.jsx (/admin) + EventsTab.jsx (/platform-admin Events) new-event form both submit contact fields; EventDetail.jsx renders EventShareAndContact above the tabs (share strip always, contact card conditional). Sport templates live in SportsManager.jsx as a hardcoded array — 10 entries. Note: EventShareAndContact placeholder (empty state) has NO testid, so tests targeting event-contact-block on empty events will fail — this appears intentional per the 'instead' wording. Orientation modal ('Welcome to Kreeda Nation HQ') no longer appears in this session for platform admin — dismissal helper still defensively coded.",
+  "rca of the issue": "N/A — this iteration verifies new features rather than fixing a bug. All acceptance criteria from the feature spec pass: (1) admin & PA event forms carry all three contact testids; (2) POST /events preserves contact fields via Pydantic model (server.py L242-243 EventCreate + L344-346 Event); (3) EventDetail.jsx renders share strip for anonymous users (verified without login); (4) contact card conditional on hasContact; (5) 10 templates render in sport-template Select, applyTemplate() correctly prefills form; (6) iter28 pytest 12/12 unchanged. Minor consideration: the empty-contact placeholder does not carry event-contact-block testid — flagged but not a bug per spec wording."
+}

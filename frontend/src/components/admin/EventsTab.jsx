@@ -13,7 +13,7 @@ import VenuePicker from "@/components/VenuePicker";
 import SuggestVenueButton from "@/components/event/SuggestVenueButton";
 
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
-const BLANK_EVENT = { name: "", sport: "cricket", format: "round_robin", event_type: "playsphere_organized", description: "", venue: "", banner_url: "", stream_url: "", player_format: "" };
+const BLANK_EVENT = { name: "", sport: "cricket", format: "round_robin", event_type: "playsphere_organized", description: "", venue: "", banner_url: "", stream_url: "", player_format: "", contact_name: "", contact_email: "", contact_phone: "" };
 const onSportChange = (current, value, sports) => {
   const fmt = getPlayerFormat(sports, value);
   return {
@@ -113,6 +113,15 @@ export default function EventsTab({ events, companies = [], reload, canManage })
         </div>
         <ImageUpload value={newEvent.banner_url} onChange={(v) => setNewEvent({ ...newEvent, banner_url: v })} testid="pa-event-banner" placeholder="Banner image — paste URL or upload" />
         <Input data-testid="pa-event-stream" placeholder="Live stream URL (YouTube / Twitch / any)" value={newEvent.stream_url} onChange={(e) => setNewEvent({ ...newEvent, stream_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+        <div className="border border-white/10 rounded-sm bg-black/30 p-3 space-y-2">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[#EC4899]">/ Organiser contact (public on event page)</div>
+          <p className="text-[10px] text-neutral-400">Teams that want to participate use these to reach you. All three optional.</p>
+          <div className="grid grid-cols-2 gap-2">
+            <Input data-testid="pa-event-contact-name" placeholder="Contact person" value={newEvent.contact_name} onChange={(e) => setNewEvent({ ...newEvent, contact_name: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+            <Input data-testid="pa-event-contact-phone" placeholder="Phone / WhatsApp" value={newEvent.contact_phone} onChange={(e) => setNewEvent({ ...newEvent, contact_phone: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          </div>
+          <Input data-testid="pa-event-contact-email" placeholder="Contact email" value={newEvent.contact_email} onChange={(e) => setNewEvent({ ...newEvent, contact_email: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+        </div>
         <Button data-testid="pa-create-event-btn" type="submit" className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Create event</Button>
         <p className="text-[10px] text-neutral-500 leading-relaxed">Once created, click <strong>Open</strong> on the event to add teams, assign captains, attach participating companies (inter-company), and add players.</p>
       </form>

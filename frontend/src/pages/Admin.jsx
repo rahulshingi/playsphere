@@ -37,7 +37,7 @@ export default function Admin() {
   const [venuePickerOpen, setVenuePickerOpen] = useState(false);
   const [teams, setTeams] = useState([]);
   const [sponsors, setSponsors] = useState([]);
-  const [newEvent, setNewEvent] = useState({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "", player_format: "" });
+  const [newEvent, setNewEvent] = useState({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "", player_format: "", contact_name: "", contact_email: "", contact_phone: "" });
   const [newSponsor, setNewSponsor] = useState({ name: "", tier: "bronze", logo_url: "", website: "", description: "", show_in_banner: true });
   const currentPF = getPlayerFormat(sports, newEvent.sport);
 
@@ -62,7 +62,7 @@ export default function Admin() {
       if (currentPF !== "both") delete payload.player_format;
       await api.post("/events", payload);
       toast.success("Event created");
-      setNewEvent({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "", player_format: "" });
+      setNewEvent({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "", player_format: "", contact_name: "", contact_email: "", contact_phone: "" });
       loadAll();
     } catch (err) { toast.error(err.response?.data?.detail || "Failed to create event"); }
   };
@@ -154,6 +154,15 @@ export default function Admin() {
                 <div className="text-[10px] font-mono text-neutral-500 -mt-1">Can&apos;t find your venue? Click <span className="text-[#84CC16]">Suggest new venue</span> — Kreeda Nation admin will reach out to onboard it.</div>
                 <Input data-testid="admin-event-banner" placeholder="Banner image URL" value={newEvent.banner_url} onChange={(e) => setNewEvent({ ...newEvent, banner_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 <Input data-testid="admin-event-stream" placeholder="Live stream URL (YouTube / Twitch / any)" value={newEvent.stream_url} onChange={(e) => setNewEvent({ ...newEvent, stream_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                <div className="border border-white/10 rounded-sm bg-black/30 p-3 space-y-2">
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-[#EC4899]">/ Organiser contact (public on event page)</div>
+                  <p className="text-[10px] text-neutral-400">Interested teams see these so they can reach you to participate. All three are optional; leave blank to keep private.</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input data-testid="admin-event-contact-name" placeholder="Contact person" value={newEvent.contact_name} onChange={(e) => setNewEvent({ ...newEvent, contact_name: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                    <Input data-testid="admin-event-contact-phone" placeholder="Phone / WhatsApp" value={newEvent.contact_phone} onChange={(e) => setNewEvent({ ...newEvent, contact_phone: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                  </div>
+                  <Input data-testid="admin-event-contact-email" placeholder="Contact email" value={newEvent.contact_email} onChange={(e) => setNewEvent({ ...newEvent, contact_email: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                </div>
                 {isPlatformAdmin && (
                   <Select value={newEvent.event_type} onValueChange={(v) => setNewEvent({ ...newEvent, event_type: v })}>
                     <SelectTrigger data-testid="admin-event-type" className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Event type" /></SelectTrigger>

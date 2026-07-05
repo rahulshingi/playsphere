@@ -338,6 +338,12 @@ class Event(BaseModel):
     stream_url: Optional[str] = ""
     company_id: Optional[str] = None
     companies: List[str] = Field(default_factory=list)
+    # ---- Organiser contact — public on the event page so interested teams
+    # can reach out to participate. Optional; falls back to created_by user's
+    # email if none provided.
+    contact_name: Optional[str] = ""
+    contact_email: Optional[str] = ""
+    contact_phone: Optional[str] = ""
     # ---- Sponsorship marketplace ----
     accept_sponsorships: bool = False
     sponsorship_requirements: Dict[str, Any] = Field(default_factory=dict)
@@ -373,6 +379,9 @@ class EventCreate(BaseModel):
     venue: Optional[str] = ""
     banner_url: Optional[str] = ""
     stream_url: Optional[str] = ""
+    contact_name: Optional[str] = ""
+    contact_email: Optional[str] = ""
+    contact_phone: Optional[str] = ""
     companies: List[str] = Field(default_factory=list)
 
 
@@ -2022,7 +2031,9 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
     commission_percent = float(settings.get("commission_percentage") or 0)
     if offline_source:
         commission_percent = 0
-    commission_amount = round(float(total_price) * commission_percent / 100.0, 2)
+    # Note: per-occurrence commission is computed inside the loop below as
+    # `this_commission`, since a recurring series may include a membership-paid
+    # first occurrence (zero commission) alongside hourly-paid subsequent ones.
 
     # -------- Compute the list of dates to create bookings for --------
     # For a plain booking this is `[requested_date]`. For a weekly recurring

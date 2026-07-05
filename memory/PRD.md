@@ -21,6 +21,13 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 2. **Team captain / viewer** — registers teams, follows fixtures & standings.
 3. **Spectator** — browses events, players, sponsors anonymously.
 
+
+## Implemented (Feb 22, 2026 — Iteration 31/32) Player Tournaments MVP (Local Matches)
+- **Backend**: `Event` + `EventCreate` models extended with `is_local_match`, `listed_publicly`, `photos`. `Fixture` carries `hero_image_url` + `awards`. `POST /api/events` allows role=player (auto-tags `is_local_match=True`, honours `listed_publicly` toggle). `PATCH /api/events/{id}` widened to the event **creator** (any role, not just admins) with protected fields whitelist. `_can_manage_event` now returns True when `event.created_by == user.id`, unlocking fixture generation + teams management + photo uploads for player-hosts. New `GET /api/players/{id}/hosted-tournaments` endpoint (hides hidden events from strangers, always visible to creator + admin). Existing `POST/DELETE /api/events/{id}/photos` used for gallery uploads (owner-only).
+- **Anonymous public profile fix (iter32)**: `GET /api/players/profiles/{id}` now uses `get_current_user_optional`; strips `mobile`/`email`/`dob` for anonymous viewers, returns `mobile_masked` instead. `PlayerDirectory.jsx` no longer redirects anonymous viewers to `/players/login`.
+- **Frontend**: `Admin.jsx` renders a distinct "HOST A LOCAL MATCH" layout for `isPlayer && !isAdmin` (form + "MY LOCAL MATCHES" list + visibility toggle). `EventDetail.jsx` shows LOCAL MATCH + HIDDEN badges; `canManage` widened to include creator; new `EventPhotoGallery` mounted below tabs (file-picker upload + lightbox + delete); new `FixtureAwardsEditor` dialog + `FixtureAwardsBanner` on completed fixture cards. `PlayerProfile.jsx` + public `PlayerDirectory.jsx` render new `PlayerTournamentsSection` (MY LOCAL MATCHES + MATCHES PLAYED cards with sport tags + contribution chips). `Nav.jsx` gains "Host match" link for players.
+- **Tests**: `tests/test_player_tournaments_iter31.py` (11/11) + `tests/test_public_profile_iter32.py` (3/3) green. Verified end-to-end by testing agent iter31 + iter32 (10/10 review cases pass after retest).
+
 ## Implemented (Feb 12, 2026)
 - JWT auth (login/register/me/logout) with auto-seeded admin & viewer
 - Events CRUD + sport/format/status; 3 demo events seeded

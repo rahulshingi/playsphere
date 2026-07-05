@@ -786,3 +786,26 @@ Admin-added sports (e.g. pickleball) weren't showing up in HR event-creation dro
 ### Verification (Feb 2026)
 - **iteration_28.json** — backend 12/12 pytest pass; frontend 80% (tennis/lawntennis missing + duplicate 'Pickle Ball').
 - **iteration_29.json** — after `useSports()` merge fix + slug canonicalisation + DB cleanup → **backend 100% + frontend 100%**. Tennis, Lawn Tennis, Pickleball all render in the dropdown (13 options vs 11 in DB), no duplicate row, singles/doubles picker works for racket sports and hides for team sports.
+
+## Feb 2026 — Organiser contact + universal event share + sport templates
+### Backend
+- **`Event.contact_name / contact_email / contact_phone`** — new optional Event fields. `POST /api/events` accepts them, `GET` returns them, `PATCH` updates them (verified 13/13 pytest in `test_event_contact_iter30.py`).
+
+### Frontend
+- **New Event form** (`Admin.jsx` + `EventsTab.jsx`) — new "Organiser contact" block with three inputs (testids `admin-event-contact-*` and `pa-event-contact-*`).
+- **Edit Event dialog** (`EventDetail.jsx`) — pre-populates + edits the same three fields (`event-edit-cname/cphone/cemail`).
+- **NEW `EventShareAndContact` component** on every event page above the tabs:
+  - Universal `event-share-block` with `WhatsApp / X / Copy` buttons (visible to anonymous visitors too).
+  - `event-contact-block` renders when any contact field is set: shows name / phone / email + a "WhatsApp the organiser" deep-link (`event-contact-wa`) that opens `wa.me/<digits>?text=...`.
+  - Placeholder shown when contact fields empty.
+- **Sport templates dropdown** on `SportsManager` — 10 pre-configured templates (Kabaddi, Kho-Kho, Futsal, Padel, Squash, Throwball, Dodgeball, Esports, Carrom, Snooker). Pick one → form fields auto-fill; admin can still override anything.
+
+### Manuals
+- Organiser recipe expanded with "How to share your event so teams can join & viewers can watch"; player recipe gained "How to share an event with viewers".
+- 7 PDFs regenerated.
+
+### Verification (iteration_30.json)
+- **Backend 100% + Frontend 100%, retest_needed=false.**
+- 13/13 pytest pass on the new contact-fields router (`test_event_contact_iter30.py`).
+- iter28 regression suite (12/12) still passes.
+- Playwright: contact fields on all 3 forms, share block on event page (anon + auth), WhatsApp organiser href resolves correctly, sport-template dropdown prefills the add-sport form.

@@ -869,6 +869,12 @@ def task_recipes(role: str) -> dict:
                 "The public detail page opens. Scroll to <b>Share this venue</b> and tap WhatsApp, X or Copy.",
                 "The recipient gets a preview card (photo + city + price) inside the chat app — one tap and they're on the venue page.",
             ]),
+            ("h3", "How to share an event with viewers"),
+            ("num", [
+                "Open any event page — the <b>Share this event</b> row lives above the tabs (WhatsApp, X, Copy).",
+                "Tap the button that fits — the pre-filled message auto-includes the event name + venue + link.",
+                "If the organiser published a contact number, tap <b>WhatsApp the organiser</b> to DM them directly to enter your team.",
+            ]),
         ],
         "company": [
             ("h3", "How to create an internal tournament"),
@@ -905,11 +911,18 @@ def task_recipes(role: str) -> dict:
             ("num", [
                 "Sign up at <b>/signup-organiser</b> with any email + verify the 6-digit OTP.",
                 "On <b>/dashboard</b>, click <b>+ New tournament</b>, fill in details, save.",
+                "<b>Fill the ORGANISER CONTACT block</b> (name / phone / WhatsApp / email). This is public so interested teams can reach you to participate. Leave any field blank to keep it private.",
                 "The event lands in status <i>Pending your acknowledgement</i> — private, not public.",
                 "Open the event; read the platform instructions banner.",
                 "If a fee is configured, click <b>I agree — pay ₹XXX &amp; submit</b> and pick <b>Pay online</b> or <b>Pay offline</b>. Free events skip this step.",
                 "Kreeda Nation HQ reviews within a few business hours. You'll get an <b>approval email</b> when done.",
                 "If rejected, the email tells you why. Edit the event using the <b>Edit event</b> button and click <b>Resubmit for approval</b>.",
+            ]),
+            ("h3", "How to share your event so teams can join &amp; viewers can watch"),
+            ("num", [
+                "Open your event page — the <b>Share this event</b> row is above the tabs (visible to everyone, even anonymous visitors).",
+                "Tap <b>WhatsApp</b> to blast a pre-filled invite to a group chat / broadcast list, <b>X / Twitter</b> for public reach, or <b>Copy link</b> to paste anywhere.",
+                "If you filled the contact block, viewers see a <b>WhatsApp the organiser</b> button that opens a direct chat with you — one tap and interested teams can DM you to sign up.",
             ]),
             ("h3", "How to edit an event after creating it"),
             ("num", [

@@ -22,6 +22,14 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 24, 2026 — Iteration 38) Logo refresh + Phase 1 profile stats
+- **Brand refresh** — new round Kreeda logo replaces the header, footer, and favicon on every page. Files at `/kreeda-mark.png` (362×414 optimised) and `/kreeda-favicon.png` (56×64). Both header + footer now render the mark in a `rounded-full` frame with `bg-black` and a subtle `border-white/10` ring.
+- **Phase 1 — Profile stats auto-update**: extended `/players/profiles/{id}/stats` from cricket-only auto-agg to cover ALL sports. New auto-tracked counters (matches, won, lost, draw, goals, points, sets_won, sets_lost, mom, top_scorer) roll up from every completed fixture the player was rostered on. Cricket now also reads the simple `{team_a:{batters,bowlers}}` shape used by local matches (previously only the deep-nested innings shape). Endpoint dropped auth requirement — anonymous viewers see stats on public profiles.
+- **UI**: sportStatsSchema.js now defines `auto: [...]` fields for badminton, pickleball, table_tennis, tennis, snooker/pool, football, basketball so the new backend counters have rendering slots.
+- **"My matches" jump link** on the profile — sticky pill button next to Edit profile scrolls to a top-of-section jump bar (Local scores / Hosted / Tournaments) with `scroll-mt-24` anchoring per sub-section.
+- **Tests**: `tests/test_profile_stats_iter38.py` (3/3 pass). Aggregate suite 41/41 green.
+
+
 ## Implemented (Feb 24, 2026 — Iteration 36) Local match visibility + share cards
 - **Platform admin dashboard**: three new stat cards on `/platform-admin` → `local_matches_total`, `local_matches_public`, `local_matches_hidden`. Backend `/dashboard/admin` extended. The "Local matches" card links to `/events?is_local_match=true` for a filtered listing; each row already deep-links to the event.
 - **Public /events page**: added a `LOCAL MATCH` badge (⚡ icon, green) on player-hosted event cards, plus a dedicated **"LOCAL MATCHES"** section that separates informal player-hosted tournaments from corporate/organiser tournaments. Reads a `?is_local_match=true` query-param filter for admin drill-downs.

@@ -6,7 +6,8 @@ import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Eye, MapPin, ExternalLink } from "lucide-react";
+import { Eye, MapPin, ExternalLink, Share2, Copy, Check } from "lucide-react";
+import { toast } from "sonner";
 import { SPORT_SCHEMAS } from "@/lib/sportProfileSchema";
 import PlayerFilters from "@/components/player/PlayerFilters";
 import SportStatsDashboard from "@/components/player/SportStatsDashboard";
@@ -107,15 +108,20 @@ function PlayerCard({ p, sportFilter }) {
 }
 
 export function PlayerProfileView() {
-  const { id } = useParams();
+  const { id, slug } = useParams();
   const { user, ready } = useAuth();
   const nav = useNavigate();
   const [p, setP] = useState(null);
 
   useEffect(() => {
     // Public profile — anonymous viewers welcome (backend redacts mobile/email).
-    if (ready) api.get(`/players/profiles/${id}`).then((r) => setP(r.data)).catch(() => setP(null));
-  }, [ready, id]);
+    // Two entry points: `/players/profiles/:id` (UUID) or `/p/:slug` (pretty share URL).
+    if (!ready) return;
+    const req = slug
+      ? api.get(`/players/by-slug/${slug}`)
+      : api.get(`/players/profiles/${id}`);
+    req.then((r) => setP(r.data)).catch(() => setP(null));
+  }, [ready, id, slug]);
 
   if (!p) return <div className="bg-[#0a0a0a] min-h-screen text-white"><Nav /><div className="p-20 text-center">Loading…</div></div>;
 
@@ -161,6 +167,8 @@ export function PlayerProfileView() {
               ))}
             </div>
 
+            <PrettyShareRow slug={p.slug} name={p.name} />
+
             {/* Sport-specific cards — one per interested sport */}
             <SportCards p={p} />
 
@@ -184,6 +192,51 @@ export function PlayerProfileView() {
         </div>
       </div>
       <Footer />
+    </div>
+  );
+}
+
+/** Copy-to-clipboard row for the player's pretty share URL (kreedanation.com/p/xxx).
+ * Falls back to the UUID URL when the profile has no slug (very old rows only). */
+function PrettyShareRow({ slug, name }) {
+  const [copied, setCopied] = useState(false);
+  const url = `${window.location.origin}/p/${slug || ""}`;
+  const canNativeShare = typeof navigator !== "undefined" && !!navigator.share;
+  const onCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      toast.success("Link copied");
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      toast.error("Copy failed");
+    }
+  };
+  const onShare = async () => {
+    try {
+      await navigator.share({ title: `${name} · Kreeda Nation`, url });
+    } catch {
+      /* user cancelled */
+    }
+  };
+  if (!slug) return null;
+  return (
+    <div className="mt-6 border border-white/10 rounded-sm bg-[#0f0f0f] p-3" data-testid="pretty-share-row">
+      <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-1.5">/ Share this player card</div>
+      <div className="flex gap-2 flex-wrap">
+        <div className="flex-1 min-w-0 bg-black/40 border border-white/10 rounded-sm px-3 py-2 font-mono text-xs text-[#84CC16] truncate" data-testid="pretty-share-url">
+          {url}
+        </div>
+        <Button onClick={onCopy} data-testid="pretty-share-copy" size="sm" className="bg-[#84CC16] hover:bg-[#65A30D] text-black rounded-sm font-semibold">
+          {copied ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
+          {copied ? "Copied" : "Copy"}
+        </Button>
+        {canNativeShare && (
+          <Button onClick={onShare} data-testid="pretty-share-native" size="sm" variant="outline" className="border-white/10 rounded-sm">
+            <Share2 className="w-4 h-4 mr-1" /> Share
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

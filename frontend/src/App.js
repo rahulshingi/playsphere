@@ -92,6 +92,7 @@ function App() {
           <Route path="/players/me" element={<PlayerProfile />} />
           <Route path="/players/profiles" element={<PlayerSearch />} />
           <Route path="/players/profiles/:id" element={<PlayerProfileView />} />
+          <Route path="/p/:slug" element={<PlayerProfileView />} />
 
           {/* Vendors */}
           <Route path="/vendor/signup" element={<VendorSignup />} />

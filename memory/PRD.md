@@ -22,6 +22,12 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 24, 2026 — Iteration 39) Pretty share URLs + Phase 2 Sport Config
+- **Pretty player URLs** — `/p/{slug}` (e.g. `/p/rahul-shingi`) instead of the UUID. Backend: `PlayerProfile.slug` unique-sparse index + boot-time backfill of every existing profile; `_unique_player_slug()` de-duplicates collisions with `-2`, `-3` suffixes; new `GET /api/players/by-slug/{slug}` route with the same anonymous-redaction rules. Frontend: `<Route path="/p/:slug">` added; `PlayerProfileView` picks slug OR id from `useParams()`; new `PrettyShareRow` on the public profile with copy-to-clipboard + native-share buttons.
+- **Phase 2 — Sport Config model** — every sport now carries a `config` object with `players_per_team {min, max, on_field}`, `formats_supported`, `tie_breakers`, `standings_fields`, plus sport-specific flags (has_toss for cricket, has_cards for football, best_of_sets for racket, race_to_frames for snooker, time_control for chess, etc.). Config is fully editable via `PATCH /api/sports/{id}` with `{config: {...}}`. Added Pickleball + Snooker/Pool + Lawn Tennis to the seed list. `_enrich_sport()` merges stored + defaults so admin overrides win and legacy rows still render.
+- **Tests**: `tests/test_share_and_sport_config_iter39.py` — 7/7 green. Aggregate 42/42.
+
+
 ## Implemented (Feb 24, 2026 — Iteration 38) Logo refresh + Phase 1 profile stats
 - **Brand refresh** — new round Kreeda logo replaces the header, footer, and favicon on every page. Files at `/kreeda-mark.png` (362×414 optimised) and `/kreeda-favicon.png` (56×64). Both header + footer now render the mark in a `rounded-full` frame with `bg-black` and a subtle `border-white/10` ring.
 - **Phase 1 — Profile stats auto-update**: extended `/players/profiles/{id}/stats` from cricket-only auto-agg to cover ALL sports. New auto-tracked counters (matches, won, lost, draw, goals, points, sets_won, sets_lost, mom, top_scorer) roll up from every completed fixture the player was rostered on. Cricket now also reads the simple `{team_a:{batters,bowlers}}` shape used by local matches (previously only the deep-nested innings shape). Endpoint dropped auth requirement — anonymous viewers see stats on public profiles.

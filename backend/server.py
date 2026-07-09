@@ -657,6 +657,9 @@ class PlayerProfile(BaseModel):
     photo_url: Optional[str] = ""
     dob: Optional[str] = None
     city: Optional[str] = ""
+    # Pretty share slug. Generated on first save from `name` — e.g. rahul-shingi.
+    # Uniqueness enforced; players can share `/p/rahul-shingi` publicly.
+    slug: Optional[str] = None
     # Multi-sport: list of sport slugs the player is interested in (e.g. ["cricket", "football"]).
     # When empty, legacy cricket fields below are used.
     interested_sports: List[str] = Field(default_factory=list)
@@ -1068,6 +1071,21 @@ async def list_event_companies(event_id: str):
     return docs
 
 
+async def _unique_player_slug(name: str) -> str:
+    """Generate a URL-safe, unique slug for the /p/{slug} share URL. Falls
+    back to `player-<random>` if the name yields an empty slug."""
+    base = "".join(c.lower() if c.isalnum() else "-" for c in (name or "")).strip("-")
+    while "--" in base:
+        base = base.replace("--", "-")
+    base = base[:40] or f"player-{uuid.uuid4().hex[:6]}"
+    candidate = base
+    n = 1
+    while await db.player_profiles.find_one({"slug": candidate}):
+        n += 1
+        candidate = f"{base}-{n}"
+    return candidate
+
+
 async def _unique_company_slug(base: str) -> str:
     slug = base.lower().strip().replace(" ", "-")[:40] or "company"
     candidate = slug
@@ -1224,6 +1242,7 @@ async def _quick_add_player(quick: dict, team: dict) -> tuple:
     prof = PlayerProfile(
         user_id=user_id, name=name, mobile=mobile, email=login_email,
         company_id=company_id, company_name=company_name,
+        slug=await _unique_player_slug(name),
     )
     await db.player_profiles.insert_one(prof.model_dump())
     logger.warning("Quick-add player created: name=%s mobile=%s email=%s temp_password=%s",
@@ -1620,6 +1639,7 @@ async def player_register(body: PlayerSignupBody, response: Response):
         user_id=user_id, name=body.name, mobile=body.mobile, email=email,
         company_id=body.company_id, company_name=company_name,
         offline_source_vendor_id=(body.ref_vendor or None),
+        slug=await _unique_player_slug(body.name),
     )
     await db.player_profiles.insert_one(profile.model_dump())
     await db.player_signup_otps.update_one(
@@ -1947,6 +1967,28 @@ async def player_lifetime_stats(profile_id: str, _: Optional[dict] = Depends(get
             result[sport] = existing
 
     return result
+
+
+@api.get("/players/by-slug/{slug}")
+async def get_player_by_slug(slug: str, user: Optional[dict] = Depends(get_current_user_optional)):
+    """Resolve a pretty share URL (e.g. `/p/rahul-shingi`) → full profile.
+
+    Same redaction rules as `/players/profiles/{id}` for anonymous viewers.
+    """
+    doc = await db.player_profiles.find_one({"slug": slug}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Profile not found")
+    is_self = user and user.get("id") == doc.get("user_id")
+    if not is_self:
+        await db.player_profiles.update_one({"slug": slug}, {"$inc": {"view_count": 1}})
+        doc["view_count"] = (doc.get("view_count", 0) or 0) + 1
+        m = doc.get("mobile") or ""
+        doc["mobile_masked"] = "•••• " + m[-4:] if len(m) >= 4 else m
+        doc.pop("mobile", None)
+        if not user:
+            doc.pop("email", None)
+            doc.pop("dob", None)
+    return doc
 
 
 @api.get("/players/profiles/{profile_id}")
@@ -3928,7 +3970,10 @@ DEFAULT_SPORTS = [
     {"value": "football", "label": "Football"},
     {"value": "basketball", "label": "Basketball"},
     {"value": "badminton", "label": "Badminton"},
+    {"value": "pickleball", "label": "Pickleball"},
     {"value": "tabletennis", "label": "Table Tennis"},
+    {"value": "tennis", "label": "Lawn Tennis"},
+    {"value": "snooker", "label": "Snooker / Pool"},
     {"value": "volleyball", "label": "Volleyball"},
     {"value": "chess", "label": "Chess"},
     {"value": "quiz", "label": "Quiz"},
@@ -3961,33 +4006,132 @@ async def seed_sports():
 #     "both"       → racket-sport that supports singles AND doubles — the event
 #                    creator picks one at event creation time.
 _SPORT_DEFAULTS = {
-    "cricket":    {"scoring_pattern": "cricket",    "player_format": "team"},
-    "football":   {"scoring_pattern": "football",   "player_format": "team"},
-    "basketball": {"scoring_pattern": "basketball", "player_format": "team"},
-    "volleyball": {"scoring_pattern": "racket",     "player_format": "team"},
-    "badminton":  {"scoring_pattern": "racket",     "player_format": "both"},
-    "tabletennis": {"scoring_pattern": "racket",    "player_format": "both"},
-    "tennis":     {"scoring_pattern": "racket",     "player_format": "both"},
-    "lawntennis": {"scoring_pattern": "racket",     "player_format": "both"},
-    "pickleball": {"scoring_pattern": "racket",     "player_format": "both"},
-    "squash":     {"scoring_pattern": "racket",     "player_format": "both"},
-    "chess":      {"scoring_pattern": "chess",      "player_format": "individual"},
-    "quiz":       {"scoring_pattern": "quiz",       "player_format": "individual"},
-    "hackathon":  {"scoring_pattern": "hackathon",  "player_format": "team"},
+    "cricket":    {"scoring_pattern": "cricket",    "player_format": "team",
+                   "config": {"players_per_team": {"min": 6, "max": 15, "on_field": 11},
+                              "formats_supported": ["league", "knockout", "round_robin", "group_knockout"],
+                              "tie_breakers": ["points", "nrr", "head_to_head"],
+                              "standings_fields": ["played", "won", "lost", "nrr", "points"],
+                              "has_toss": True, "has_playing_xi": True,
+                              "match_duration_min": 240}},
+    "football":   {"scoring_pattern": "football",   "player_format": "team",
+                   "config": {"players_per_team": {"min": 7, "max": 18, "on_field": 11},
+                              "formats_supported": ["league", "knockout", "round_robin", "group_knockout", "double_elimination"],
+                              "tie_breakers": ["points", "goal_diff", "goals_for", "head_to_head"],
+                              "standings_fields": ["played", "won", "drawn", "lost", "gf", "ga", "gd", "points"],
+                              "has_cards": True, "has_substitutions": True,
+                              "match_duration_min": 90}},
+    "basketball": {"scoring_pattern": "basketball", "player_format": "team",
+                   "config": {"players_per_team": {"min": 5, "max": 12, "on_field": 5},
+                              "formats_supported": ["league", "knockout", "round_robin", "group_knockout"],
+                              "tie_breakers": ["points", "point_diff", "head_to_head"],
+                              "standings_fields": ["played", "won", "lost", "pf", "pa", "pd", "points"],
+                              "has_substitutions": True,
+                              "match_duration_min": 40}},
+    "volleyball": {"scoring_pattern": "racket",     "player_format": "team",
+                   "config": {"players_per_team": {"min": 6, "max": 12, "on_field": 6},
+                              "formats_supported": ["league", "knockout", "round_robin"],
+                              "tie_breakers": ["points", "sets_won", "point_diff"],
+                              "standings_fields": ["played", "won", "lost", "sets_won", "sets_lost", "points"],
+                              "match_duration_min": 60}},
+    "badminton":  {"scoring_pattern": "racket",     "player_format": "both",
+                   "config": {"players_per_team": {"min": 1, "max": 2, "on_field": 2},
+                              "formats_supported": ["knockout", "round_robin", "group_knockout", "double_elimination"],
+                              "tie_breakers": ["points", "sets_won", "point_diff", "head_to_head"],
+                              "standings_fields": ["played", "won", "lost", "sets_won", "points"],
+                              "best_of_sets": 3,
+                              "match_duration_min": 45}},
+    "tabletennis": {"scoring_pattern": "racket",    "player_format": "both",
+                    "config": {"players_per_team": {"min": 1, "max": 2, "on_field": 2},
+                               "formats_supported": ["knockout", "round_robin", "group_knockout"],
+                               "tie_breakers": ["points", "sets_won", "head_to_head"],
+                               "standings_fields": ["played", "won", "lost", "sets_won", "points"],
+                               "best_of_sets": 5,
+                               "match_duration_min": 30}},
+    "tennis":     {"scoring_pattern": "racket",     "player_format": "both",
+                   "config": {"players_per_team": {"min": 1, "max": 2, "on_field": 2},
+                              "formats_supported": ["knockout", "round_robin"],
+                              "tie_breakers": ["sets_won", "games_won"],
+                              "standings_fields": ["played", "won", "lost", "sets_won", "games_won"],
+                              "best_of_sets": 3, "has_tiebreak": True,
+                              "match_duration_min": 90}},
+    "lawntennis": {"scoring_pattern": "racket",     "player_format": "both",
+                   "config": {"players_per_team": {"min": 1, "max": 2, "on_field": 2},
+                              "formats_supported": ["knockout", "round_robin"],
+                              "tie_breakers": ["sets_won", "games_won"],
+                              "standings_fields": ["played", "won", "lost", "sets_won", "games_won"],
+                              "best_of_sets": 3, "has_tiebreak": True,
+                              "match_duration_min": 90}},
+    "pickleball": {"scoring_pattern": "racket",     "player_format": "both",
+                   "config": {"players_per_team": {"min": 1, "max": 2, "on_field": 2},
+                              "formats_supported": ["knockout", "round_robin", "group_knockout"],
+                              "tie_breakers": ["points", "sets_won", "point_diff"],
+                              "standings_fields": ["played", "won", "lost", "sets_won", "points"],
+                              "best_of_sets": 3, "points_to_win_set": 11,
+                              "match_duration_min": 30}},
+    "squash":     {"scoring_pattern": "racket",     "player_format": "both",
+                   "config": {"players_per_team": {"min": 1, "max": 2, "on_field": 2},
+                              "formats_supported": ["knockout", "round_robin"],
+                              "tie_breakers": ["sets_won", "points"],
+                              "standings_fields": ["played", "won", "lost", "sets_won"],
+                              "best_of_sets": 5,
+                              "match_duration_min": 45}},
+    "snooker":    {"scoring_pattern": "generic",    "player_format": "individual",
+                   "config": {"players_per_team": {"min": 1, "max": 1, "on_field": 1},
+                              "formats_supported": ["knockout", "round_robin"],
+                              "tie_breakers": ["frames_won", "frames_diff", "head_to_head"],
+                              "standings_fields": ["played", "won", "lost", "frames_won", "frames_diff"],
+                              "race_to_frames": 5,
+                              "match_duration_min": 60}},
+    "pool":       {"scoring_pattern": "generic",    "player_format": "individual",
+                   "config": {"players_per_team": {"min": 1, "max": 1, "on_field": 1},
+                              "formats_supported": ["knockout", "round_robin"],
+                              "tie_breakers": ["frames_won", "frames_diff"],
+                              "standings_fields": ["played", "won", "lost", "frames_won", "frames_diff"],
+                              "race_to_frames": 5,
+                              "match_duration_min": 30}},
+    "chess":      {"scoring_pattern": "chess",      "player_format": "individual",
+                   "config": {"players_per_team": {"min": 1, "max": 1, "on_field": 1},
+                              "formats_supported": ["swiss", "knockout", "round_robin"],
+                              "tie_breakers": ["points", "buchholz", "sonneborn_berger", "head_to_head"],
+                              "standings_fields": ["played", "won", "lost", "drawn", "points", "buchholz"],
+                              "time_control": "10+5",
+                              "match_duration_min": 60}},
+    "quiz":       {"scoring_pattern": "quiz",       "player_format": "individual",
+                   "config": {"players_per_team": {"min": 1, "max": 5, "on_field": 4},
+                              "formats_supported": ["league", "knockout"],
+                              "tie_breakers": ["points", "correct_answers"],
+                              "standings_fields": ["played", "won", "lost", "points"],
+                              "match_duration_min": 45}},
+    "hackathon":  {"scoring_pattern": "hackathon",  "player_format": "team",
+                   "config": {"players_per_team": {"min": 1, "max": 6, "on_field": 6},
+                              "formats_supported": ["league"],
+                              "tie_breakers": ["score"],
+                              "standings_fields": ["projects", "score", "rank"],
+                              "match_duration_min": 1440}},
 }
 
 
 def _enrich_sport(doc: dict) -> dict:
-    """Ensure a sport doc has scoring_pattern + player_format set, using
-    _SPORT_DEFAULTS as a fallback for well-known sports; otherwise defaults to
-    generic team scoring."""
+    """Ensure a sport doc has scoring_pattern + player_format + config set,
+    using _SPORT_DEFAULTS as a fallback for well-known sports; otherwise
+    defaults to a generic team-sport config."""
     if not doc:
         return doc
-    defaults = _SPORT_DEFAULTS.get(doc.get("value", "").lower(), {"scoring_pattern": "generic", "player_format": "team"})
+    defaults = _SPORT_DEFAULTS.get(doc.get("value", "").lower(), {
+        "scoring_pattern": "generic", "player_format": "team",
+        "config": {"players_per_team": {"min": 1, "max": 20, "on_field": 11},
+                   "formats_supported": ["league", "knockout", "round_robin"],
+                   "tie_breakers": ["points"],
+                   "standings_fields": ["played", "won", "lost", "points"]},
+    })
     if not doc.get("scoring_pattern"):
         doc["scoring_pattern"] = defaults["scoring_pattern"]
     if not doc.get("player_format"):
         doc["player_format"] = defaults["player_format"]
+    # Config: merge stored + defaults so admin overrides win.
+    stored = doc.get("config") or {}
+    merged = {**defaults.get("config", {}), **stored}
+    doc["config"] = merged
     return doc
 
 
@@ -4024,7 +4168,7 @@ async def create_sport(body: dict, _: dict = Depends(require_platform_admin)):
 
 @api.patch("/sports/{sport_id}")
 async def update_sport(sport_id: str, body: dict, _: dict = Depends(require_platform_admin)):
-    allowed = {k: v for k, v in body.items() if k in ("label", "active", "sort_order", "scoring_pattern", "player_format")}
+    allowed = {k: v for k, v in body.items() if k in ("label", "active", "sort_order", "scoring_pattern", "player_format", "config")}
     if not allowed:
         raise HTTPException(400, "No allowed fields")
     await db.sports.update_one({"id": sport_id}, {"$set": allowed})
@@ -4506,6 +4650,14 @@ async def on_startup():
     await db.player_profiles.create_index("mobile", unique=True)
     await db.player_profiles.create_index("user_id", unique=True)
     await db.player_profiles.create_index("company_id")
+    # Sparse unique index — some old rows may lack a slug; the backfill below
+    # fills them in idempotently.
+    await db.player_profiles.create_index("slug", unique=True, sparse=True)
+    # ---- Backfill: give every existing PlayerProfile a slug. Runs once per boot;
+    # subsequent boots find no missing rows and finish in one query.
+    async for doc in db.player_profiles.find({"$or": [{"slug": None}, {"slug": {"$exists": False}}]}, {"_id": 0, "id": 1, "name": 1}):
+        slug = await _unique_player_slug(doc.get("name") or "")
+        await db.player_profiles.update_one({"id": doc["id"]}, {"$set": {"slug": slug}})
     await db.vendors.create_index("user_id", unique=True)
     await db.vendor_listings.create_index("vendor_id")
     await db.vendor_bookings.create_index("company_id")

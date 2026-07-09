@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 35 — Full Playwright E2E for Kreeda Nation Phase 3 / 4 / 5 + BracketView + canvas share. Seeded 7 events (pickleball, snooker, chess, tabletennis, knockout, swiss, double_elim) via /app/test_reports/seed_iter35_events.py using admin@kreedanation.com/admin123, then ran 11 end-to-end browser flows. 11/11 PASSED. Backend regression suites test_phase3_phase4.py (14/14) and test_phase5_sport_rules.py (7/7) were already green (per main-agent note) and were not re-executed. Zero P0/P1 bugs found in this iteration.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Platform admin — Events / EventDetail on first login", "issues": ["The 'Welcome to Kreeda Nation HQ' first-time-orientation modal (data-testid=welcome-modal) is a z=60 full-screen overlay that intercepts all pointer events until dismissed. Playwright's first pass was fully blocked. Consider (a) auto-dismiss on ESC or backdrop click, (b) always render close-X inside modal even for keyboard-only users, (c) persist dismissed state to backend user prefs instead of only localStorage so cross-device sessions don't repeatedly interrupt Admin flows. Not a bug per se, but reduces UX and makes automated smoke-tests fragile."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/seed_iter35_events.py",
+    "/app/test_reports/iter35_event_ids.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LiveScorer.jsx (305 LOC) — sport-aware branching (racket/frame/chess/generic) is clean; SideEditor is well-factored. Small nit: on line 241 the 'else' branch for 'other' sports duplicates the fallback score input already handled implicitly — safe but could tighten with an explicit `sport==='other'` check to avoid future regression.",
+    "sports.js::computeMatchOutcome — correct handling of best-of-N + deuce + hard_cap. TT test verified sets 5-0 does NOT count (needs 11), which matches _setWinner's `pa<target && pb<target => null` guard. Good.",
+    "shareBracketImage.js — uses `canvas.roundRect` conditionally (line 168), which is Chrome-only until recently. It has an `? : rect(...)` fallback so it works on older browsers. Solid.",
+    "BracketView.jsx — filters WB/LB/GF by `bracket_position` startsWith prefix — depends on backend emitting these prefixes exactly. Consider adding a defensive fallback to render everything under a single 'Bracket' section if prefixes aren't set. Currently double-elim rendered correctly.",
+    "EventDetail.jsx — bracket TabsTrigger + TabsContent (lines 257, 272-276) correctly gated on `['knockout','double_elimination'].includes(event.format)`; swiss / round_robin do not get a bracket tab, matching product intent.",
+    "WelcomeModal (frontend) — non-dismissable overlay traps E2E tests + real admins. See design_issues above."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not re-tested — Phase 3/4 14/14 + Phase 5 7/7 already green)", "frontend": "11/11 (100%)"},
+  "test_credentials": "admin@kreedanation.com / admin123 (from /app/memory/test_credentials.md — verified working)",
+  "seed_data_creation": "Seeded 7 events prefixed with TEST_iter35_ via /app/test_reports/seed_iter35_events.py (idempotent — reruns delete + recreate). IDs stored in /app/test_reports/iter35_event_ids.json. Events LEFT IN PLACE for main agent to inspect: TEST_iter35_pickleball_singles, TEST_iter35_snooker_knock, TEST_iter35_chess_knock, TEST_iter35_tabletennis_singles, TEST_iter35_knockout_generic, TEST_iter35_swiss_football, TEST_iter35_double_elim. Also created 1 extra team 'TESTiter35_Regression' in the knockout_generic event, and saved Court 7 / John Ref meta + Coach K/Mgr M team roles on the first team.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 11 iter35 frontend flows PASS. Test outcomes verified on live preview URL: (1) Pickleball rule chips 'Best of 3' + 'to 11 (win by 2)', outcome-hint 'Match won 2-1 (best of 3)', apply-suggested-winner + save = completed. (2) Snooker rule chip 'Race to 5 frames', outcome 'Race to 5 won 5-3', save. (3) Chess ChessResultEditor with 3 radios (white/draw/black), outcome 'White wins', save. (4) Table Tennis best-of-5 with 5 set inputs, outcome 'Match won 3-1 (best of 5)'. (5) Knockout Bracket tab renders heading + Share bracket button, PNG download triggered (bracket-test-iter35-knockout-generic.png). (6) Double-elim renders bracket-wb + bracket-lb + bracket-gf sections; Share triggers PNG download. (7) Swiss format shows swiss-pair-next-btn. (8) FixtureMetaEditor: venue/court/scheduled/toss-winner/toss-decision/officials all render; Court 7 + John Ref persist to FixtureMetaStrip after reload. (9) TeamRolesEditor: VC/coach/manager/jersey selectors render; Coach K + Mgr M save + show on card. (10) NewTeamForm regression: all nt-* testids present + team creation works. (11) FixtureAwardsEditor opens on completed pickleball fixture. ONE UX FRICTION: first-login welcome modal (data-testid=welcome-modal) blocks all clicks; automation must dismiss via 'Got it' click or DOM removal.",
+  "rca of the issue": "No bugs to RCA in iter35 — all requested flows work end-to-end. The only friction encountered was the mandatory first-time WelcomeModal on /platform-admin routes intercepting clicks until user seeds the dismissed flag. This is not a functional bug — merely a UX consideration for main agent to decide whether to auto-dismiss on outside click / ESC."
+}

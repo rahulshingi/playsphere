@@ -1019,12 +1019,18 @@ def default_score(sport: str) -> dict:
         return {"team_a": {"goals": 0}, "team_b": {"goals": 0}}
     if sport == "basketball":
         return {"team_a": {"points": 0, "q": 1}, "team_b": {"points": 0, "q": 1}}
-    if sport == "badminton" or sport == "tabletennis":
+    if sport in ("badminton", "pickleball"):
+        return {"team_a": {"sets": [0, 0, 0]}, "team_b": {"sets": [0, 0, 0]}}
+    if sport == "tabletennis":
+        return {"team_a": {"sets": [0, 0, 0, 0, 0]}, "team_b": {"sets": [0, 0, 0, 0, 0]}}
+    if sport in ("tennis", "lawntennis", "squash"):
         return {"team_a": {"sets": [0, 0, 0]}, "team_b": {"sets": [0, 0, 0]}}
     if sport == "volleyball":
-        return {"team_a": {"sets": [0, 0, 0]}, "team_b": {"sets": [0, 0, 0]}}
+        return {"team_a": {"sets": [0, 0, 0, 0, 0]}, "team_b": {"sets": [0, 0, 0, 0, 0]}}
+    if sport in ("snooker", "pool"):
+        return {"team_a": {"frames_won": 0}, "team_b": {"frames_won": 0}}
     if sport == "chess":
-        return {"team_a": {"points": 0}, "team_b": {"points": 0}}
+        return {"team_a": {"points": 0}, "team_b": {"points": 0}, "result": None}
     if sport == "quiz":
         return {"team_a": {"points": 0}, "team_b": {"points": 0}}
     if sport == "hackathon":

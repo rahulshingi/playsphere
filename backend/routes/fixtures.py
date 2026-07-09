@@ -428,7 +428,7 @@ def register(api, app, db, ws_manager, deps):
             b = (score.get("team_b") or (score.get("sides") or {}).get("b") or score.get("b") or {}) or {}
 
             def _score_of(side: dict) -> float:
-                for k in ("total", "score", "runs", "goals", "points"):
+                for k in ("total", "score", "runs", "goals", "points", "frames_won"):
                     v = side.get(k)
                     if v is not None:
                         return float(v)

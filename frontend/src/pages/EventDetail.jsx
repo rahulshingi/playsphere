@@ -20,6 +20,7 @@ import EventApprovalBanner from "@/components/event/EventApprovalBanner";
 import EventPhotoGallery from "@/components/event/EventPhotoGallery";
 import FixtureAwardsEditor, { FixtureAwardsBanner } from "@/components/event/FixtureAwardsEditor";
 import FixtureMetaEditor, { FixtureMetaStrip } from "@/components/event/FixtureMetaEditor";
+import BracketView from "@/components/event/BracketView";
 import useFixtureSocket from "@/lib/useFixtureSocket";
 import { toast } from "sonner";
 
@@ -253,7 +254,7 @@ export default function EventDetail() {
             <TabsTrigger value="fixtures" data-testid="tab-fixtures" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Fixtures</TabsTrigger>
             <TabsTrigger value="standings" data-testid="tab-standings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Standings</TabsTrigger>
             {canSeeTeamsTab && <TabsTrigger value="teams" data-testid="tab-teams" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">{["chess", "quiz", "hackathon"].includes(event.sport) ? "Players" : "Teams"}</TabsTrigger>}
-            {event.format === "knockout" && <TabsTrigger value="bracket" data-testid="tab-bracket" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bracket</TabsTrigger>}
+            {["knockout", "double_elimination"].includes(event.format) && <TabsTrigger value="bracket" data-testid="tab-bracket" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Bracket</TabsTrigger>}
             <TabsTrigger value="sponsors" data-testid="tab-sponsors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Sponsors ({totalSponsorCount})</TabsTrigger>
             <TabsTrigger value="sponsorship" data-testid="tab-sponsorship" className="data-[state=active]:bg-[#FACC15] data-[state=active]:text-black rounded-sm">Sponsorship</TabsTrigger>
             {canManage && <TabsTrigger value="scorers" data-testid="tab-scorers" className="data-[state=active]:bg-[#06B6D4] data-[state=active]:text-black rounded-sm">Scorers</TabsTrigger>}
@@ -268,9 +269,9 @@ export default function EventDetail() {
           <TabsContent value="teams" className="mt-6">
             <EventTeamsManager event={event} teams={teams} reload={loadAll} />
           </TabsContent>
-          {event.format === "knockout" && (
+          {["knockout", "double_elimination"].includes(event.format) && (
             <TabsContent value="bracket" className="mt-6">
-              <Bracket fixtures={fixtures} teamMap={teamMap} event={event} />
+              <BracketView fixtures={fixtures} teamMap={teamMap} event={event} />
             </TabsContent>
           )}
           <TabsContent value="sponsors" className="mt-6">
@@ -533,42 +534,6 @@ function TeamsGrid({ teams }) {
           {t.captain && <div className="mt-3 text-xs text-neutral-500">Captain · {t.captain}</div>}
         </Link>
       ))}
-    </div>
-  );
-}
-
-function Bracket({ fixtures, teamMap, event }) {
-  const grouped = fixtures.reduce((acc, f) => { (acc[f.round] = acc[f.round] || []).push(f); return acc; }, {});
-  const rounds = Object.keys(grouped).sort((a, b) => a - b);
-  if (!rounds.length) return <div className="text-neutral-500 text-center py-20">Generate fixtures to view the bracket.</div>;
-  return (
-    <div className="overflow-x-auto scrollbar-thin">
-      <div className="flex gap-10 min-w-max py-6">
-        {rounds.map((r) => (
-          <div key={r} className="flex flex-col justify-around gap-6 min-w-[240px]">
-            <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">/ Round {r}</div>
-            {grouped[r].map((f) => (
-              <div key={f.id} className="bracket-line border border-white/10 rounded-sm bg-[#141414] p-3">
-                <BracketRow team={teamMap[f.team_a_id]} score={renderScore(event.sport, f.score?.team_a)} winner={f.winner_id === f.team_a_id} />
-                <div className="h-px bg-white/10 my-1" />
-                <BracketRow team={teamMap[f.team_b_id]} score={renderScore(event.sport, f.score?.team_b)} winner={f.winner_id === f.team_b_id} />
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function BracketRow({ team, score, winner }) {
-  return (
-    <div className="flex items-center justify-between py-1.5">
-      <div className="flex items-center gap-2">
-        <span className="w-1.5 h-5 rounded-sm" style={{ background: team?.color || "#333" }} />
-        <span className={`text-sm ${winner ? "text-white font-semibold" : "text-neutral-400"}`}>{team?.name || "TBD"}</span>
-      </div>
-      <span className="font-mono text-sm">{score}</span>
     </div>
   );
 }

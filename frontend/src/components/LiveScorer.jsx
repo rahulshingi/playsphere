@@ -1,14 +1,23 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { renderScore } from "@/lib/sports";
+import { renderScore, rulesFor, computeMatchOutcome } from "@/lib/sports";
+import { devError } from "@/lib/devLog";
+
+const RACKET_SPORTS = new Set(["badminton", "tabletennis", "tennis", "lawntennis", "pickleball", "volleyball", "squash"]);
+const FRAME_SPORTS = new Set(["snooker", "pool"]);
 
 /**
  * Sport-specific live scorer modal.
+ *
+ * Phase 5 (Feb 2026): pickleball / snooker / TT / chess now render
+ * rule-aware editors driven by `SPORT_RULES` (points_to_win_set,
+ * race_to_frames, chess result radio). The `Set match complete` chip
+ * auto-fills winner + status when the win condition is met.
  */
 export default function LiveScorer({ fixture, event, teamMap, onClose, onSaved }) {
   const [score, setScore] = useState(fixture.score && Object.keys(fixture.score).length ? fixture.score : defaultScore(event.sport));
@@ -16,12 +25,26 @@ export default function LiveScorer({ fixture, event, teamMap, onClose, onSaved }
   const [winnerId, setWinnerId] = useState(fixture.winner_id || "");
   const a = teamMap[fixture.team_a_id];
   const b = teamMap[fixture.team_b_id];
+  const rules = useMemo(() => rulesFor(event.sport), [event.sport]);
+  const outcome = useMemo(
+    () => computeMatchOutcome(event.sport, score, a?.id, b?.id),
+    [event.sport, score, a?.id, b?.id]
+  );
 
   useEffect(() => {
     if (!fixture.score || !Object.keys(fixture.score).length) {
-      api.post(`/fixtures/${fixture.id}/init-score`).then((r) => setScore(r.data.score)).catch(() => {});
+      api.post(`/fixtures/${fixture.id}/init-score`)
+        .then((r) => setScore(r.data.score))
+        .catch((err) => devError("[LiveScorer] init-score failed:", err));
     }
-  }, [fixture.id]);
+  }, [fixture.id, fixture.score]);
+
+  const applySuggestedWinner = () => {
+    if (outcome.isComplete) {
+      setStatus("completed");
+      if (outcome.winner_id) setWinnerId(outcome.winner_id);
+    }
+  };
 
   const save = async () => {
     const body = { score, status };
@@ -32,22 +55,55 @@ export default function LiveScorer({ fixture, event, teamMap, onClose, onSaved }
       onSaved && onSaved();
       onClose();
     } catch (e) {
-      toast.error("Failed to save");
+      toast.error(e.response?.data?.detail || "Failed to save");
     }
   };
+
+  const ruleChips = [];
+  if (rules.best_of_sets) ruleChips.push(`Best of ${rules.best_of_sets}`);
+  if (rules.points_to_win_set) ruleChips.push(`to ${rules.points_to_win_set}${rules.deuce_win_by ? ` (win by ${rules.deuce_win_by})` : ""}`);
+  if (rules.race_to_frames) ruleChips.push(`Race to ${rules.race_to_frames} frames`);
+  if (rules.time_control) ruleChips.push(`Time ${rules.time_control}`);
+  if (rules.has_tiebreak) ruleChips.push("Tiebreak");
 
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent data-testid="live-scorer-modal" className="bg-[#0c0c0c] border border-white/10 max-w-2xl text-white">
         <DialogHeader>
           <DialogTitle className="font-display text-3xl tracking-wider">LIVE SCORING</DialogTitle>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">{event.sport} · Match #{fixture.match_number}</p>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
+            {event.sport} · Match #{fixture.match_number}
+          </p>
+          {ruleChips.length > 0 && (
+            <div data-testid="rule-chips" className="flex flex-wrap gap-1.5 mt-1">
+              {ruleChips.map((r) => (
+                <span key={r} className="text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-sm bg-white/5 text-neutral-400 border border-white/10">
+                  {r}
+                </span>
+              ))}
+            </div>
+          )}
         </DialogHeader>
 
-        <div className="grid grid-cols-2 gap-4 mt-2">
-          <SideEditor sport={event.sport} side="team_a" team={a} score={score} setScore={setScore} />
-          <SideEditor sport={event.sport} side="team_b" team={b} score={score} setScore={setScore} />
-        </div>
+        {event.sport === "chess" ? (
+          <ChessResultEditor score={score} setScore={setScore} teamA={a} teamB={b} />
+        ) : (
+          <div className="grid grid-cols-2 gap-4 mt-2">
+            <SideEditor sport={event.sport} side="team_a" team={a} score={score} setScore={setScore} rules={rules} />
+            <SideEditor sport={event.sport} side="team_b" team={b} score={score} setScore={setScore} rules={rules} />
+          </div>
+        )}
+
+        {(outcome.note || outcome.isComplete) && (
+          <div data-testid="outcome-hint" className={`mt-3 rounded-sm border px-3 py-2 text-xs flex items-center justify-between gap-3 ${outcome.isComplete ? "border-[#84CC16]/40 bg-[#84CC16]/5 text-[#84CC16]" : "border-white/10 bg-white/5 text-neutral-400"}`}>
+            <span className="font-mono">{outcome.note}</span>
+            {outcome.isComplete && status !== "completed" && (
+              <Button data-testid="apply-suggested-winner" size="sm" onClick={applySuggestedWinner} className="bg-[#84CC16] hover:bg-[#65A30D] text-black rounded-sm h-7 text-xs">
+                Mark completed
+              </Button>
+            )}
+          </div>
+        )}
 
         <div className="mt-4 grid md:grid-cols-2 gap-3">
           <div>
@@ -91,25 +147,31 @@ export default function LiveScorer({ fixture, event, teamMap, onClose, onSaved }
 }
 
 function defaultScore(sport) {
+  const rules = rulesFor(sport);
   switch (sport) {
     case "cricket": return { team_a: { runs: 0, wickets: 0, overs: 0 }, team_b: { runs: 0, wickets: 0, overs: 0 } };
     case "football": return { team_a: { goals: 0 }, team_b: { goals: 0 } };
     case "basketball": return { team_a: { points: 0, q: 1 }, team_b: { points: 0, q: 1 } };
-    case "badminton":
-    case "tabletennis":
-    case "volleyball":
-      return { team_a: { sets: [0, 0, 0] }, team_b: { sets: [0, 0, 0] } };
+    case "snooker":
+    case "pool":
+      return { team_a: { frames_won: 0 }, team_b: { frames_won: 0 } };
     case "chess":
+      return { team_a: { points: 0 }, team_b: { points: 0 }, result: null };
     case "quiz":
       return { team_a: { points: 0 }, team_b: { points: 0 } };
     case "hackathon":
       return { team_a: { score: 0 }, team_b: { score: 0 } };
     default:
+      if (RACKET_SPORTS.has(sport)) {
+        const n = rules.best_of_sets || 3;
+        const zeros = new Array(n).fill(0);
+        return { team_a: { sets: [...zeros] }, team_b: { sets: [...zeros] } };
+      }
       return { team_a: { score: 0 }, team_b: { score: 0 } };
   }
 }
 
-function SideEditor({ sport, side, team, score, setScore }) {
+function SideEditor({ sport, side, team, score, setScore, rules }) {
   const s = score[side] || {};
   const update = (patch) => setScore({ ...score, [side]: { ...s, ...patch } });
 
@@ -139,19 +201,36 @@ function SideEditor({ sport, side, team, score, setScore }) {
         </div>
       )}
 
-      {(sport === "badminton" || sport === "tabletennis" || sport === "volleyball") && (
+      {RACKET_SPORTS.has(sport) && (
         <div className="space-y-2">
-          {(s.sets || [0, 0, 0]).map((v, i) => (
-            <NumberField key={`set-${i + 1}`} testid={`${side}-set-${i + 1}`} label={`Set ${i + 1}`} value={v} onChange={(nv) => {
-              const arr = [...(s.sets || [0, 0, 0])];
-              arr[i] = nv;
-              update({ sets: arr });
-            }} />
+          {(s.sets || new Array(rules.best_of_sets || 3).fill(0)).map((v, i) => (
+            <NumberField
+              key={`set-${i + 1}`}
+              testid={`${side}-set-${i + 1}`}
+              label={`Set ${i + 1}${rules.points_to_win_set ? ` · to ${rules.points_to_win_set}` : ""}`}
+              value={v}
+              max={rules.hard_cap || undefined}
+              onChange={(nv) => {
+                const arr = [...(s.sets || new Array(rules.best_of_sets || 3).fill(0))];
+                arr[i] = nv;
+                update({ sets: arr });
+              }}
+            />
           ))}
         </div>
       )}
 
-      {(sport === "chess" || sport === "quiz") && (
+      {FRAME_SPORTS.has(sport) && (
+        <NumberField
+          testid={`${side}-frames`}
+          label={`Frames won · race to ${rules.race_to_frames || 5}`}
+          value={s.frames_won ?? 0}
+          onChange={(v) => update({ frames_won: v })}
+          max={(rules.race_to_frames || 5) * 2}
+        />
+      )}
+
+      {sport === "quiz" && (
         <NumberField testid={`${side}-points`} label="Points" value={s.points ?? 0} onChange={(v) => update({ points: v })} />
       )}
 
@@ -159,9 +238,50 @@ function SideEditor({ sport, side, team, score, setScore }) {
         <NumberField testid={`${side}-score`} label="Score" value={s.score ?? 0} onChange={(v) => update({ score: v })} />
       )}
 
-      {!["cricket", "football", "basketball", "badminton", "tabletennis", "volleyball", "chess", "quiz", "hackathon"].includes(sport) && (
-        <NumberField testid={`${side}-score`} label="Score" value={s.score ?? 0} onChange={(v) => update({ score: v })} />
+      {!["cricket", "football", "basketball", "quiz", "hackathon"].includes(sport)
+        && !RACKET_SPORTS.has(sport)
+        && !FRAME_SPORTS.has(sport)
+        && sport !== "chess" && (
+          <NumberField testid={`${side}-score`} label="Score" value={s.score ?? 0} onChange={(v) => update({ score: v })} />
       )}
+    </div>
+  );
+}
+
+function ChessResultEditor({ score, setScore, teamA, teamB }) {
+  const result = score?.result || null;
+  const setResult = (r) => {
+    // Auto-fill points: white=1, black=1, draw=0.5.
+    const next = { ...score, result: r };
+    if (r === "white") next.team_a = { ...(next.team_a || {}), points: 1 };
+    else if (r === "black") next.team_b = { ...(next.team_b || {}), points: 1 };
+    else if (r === "draw") {
+      next.team_a = { ...(next.team_a || {}), points: 0.5 };
+      next.team_b = { ...(next.team_b || {}), points: 0.5 };
+    }
+    setScore(next);
+  };
+  const options = [
+    { key: "white", label: `${teamA?.name || "White"} wins (1-0)`, side: "a" },
+    { key: "draw", label: "Draw (½-½)", side: null },
+    { key: "black", label: `${teamB?.name || "Black"} wins (0-1)`, side: "b" },
+  ];
+  return (
+    <div className="mt-2 border border-white/10 rounded-sm p-4 bg-[#141414]">
+      <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-2">Game result</div>
+      <div className="grid grid-cols-1 gap-2">
+        {options.map((o) => (
+          <button
+            key={o.key}
+            data-testid={`chess-result-${o.key}`}
+            onClick={() => setResult(o.key)}
+            className={`text-left px-3 py-2 rounded-sm border text-sm ${result === o.key ? "bg-[#84CC16]/10 border-[#84CC16] text-white" : "border-white/10 text-neutral-300 hover:bg-white/5"}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+      <p className="text-[10px] text-neutral-500 mt-2 font-mono">Points auto-fill: 1 for a win, ½ for a draw. Click Save + status=completed to finalise.</p>
     </div>
   );
 }

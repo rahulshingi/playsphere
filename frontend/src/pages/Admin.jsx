@@ -110,6 +110,8 @@ export default function Admin() {
                   <SelectContent className="bg-[#141414] text-white border-white/10">
                     <SelectItem value="round_robin">Round-robin</SelectItem>
                     <SelectItem value="knockout">Knockout</SelectItem>
+                    <SelectItem value="swiss">Swiss</SelectItem>
+                    <SelectItem value="double_elimination">Double elimination</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -274,6 +276,8 @@ export default function Admin() {
                     <SelectContent className="bg-[#141414] text-white border-white/10">
                       <SelectItem value="round_robin">Round-robin</SelectItem>
                       <SelectItem value="knockout">Knockout</SelectItem>
+                      <SelectItem value="swiss">Swiss</SelectItem>
+                      <SelectItem value="double_elimination">Double elimination</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

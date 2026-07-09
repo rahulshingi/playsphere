@@ -19,6 +19,7 @@ import EventScorersManager from "@/components/event/EventScorersManager";
 import EventApprovalBanner from "@/components/event/EventApprovalBanner";
 import EventPhotoGallery from "@/components/event/EventPhotoGallery";
 import FixtureAwardsEditor, { FixtureAwardsBanner } from "@/components/event/FixtureAwardsEditor";
+import FixtureMetaEditor, { FixtureMetaStrip } from "@/components/event/FixtureMetaEditor";
 import useFixtureSocket from "@/lib/useFixtureSocket";
 import { toast } from "sonner";
 
@@ -135,6 +136,17 @@ export default function EventDetail() {
     }
   };
 
+  const pairSwissNext = async () => {
+    try {
+      const { data } = await api.post(`/events/${id}/swiss/pair-next-round`);
+      if (data.paired === 0) toast.info(data.message || "All rounds already paired");
+      else toast.success(`Round ${data.round}: paired ${data.paired} matches`);
+      await loadAll();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed to pair next round");
+    }
+  };
+
   if (!event) return <div className="bg-[#0a0a0a] min-h-screen text-white"><Nav /><div className="p-20 text-center">Loading…</div></div>;
 
   return (
@@ -199,6 +211,16 @@ export default function EventDetail() {
               >
                 {fixturesLocked ? "Fixtures locked" : "Generate fixtures"}
               </Button>
+              {event.format === "swiss" && fixtures.length > 0 && (
+                <Button
+                  data-testid="swiss-pair-next-btn"
+                  onClick={pairSwissNext}
+                  variant="outline"
+                  className="border-[#06B6D4]/40 text-[#06B6D4] hover:bg-[#06B6D4]/10 rounded-sm"
+                >
+                  Pair next Swiss round
+                </Button>
+              )}
               {editingStream ? (
                 <div className="flex gap-2 items-center">
                   <Input data-testid="event-stream-input" value={streamDraft} onChange={(e) => setStreamDraft(e.target.value)} placeholder="https://youtube.com/live/…" className="bg-black/40 border-white/10 text-white w-80" />
@@ -363,19 +385,32 @@ function FixtureCard({ fixture, event, teamMap, canManage, canScore, onScore, on
   const isLive = fixture.status === "live";
   const isCompleted = fixture.status === "completed";
   const [editingAwards, setEditingAwards] = useState(false);
+  const [editingMeta, setEditingMeta] = useState(false);
   return (
     <div data-testid={`fixture-card-${fixture.id}`} className={`rounded-sm border bg-[#141414] p-5 hover-lift ${isLive ? "border-[#FF3B30]/50" : "border-white/10"}`}>
       <div className="flex items-center justify-between mb-3">
-        <span className="font-mono text-[10px] text-neutral-500 uppercase tracking-widest">Match #{fixture.match_number}</span>
+        <span className="font-mono text-[10px] text-neutral-500 uppercase tracking-widest">Match #{fixture.match_number}{fixture.bracket_position ? ` · ${fixture.bracket_position}` : ""}</span>
         <StatusPill status={fixture.status} />
       </div>
       <TeamRow team={a} score={renderScore(event.sport, fixture.score?.team_a)} winner={fixture.winner_id === a?.id} />
       <div className="text-[10px] font-mono text-neutral-600 my-1.5 text-center">VS</div>
       <TeamRow team={b} score={renderScore(event.sport, fixture.score?.team_b)} winner={fixture.winner_id === b?.id} />
+      <FixtureMetaStrip fixture={fixture} teamMap={teamMap} />
       <FixtureAwardsBanner fixture={fixture} />
       {canScore && a && b && (
         <Button data-testid={`score-fixture-${fixture.id}`} size="sm" onClick={() => onScore(fixture)} className="mt-3 w-full bg-white/5 hover:bg-[#84CC16] text-white rounded-sm border border-white/10">
           Update score
+        </Button>
+      )}
+      {canManage && (
+        <Button
+          data-testid={`fixture-meta-btn-${fixture.id}`}
+          size="sm"
+          variant="outline"
+          onClick={() => setEditingMeta(true)}
+          className="mt-2 w-full bg-transparent hover:bg-[#06B6D4]/10 text-[#06B6D4] rounded-sm border-[#06B6D4]/40"
+        >
+          Match details (venue · court · toss · officials)
         </Button>
       )}
       {isCompleted && canManage && (
@@ -404,6 +439,17 @@ function FixtureCard({ fixture, event, teamMap, canManage, canScore, onScore, on
           sport={event.sport}
           open={editingAwards}
           onClose={() => setEditingAwards(false)}
+          onSaved={onAwardsSaved}
+        />
+      )}
+      {editingMeta && (
+        <FixtureMetaEditor
+          fixture={fixture}
+          event={event}
+          teamA={a}
+          teamB={b}
+          open={editingMeta}
+          onClose={() => setEditingMeta(false)}
           onSaved={onAwardsSaved}
         />
       )}

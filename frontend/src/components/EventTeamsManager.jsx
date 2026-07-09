@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Trash2, Plus, Crown, UserPlus, Users, Building2 } from "lucide-react";
+import { Trash2, Plus, Crown, UserPlus, Users, Building2, Shield, Pencil } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 const COLOR_OPTIONS = ["#84CC16", "#EC4899", "#06B6D4", "#F59E0B", "#A855F7", "#3B82F6", "#EF4444"];
@@ -294,7 +294,7 @@ function NewIndividualPlayerForm({ event, companies, isPlatformAdmin, companyId,
 }
 
 function NewTeamForm({ event, companies, isPlatformAdmin, companyId, reload }) {
-  const [form, setForm] = useState({ name: "", department: "", color: COLOR_OPTIONS[0], company_id: "" });
+  const [form, setForm] = useState({ name: "", department: "", color: COLOR_OPTIONS[0], jersey_color: "", coach_name: "", manager_name: "", company_id: "" });
   const submit = async (e) => {
     e.preventDefault();
     if (!form.name) return toast.error("Team name required");
@@ -306,7 +306,7 @@ function NewTeamForm({ event, companies, isPlatformAdmin, companyId, reload }) {
     try {
       await api.post(`/events/${event.id}/teams`, payload);
       toast.success("Team created");
-      setForm({ name: "", department: "", color: COLOR_OPTIONS[0], company_id: "" });
+      setForm({ name: "", department: "", color: COLOR_OPTIONS[0], jersey_color: "", coach_name: "", manager_name: "", company_id: "" });
       reload();
     } catch (e2) { toast.error(e2.response?.data?.detail || "Failed"); }
   };
@@ -329,11 +329,32 @@ function NewTeamForm({ event, companies, isPlatformAdmin, companyId, reload }) {
           </SelectContent>
         </Select>
       ) : (
-        <Button data-testid="nt-submit" type="submit" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Add team</Button>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono uppercase text-neutral-500 whitespace-nowrap">Jersey</span>
+          <Input
+            data-testid="nt-jersey"
+            type="color"
+            value={form.jersey_color || "#84CC16"}
+            onChange={(e) => setForm({ ...form, jersey_color: e.target.value })}
+            className="bg-black/40 border-white/10 text-white h-9 w-full p-1"
+          />
+        </div>
       )}
       {event.event_type === "inter_company" && isPlatformAdmin && (
-        <Button data-testid="nt-submit" type="submit" className="md:col-span-4 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Add team</Button>
+        <div className="flex items-center gap-2 md:col-span-4">
+          <span className="text-[10px] font-mono uppercase text-neutral-500 whitespace-nowrap">Jersey colour</span>
+          <Input
+            data-testid="nt-jersey"
+            type="color"
+            value={form.jersey_color || "#84CC16"}
+            onChange={(e) => setForm({ ...form, jersey_color: e.target.value })}
+            className="bg-black/40 border-white/10 text-white h-9 w-24 p-1"
+          />
+        </div>
       )}
+      <Input data-testid="nt-coach" placeholder="Coach (optional)" value={form.coach_name} onChange={(e) => setForm({ ...form, coach_name: e.target.value })} className="bg-black/40 border-white/10 text-white md:col-span-2" />
+      <Input data-testid="nt-manager" placeholder="Manager (optional)" value={form.manager_name} onChange={(e) => setForm({ ...form, manager_name: e.target.value })} className="bg-black/40 border-white/10 text-white md:col-span-2" />
+      <Button data-testid="nt-submit" type="submit" className="md:col-span-4 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Add team</Button>
     </form>
   );
 }
@@ -363,24 +384,139 @@ function useTeamMembers(eventId, teamId) {
   return [members, refresh];
 }
 
-function TeamCardHeader({ team, company }) {
+function TeamCardHeader({ team, company, canManage, onEditRoles }) {
   return (
     <div className="flex items-start justify-between mb-3">
       <div className="flex items-center gap-3">
         <span className="w-2 h-10 rounded-sm" style={{ background: team.color }} />
         <div>
-          <div className="font-semibold text-base">{team.name}</div>
+          <div className="font-semibold text-base flex items-center gap-2">
+            {team.name}
+            {team.jersey_color && (
+              <span
+                data-testid={`team-jersey-${team.id}`}
+                title={`Jersey: ${team.jersey_color}`}
+                className="inline-block w-3 h-3 rounded-full border border-white/20"
+                style={{ background: team.jersey_color }}
+              />
+            )}
+          </div>
           <div className="text-[10px] font-mono uppercase text-neutral-500 tracking-widest">
             {team.department || "team"}{company && ` · ${company.name}`}
           </div>
+          {(team.coach_name || team.manager_name || team.vice_captain) && (
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] font-mono text-neutral-500">
+              {team.vice_captain && <span data-testid={`team-vc-${team.id}`}><span className="text-[#06B6D4]">VC</span> · {team.vice_captain}</span>}
+              {team.coach_name && <span><span className="text-[#84CC16]">Coach</span> · {team.coach_name}</span>}
+              {team.manager_name && <span><span className="text-[#EC4899]">Mgr</span> · {team.manager_name}</span>}
+            </div>
+          )}
         </div>
       </div>
-      {team.captain && (
-        <div className="flex items-center gap-1 text-xs font-mono text-[#F59E0B]">
-          <Crown className="w-3.5 h-3.5" /> {team.captain}
-        </div>
-      )}
+      <div className="flex items-center gap-2">
+        {team.captain && (
+          <div className="flex items-center gap-1 text-xs font-mono text-[#F59E0B]">
+            <Crown className="w-3.5 h-3.5" /> {team.captain}
+          </div>
+        )}
+        {canManage && (
+          <button
+            onClick={onEditRoles}
+            data-testid={`team-edit-roles-${team.id}`}
+            className="text-neutral-500 hover:text-white p-1"
+            title="Edit team roles"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
     </div>
+  );
+}
+
+function TeamRolesEditor({ event, team, allPlayers, members, open, onOpenChange, onSaved }) {
+  const [form, setForm] = useState({
+    coach_name: team.coach_name || "",
+    manager_name: team.manager_name || "",
+    jersey_color: team.jersey_color || "#84CC16",
+    vice_captain_player_id: team.vice_captain_player_id || "",
+  });
+  const [busy, setBusy] = useState(false);
+
+  // VC candidates: prefer existing team members, fall back to all registered players
+  const vcCandidates = useMemo(() => {
+    const memberIds = new Set(members.map((m) => m.id));
+    const inTeam = members.map((m) => ({ id: m.id, name: m.name, in_team: true }));
+    const others = allPlayers.filter((p) => !memberIds.has(p.id)).map((p) => ({ id: p.id, name: p.name, in_team: false }));
+    return [...inTeam, ...others];
+  }, [members, allPlayers]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      const payload = {
+        coach_name: form.coach_name || "",
+        manager_name: form.manager_name || "",
+        jersey_color: form.jersey_color || "",
+        vice_captain_player_id: form.vice_captain_player_id || null,
+      };
+      await api.patch(`/events/${event.id}/teams/${team.id}`, payload);
+      toast.success("Team roles updated");
+      onSaved?.();
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Failed to save");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-[#141414] text-white border-white/10" data-testid={`team-roles-dialog-${team.id}`}>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-[#06B6D4]" /> {team.name} · Roles & Kit
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-1">Vice-captain</div>
+            <Select value={form.vice_captain_player_id || "__none__"} onValueChange={(v) => setForm({ ...form, vice_captain_player_id: v === "__none__" ? "" : v })}>
+              <SelectTrigger data-testid={`tr-vc-pick-${team.id}`} className="bg-black/40 border-white/10 text-white"><SelectValue placeholder="Pick vice-captain (optional)" /></SelectTrigger>
+              <SelectContent className="bg-[#141414] text-white border-white/10 max-h-[260px]">
+                <SelectItem value="__none__">— Clear vice-captain —</SelectItem>
+                {vcCandidates.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}{p.in_team ? "" : " · not yet in team"}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[10px] text-neutral-500 mt-1">Picking a non-team player will auto-add them to the roster.</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-1">Coach</div>
+              <Input data-testid={`tr-coach-${team.id}`} placeholder="Coach name" value={form.coach_name} onChange={(e) => setForm({ ...form, coach_name: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+            </div>
+            <div>
+              <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-1">Manager</div>
+              <Input data-testid={`tr-manager-${team.id}`} placeholder="Manager name" value={form.manager_name} onChange={(e) => setForm({ ...form, manager_name: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+            </div>
+          </div>
+          <div>
+            <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mb-1">Jersey colour</div>
+            <div className="flex items-center gap-3">
+              <Input data-testid={`tr-jersey-${team.id}`} type="color" value={form.jersey_color || "#84CC16"} onChange={(e) => setForm({ ...form, jersey_color: e.target.value })} className="bg-black/40 border-white/10 h-10 w-24 p-1" />
+              <span className="font-mono text-xs text-neutral-400">{form.jersey_color}</span>
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-neutral-400">Cancel</Button>
+          <Button data-testid={`tr-save-${team.id}`} disabled={busy} onClick={save} className="bg-[#84CC16] hover:bg-[#65A30D] text-black rounded-sm">{busy ? "Saving…" : "Save"}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -475,6 +611,7 @@ function AddMemberDialog({ team, allPlayers, members, open, onOpenChange, onPick
 function TeamCard({ team, event, companies, allPlayers, canManage, reload, setCreds }) {
   const [members, refreshMembers] = useTeamMembers(event.id, team.id);
   const [open, setOpen] = useState(false);
+  const [rolesOpen, setRolesOpen] = useState(false);
   const company = useMemo(() => companies.find((c) => c.id === team.company_id), [companies, team.company_id]);
 
   const handleAssignCaptain = async (playerId) => {
@@ -523,7 +660,7 @@ function TeamCard({ team, event, companies, allPlayers, canManage, reload, setCr
 
   return (
     <div data-testid={`team-card-${team.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-5">
-      <TeamCardHeader team={team} company={company} />
+      <TeamCardHeader team={team} company={company} canManage={canManage} onEditRoles={() => setRolesOpen(true)} />
       {canManage && !team.captain_player_id && (
         <CaptainAssigner team={team} allPlayers={allPlayers} onAssign={handleAssignCaptain} />
       )}
@@ -552,6 +689,17 @@ function TeamCard({ team, event, companies, allPlayers, canManage, reload, setCr
         onPick={handlePick}
         onQuick={handleQuick}
       />
+      {rolesOpen && (
+        <TeamRolesEditor
+          event={event}
+          team={team}
+          allPlayers={allPlayers}
+          members={members}
+          open={rolesOpen}
+          onOpenChange={setRolesOpen}
+          onSaved={async () => { await refreshMembers(); reload(); }}
+        />
+      )}
     </div>
   );
 }

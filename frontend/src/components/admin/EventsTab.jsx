@@ -75,6 +75,8 @@ export default function EventsTab({ events, companies = [], reload, canManage })
             <SelectContent className="bg-[#141414] text-white border-white/10">
               <SelectItem value="round_robin">Round-robin</SelectItem>
               <SelectItem value="knockout">Knockout</SelectItem>
+              <SelectItem value="swiss">Swiss</SelectItem>
+              <SelectItem value="double_elimination">Double elimination</SelectItem>
             </SelectContent>
           </Select>
         </div>

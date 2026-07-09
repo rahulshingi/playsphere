@@ -4,10 +4,11 @@ Wired via `register(api, app, db, ws_manager, deps)` from server.py. The websock
 on `app` directly (not on the `/api` APIRouter) so the path remains `/api/ws`.
 """
 import uuid
+import math
 import random
 from datetime import datetime, timezone
 from typing import List, Optional
-from fastapi import Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, HTTPException, WebSocket, WebSocketDisconnect, Query
 
 
 def generate_round_robin(team_ids: List[str], event_id: str) -> List[dict]:
@@ -102,6 +103,134 @@ def generate_knockout(team_ids: List[str], event_id: str) -> List[dict]:
     return fixtures
 
 
+def _new_fixture(event_id: str, rnd: int, match_num: int, team_a_id, team_b_id,
+                 bracket_position: Optional[str] = None) -> dict:
+    return {
+        "id": str(uuid.uuid4()),
+        "event_id": event_id,
+        "round": rnd,
+        "match_number": match_num,
+        "team_a_id": team_a_id,
+        "team_b_id": team_b_id,
+        "scheduled_at": None,
+        "venue": "",
+        "status": "scheduled",
+        "score": {},
+        "winner_id": None,
+        "bracket_position": bracket_position,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def generate_swiss(team_ids: List[str], event_id: str, rounds: int = 0) -> List[dict]:
+    """Swiss-system fixture generation.
+
+    Only round 1 is materialised with concrete pairings — seeded top-half vs
+    bottom-half. Later rounds are created as empty placeholders and are paired
+    dynamically after each round completes via
+    `POST /events/{event_id}/swiss/pair-next-round`.
+
+    Default rounds = ceil(log2(N)) — the standard Swiss recommendation. Caller
+    can override via the query param on `/generate-fixtures?rounds=...`.
+    """
+    teams = list(team_ids)
+    if len(teams) < 2:
+        return []
+    if rounds <= 0:
+        rounds = max(1, math.ceil(math.log2(len(teams))))
+    # Round 1: top-half vs bottom-half based on the incoming order (which the
+    # caller can pre-seed). If odd, the last team gets a bye (team_b_id=None).
+    n = len(teams)
+    half = n // 2
+    top = teams[:half]
+    bot = teams[half:half * 2]
+    bye = teams[-1] if n % 2 == 1 else None
+    fixtures: List[dict] = []
+    match_num = 1
+    for a, b in zip(top, bot):
+        fixtures.append(_new_fixture(event_id, 1, match_num, a, b, f"SW-R1-M{match_num}"))
+        match_num += 1
+    if bye is not None:
+        # Bye: team_a plays "null" — auto-win awarded when standings run.
+        fixtures.append(_new_fixture(event_id, 1, match_num, bye, None, f"SW-R1-M{match_num}"))
+        match_num += 1
+    # Placeholder empty fixtures for later rounds — filled by /swiss/pair-next-round.
+    per_round_slots = math.ceil(n / 2)
+    for rnd in range(2, rounds + 1):
+        for _ in range(per_round_slots):
+            fixtures.append(_new_fixture(event_id, rnd, match_num, None, None, f"SW-R{rnd}-M{match_num}"))
+            match_num += 1
+    return fixtures
+
+
+def generate_double_elimination(team_ids: List[str], event_id: str) -> List[dict]:
+    """Double-elimination bracket generator.
+
+    Produces: Winners Bracket (WB) — a standard single-elim tree; Losers
+    Bracket (LB) — every WB loser drops into the LB; Grand Final (GF) — LB
+    winner vs WB winner (single match — reset match omitted for simplicity).
+
+    Bracket positions:
+      WB-R{n}-M{n} — winners bracket
+      LB-R{n}-M{n} — losers bracket
+      GF-M1        — grand final
+    """
+    teams = list(team_ids)
+    random.shuffle(teams)
+    if len(teams) < 2:
+        return []
+    # Pad to next power of 2
+    n = 1
+    while n < len(teams):
+        n *= 2
+    while len(teams) < n:
+        teams.append(None)
+
+    fixtures: List[dict] = []
+    match_num = 1
+    # ---- Winners Bracket ----
+    # Round 1 with concrete pairings
+    wb_current = []
+    for i in range(0, n, 2):
+        f = _new_fixture(event_id, 1, match_num, teams[i], teams[i + 1], f"WB-R1-M{match_num}")
+        fixtures.append(f)
+        wb_current.append(f["id"])
+        match_num += 1
+    wb_rounds = int(math.log2(n))
+    for rnd in range(2, wb_rounds + 1):
+        new_current = []
+        for _ in range(len(wb_current) // 2):
+            f = _new_fixture(event_id, rnd, match_num, None, None, f"WB-R{rnd}-M{match_num}")
+            fixtures.append(f)
+            new_current.append(f["id"])
+            match_num += 1
+        wb_current = new_current
+    # ---- Losers Bracket ----
+    # Number of LB rounds = 2 * wb_rounds - 1. Each pair of consecutive rounds
+    # halves the LB size; alternating rounds absorb new drops from the WB.
+    lb_rounds = 2 * wb_rounds - 1
+    lb_matches = n // 4  # first LB round pairs the losers of WB-R1
+    lb_round_num = 1
+    while lb_matches >= 1 and lb_round_num <= lb_rounds:
+        for _ in range(lb_matches):
+            f = _new_fixture(event_id, wb_rounds + lb_round_num, match_num, None, None,
+                             f"LB-R{lb_round_num}-M{match_num}")
+            fixtures.append(f)
+            match_num += 1
+        lb_round_num += 1
+        # Alternate: consolidation round (same size), then halving.
+        if lb_round_num % 2 == 0:
+            # Consolidation round keeps the same match count (WB loser joins in).
+            pass
+        else:
+            lb_matches = max(1, lb_matches // 2) if lb_matches > 1 else 0
+        if lb_matches == 0:
+            break
+    # ---- Grand Final ----
+    fixtures.append(_new_fixture(event_id, wb_rounds + lb_rounds + 1, match_num, None, None, "GF-M1"))
+    return fixtures
+
+
 def register(api, app, db, ws_manager, deps):
     """deps must expose: Fixture, ScoreUpdate, require_admin, get_current_user,
     can_manage_event, can_score_fixture, fixtures_locked, get_event_or_404,
@@ -117,7 +246,11 @@ def register(api, app, db, ws_manager, deps):
     propagate_knockout_winner = deps.propagate_knockout_winner
 
     @api.post("/events/{event_id}/generate-fixtures")
-    async def generate_fixtures_endpoint(event_id: str, user: dict = Depends(get_current_user)):
+    async def generate_fixtures_endpoint(
+        event_id: str,
+        user: dict = Depends(get_current_user),
+        rounds: int = Query(0, ge=0, le=32),
+    ):
         ev = await get_event_or_404(event_id)
         if not await can_manage_event(user, ev):
             raise HTTPException(403, "Only the event organiser can generate fixtures")
@@ -132,13 +265,119 @@ def register(api, app, db, ws_manager, deps):
         if len(team_ids) < 2:
             raise HTTPException(400, "Need at least 2 teams to generate fixtures")
         await db.fixtures.delete_many({"event_id": event_id})
-        if ev["format"] == "knockout":
+        fmt = ev["format"]
+        if fmt == "knockout":
             fixtures = generate_knockout(team_ids, event_id)
+        elif fmt == "swiss":
+            fixtures = generate_swiss(team_ids, event_id, rounds=rounds or 0)
+        elif fmt == "double_elimination":
+            fixtures = generate_double_elimination(team_ids, event_id)
         else:
             fixtures = generate_round_robin(team_ids, event_id)
         if fixtures:
             await db.fixtures.insert_many(fixtures)
-        return {"ok": True, "count": len(fixtures)}
+        return {"ok": True, "count": len(fixtures), "format": fmt}
+
+    @api.post("/events/{event_id}/swiss/pair-next-round")
+    async def swiss_pair_next_round(event_id: str, user: dict = Depends(get_current_user)):
+        """Pair the next unpaired Swiss round based on current standings.
+
+        Standings = wins (2 pts each) + draws (1 pt) + byes (2 pts). Teams are
+        ranked by points desc, then id (stable). Pair adjacent ranked teams
+        while avoiding repeat opponents when possible. Empty slots in the next
+        pending round are filled in-place.
+        """
+        ev = await get_event_or_404(event_id)
+        if not await can_manage_event(user, ev):
+            raise HTTPException(403, "Only the event organiser can pair rounds")
+        if ev.get("format") != "swiss":
+            raise HTTPException(400, "Event is not a Swiss-format tournament")
+        all_fx = await db.fixtures.find({"event_id": event_id}, {"_id": 0}).sort(
+            [("round", 1), ("match_number", 1)]
+        ).to_list(2000)
+        if not all_fx:
+            raise HTTPException(400, "No fixtures generated yet")
+        # Find the earliest round that still has empty slots (team_a/team_b None).
+        target_round = None
+        for f in all_fx:
+            if f["team_a_id"] is None and f["team_b_id"] is None:
+                target_round = f["round"]
+                break
+        if target_round is None:
+            return {"ok": True, "paired": 0, "message": "All rounds already paired"}
+        # Ensure previous rounds are completed
+        prev_incomplete = [
+            f for f in all_fx if f["round"] < target_round and f.get("status") != "completed"
+            and (f["team_a_id"] is not None or f["team_b_id"] is not None)
+        ]
+        if prev_incomplete:
+            raise HTTPException(400, f"Complete round {target_round - 1} before pairing round {target_round}")
+        # Compute standings from completed fixtures
+        team_ids: List[str] = []
+        for f in all_fx:
+            for tid in (f.get("team_a_id"), f.get("team_b_id")):
+                if tid and tid not in team_ids:
+                    team_ids.append(tid)
+        points = {tid: 0 for tid in team_ids}
+        opponents: dict = {tid: set() for tid in team_ids}
+        for f in all_fx:
+            if f.get("round") >= target_round:
+                continue
+            a, b = f.get("team_a_id"), f.get("team_b_id")
+            if a and b is None:
+                points[a] = points.get(a, 0) + 2  # bye
+            elif f.get("status") == "completed":
+                w = f.get("winner_id")
+                if w in (a, b):
+                    points[w] = points.get(w, 0) + 2
+                else:  # draw
+                    if a:
+                        points[a] = points.get(a, 0) + 1
+                    if b:
+                        points[b] = points.get(b, 0) + 1
+                if a and b:
+                    opponents[a].add(b)
+                    opponents[b].add(a)
+        # Rank teams
+        ranked = sorted(team_ids, key=lambda t: (-points[t], t))
+        # Pair adjacent ranked teams, avoiding rematches greedily.
+        pairs: List[tuple] = []
+        used: set = set()
+        for i, t in enumerate(ranked):
+            if t in used:
+                continue
+            paired = False
+            for j in range(i + 1, len(ranked)):
+                candidate = ranked[j]
+                if candidate in used:
+                    continue
+                if candidate in opponents[t]:
+                    continue
+                pairs.append((t, candidate))
+                used.add(t)
+                used.add(candidate)
+                paired = True
+                break
+            if not paired and t not in used:
+                # forced rematch or bye
+                for j in range(i + 1, len(ranked)):
+                    candidate = ranked[j]
+                    if candidate not in used:
+                        pairs.append((t, candidate))
+                        used.add(t)
+                        used.add(candidate)
+                        paired = True
+                        break
+                if not paired:
+                    pairs.append((t, None))  # bye
+                    used.add(t)
+        # Persist pairings into the empty slots of target_round
+        empty_slots = [f for f in all_fx if f["round"] == target_round and f["team_a_id"] is None]
+        for slot, pair in zip(empty_slots, pairs):
+            a, b = pair
+            await db.fixtures.update_one({"id": slot["id"]}, {"$set": {"team_a_id": a, "team_b_id": b}})
+        return {"ok": True, "paired": len(pairs), "round": target_round}
+
 
     @api.get("/events/{event_id}/fixtures", response_model=List[Fixture])
     async def list_fixtures(event_id: str):
@@ -388,6 +627,67 @@ def register(api, app, db, ws_manager, deps):
             raise HTTPException(400, "hero_image_url or awards required")
         await db.fixtures.update_one({"id": fixture_id}, {"$set": upd})
         doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+        return Fixture(**doc)
+
+    # ---------- Phase 3: Match metadata (venue, court, officials, toss) ----------
+    _FIXTURE_META_ALLOWED = {"venue", "court_number", "scheduled_at"}
+
+    def _sanitize_officials(raw) -> list:
+        if not isinstance(raw, list):
+            return []
+        out = []
+        for entry in raw[:12]:  # hard cap
+            if not isinstance(entry, dict):
+                continue
+            role = (entry.get("role") or "").strip()
+            name = (entry.get("name") or "").strip()
+            if not name:
+                continue
+            out.append({"role": role or "official", "name": name})
+        return out
+
+    def _sanitize_toss(raw, team_a_id, team_b_id) -> Optional[dict]:
+        if not isinstance(raw, dict):
+            return None
+        winner = raw.get("winner_team_id")
+        if winner and winner not in (team_a_id, team_b_id):
+            raise HTTPException(400, "toss.winner_team_id must be team_a or team_b")
+        decision = (raw.get("decision") or "").strip().lower()
+        allowed_decisions = {"", "bat", "field", "bowl", "serve", "receive", "choose_side"}
+        if decision and decision not in allowed_decisions:
+            raise HTTPException(400, f"Invalid toss decision. Allowed: {sorted(allowed_decisions - {''})}")
+        note = (raw.get("note") or "").strip()
+        return {"winner_team_id": winner or None, "decision": decision or None, "note": note or None}
+
+    @api.patch("/fixtures/{fixture_id}/meta", response_model=Fixture)
+    async def set_fixture_meta(fixture_id: str, body: dict, user: dict = Depends(get_current_user)):
+        """Set venue / court / scheduled_at / officials / toss on a fixture.
+
+        Auth: event creator, platform admin, or company_admin scoped to the
+        event's company. Editable at any status (including completed) so
+        organisers can retroactively correct match-day metadata.
+        """
+        fx = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+        if not fx:
+            raise HTTPException(404, "Fixture not found")
+        ev = await get_event_or_404(fx["event_id"])
+        if not await can_manage_event(user, ev):
+            raise HTTPException(403, "Only the event organiser can edit match metadata")
+        body = body or {}
+        upd: dict = {}
+        for k in _FIXTURE_META_ALLOWED:
+            if k in body:
+                v = body[k]
+                upd[k] = (v.strip() if isinstance(v, str) else v) or ""
+        if "officials" in body:
+            upd["officials"] = _sanitize_officials(body["officials"])
+        if "toss" in body:
+            upd["toss"] = _sanitize_toss(body["toss"], fx.get("team_a_id"), fx.get("team_b_id"))
+        if not upd:
+            raise HTTPException(400, "No valid fields provided")
+        await db.fixtures.update_one({"id": fixture_id}, {"$set": upd})
+        doc = await db.fixtures.find_one({"id": fixture_id}, {"_id": 0})
+        await ws_manager.broadcast({"type": "fixture_update", "event_id": doc["event_id"], "fixture": doc})
         return Fixture(**doc)
 
     @api.post("/fixtures/{fixture_id}/reopen", response_model=Fixture)

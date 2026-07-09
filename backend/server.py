@@ -269,7 +269,7 @@ SportType = Literal[
 # extend at runtime with `/api/sports`) now accept ANY lower-case sport slug —
 # validated at the router level against `db.sports`.
 SportSlug = str
-FixtureFormat = Literal["round_robin", "knockout"]
+FixtureFormat = Literal["round_robin", "knockout", "swiss", "double_elimination"]
 EventStatus = Literal["upcoming", "ongoing", "completed"]
 EventType = Literal["single_company", "inter_company", "playsphere_organized"]
 MatchStatus = Literal["scheduled", "live", "completed"]
@@ -282,6 +282,19 @@ class Team(BaseModel):
     department: Optional[str] = ""
     captain: Optional[str] = ""
     captain_player_id: Optional[str] = None
+    # ---- Phase 3 (Feb 2026) — richer team roles ----
+    # Vice-captain mirrors the captain pattern: a linked player-profile id +
+    # the resolved display name (kept in sync on set).
+    vice_captain: Optional[str] = ""
+    vice_captain_player_id: Optional[str] = None
+    # Free-text staff names — no linked account required. Handy for local
+    # matches and sports like cricket / football where coach/manager are
+    # part of the team card but don't need a login.
+    coach_name: Optional[str] = ""
+    manager_name: Optional[str] = ""
+    # Distinct from `color` (used as the team brand chip). Jersey colour
+    # is the on-field kit colour so referees can distinguish sides.
+    jersey_color: Optional[str] = ""
     members: List[str] = Field(default_factory=list)
     color: Optional[str] = "#007AFF"
     logo_url: Optional[str] = ""
@@ -296,6 +309,9 @@ class TeamCreate(BaseModel):
     department: Optional[str] = ""
     captain: Optional[str] = ""
     color: Optional[str] = "#007AFF"
+    jersey_color: Optional[str] = ""
+    coach_name: Optional[str] = ""
+    manager_name: Optional[str] = ""
     logo_url: Optional[str] = ""
     event_id: Optional[str] = None
     company_id: Optional[str] = None
@@ -479,7 +495,16 @@ class Fixture(BaseModel):
     status: MatchStatus = "scheduled"
     score: dict = Field(default_factory=dict)
     winner_id: Optional[str] = None
-    bracket_position: Optional[str] = None  # for knockout
+    bracket_position: Optional[str] = None  # for knockout / double_elimination (WB/LB/GF prefixes)
+    # ---- Phase 3 (Feb 2026) — Match metadata for diverse sports ----
+    # Court / table / lane number (racket sports, snooker, etc.). Free-text
+    # so organisers can say "Court 1" or "Table 3" or "Rink A".
+    court_number: Optional[str] = ""
+    # Officials on this match. Each: {role: "umpire"|"referee"|"scorer"|... , name: str}.
+    officials: List[Dict[str, Any]] = Field(default_factory=list)
+    # Toss result (cricket + racket sports with a serve toss). Shape:
+    # {winner_team_id, decision: "bat"|"field"|"serve"|"receive", note?}
+    toss: Optional[Dict[str, Any]] = None
     # Post-match visuals + auto-computed awards. Populated by the scorer /
     # score-update route when a match transitions to "completed"; also
     # manually editable by the event creator.
@@ -1235,6 +1260,56 @@ async def set_team_captain(event_id: str, team_id: str, body: dict, user: dict =
     )
     doc = await db.teams.find_one({"id": team_id}, {"_id": 0})
     return Team(**doc)
+
+
+# ---------- Phase 3: team-role updates (vice-captain, coach, manager, jersey_color, etc.) ----------
+_TEAM_META_ALLOWED = {
+    "name", "department", "color", "jersey_color", "coach_name", "manager_name",
+    "logo_url", "vice_captain_player_id",
+}
+
+
+@api.patch("/events/{event_id}/teams/{team_id}", response_model=Team)
+async def update_event_team(event_id: str, team_id: str, body: dict, user: dict = Depends(get_current_user)):
+    """Update team metadata for Phase 3 team roles.
+
+    Fields (all optional): name, department, color, jersey_color, coach_name,
+    manager_name, logo_url, vice_captain_player_id. When vice_captain_player_id
+    is set, the linked player's name is auto-resolved and stored in
+    `vice_captain`; passing null / empty clears both.
+    """
+    ev = await _get_event_or_404(event_id)
+    t = await _get_team_or_404(team_id, event_id)
+    if not await _can_manage_team(user, ev, t):
+        raise HTTPException(403, "Not allowed")
+    upd: dict = {}
+    body = body or {}
+    for k in _TEAM_META_ALLOWED:
+        if k in body:
+            upd[k] = body[k]
+    # Auto-resolve vice-captain name
+    if "vice_captain_player_id" in body:
+        vc_id = body.get("vice_captain_player_id") or None
+        if vc_id:
+            prof = await db.player_profiles.find_one({"id": vc_id}, {"_id": 0, "name": 1})
+            if not prof:
+                raise HTTPException(404, "Vice-captain player not found")
+            upd["vice_captain_player_id"] = vc_id
+            upd["vice_captain"] = prof.get("name") or ""
+            # Auto-add to roster if not already there
+            members = list(t.get("members") or [])
+            if vc_id not in members:
+                members.append(vc_id)
+                upd["members"] = members
+        else:
+            upd["vice_captain_player_id"] = None
+            upd["vice_captain"] = ""
+    if not upd:
+        raise HTTPException(400, "No valid fields provided")
+    await db.teams.update_one({"id": team_id}, {"$set": upd})
+    doc = await db.teams.find_one({"id": team_id}, {"_id": 0})
+    return Team(**doc)
+
 
 
 @api.get("/events/{event_id}/teams/{team_id}/members")

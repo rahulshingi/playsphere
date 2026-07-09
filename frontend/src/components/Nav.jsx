@@ -114,7 +114,7 @@ export default function Nav() {
     >
       <div className="mx-auto max-w-7xl px-4 sm:px-6 h-20 flex items-center justify-between gap-3">
         <Link to="/" data-testid="nav-logo" className="flex items-center gap-3 shrink-0">
-          <img src={LOGO_URL} alt="Kreeda Nation" className="w-16 h-16 object-contain" />
+          <img src={LOGO_URL} alt="Kreeda Nation" className="w-16 h-16 object-cover rounded-full border border-white/10 bg-black" />
           <div className="leading-none hidden lg:flex flex-col items-stretch">
             <div data-testid="brand-kreeda" className="font-logo font-extrabold text-[34px] text-white uppercase leading-[0.9] tracking-[0.18em] text-center">
               KREEDA
@@ -292,7 +292,7 @@ export default function Nav() {
 
               <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
                 <div className="flex items-center gap-3">
-                  <img src={LOGO_URL} alt="" className="w-9 h-9 object-contain" />
+                  <img src={LOGO_URL} alt="" className="w-9 h-9 object-cover rounded-full border border-white/10 bg-black" />
                   <span className="font-brand text-lg">
                     <span className="text-white">KREEDA</span><span className="text-[#84CC16]"> NATION</span>
                   </span>

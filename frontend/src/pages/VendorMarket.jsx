@@ -56,10 +56,9 @@ export default function VendorMarket() {
   const canBook = !!user && ["player", "organiser", "company_admin"].includes(user.role);
 
   const openBookingFor = (listing) => {
-    if (ready && !user) {
-      nav("/login?next=/hire");
-      return;
-    }
+    // Anyone can open the modal to preview the calendar + available slots.
+    // We only gate the SUBMIT action inside the modal so anonymous visitors
+    // can inspect vacancy before deciding to sign up. Task 5 (Feb 2026).
     setSelected(listing);
   };
 
@@ -310,6 +309,8 @@ function SectionTitle({ n, title }) {
 }
 
 export function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
+  const { user } = useAuth();
+  const canBook = !!user && ["player", "organiser", "company_admin"].includes(user.role);
   const total = useMemo(() => Number(listing.price) * Number(form.hours || 0), [listing.price, form.hours]);
   const [availability, setAvailability] = useState(null);
   const [eligibility, setEligibility] = useState(null);
@@ -486,9 +487,24 @@ export function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
             </div>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={onClose} className="text-neutral-400">Cancel</Button>
-              <Button data-testid="vm-book-submit" onClick={onSubmit} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Send request</Button>
+              {canBook ? (
+                <Button data-testid="vm-book-submit" onClick={onSubmit} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Send request</Button>
+              ) : (
+                <a
+                  href={`/login?next=${encodeURIComponent("/hire")}`}
+                  data-testid="vm-book-login-cta"
+                  className="inline-flex items-center gap-2 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm px-4 py-2 text-sm"
+                >
+                  Sign in to book
+                </a>
+              )}
             </div>
           </div>
+          {!canBook && (
+            <p data-testid="vm-book-anon-hint" className="text-[10px] font-mono text-neutral-500 mt-2 text-right">
+              Browse freely — <a href={`/signup-company`} className="text-[#84CC16] hover:underline">create HR</a>, <a href={`/signup-organiser`} className="text-[#06B6D4] hover:underline">organiser</a>, or <a href={`/players/signup`} className="text-[#84CC16] hover:underline">player</a> account to book this slot.
+            </p>
+          )}
         </div>
       </div>
     </div>

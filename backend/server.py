@@ -270,7 +270,7 @@ SportType = Literal[
 # validated at the router level against `db.sports`.
 SportSlug = str
 FixtureFormat = Literal["round_robin", "knockout", "swiss", "double_elimination"]
-EventStatus = Literal["upcoming", "ongoing", "completed"]
+EventStatus = Literal["upcoming", "ongoing", "completed", "cancelled"]
 EventType = Literal["single_company", "inter_company", "playsphere_organized"]
 MatchStatus = Literal["scheduled", "live", "completed"]
 
@@ -394,6 +394,10 @@ class Event(BaseModel):
     submitted_at: Optional[str] = None
     approved_at: Optional[str] = None
     approved_by: Optional[str] = None
+    # ---- Cancellation (soft-delete) — preserves fixtures/teams/photos ----
+    cancellation_reason: Optional[str] = ""
+    cancelled_at: Optional[str] = None
+    cancelled_by: Optional[str] = None
     # Organiser event-fee payment record. Populated at acknowledge-instructions:
     # `{fee, currency, status: not_required|pending_offline|paid_offline|paid_online, method, paid_at, provider}`.
     payment: Optional[Dict[str, Any]] = None
@@ -459,6 +463,7 @@ class SponsorSignupBody(BaseModel):
     password: str
     company_name: str
     contact_person: Optional[str] = ""
+    mobile: Optional[str] = ""
 
 
 class SponsorshipInterest(BaseModel):
@@ -3126,14 +3131,20 @@ async def sponsor_signup(body: SponsorSignupBody, response: Response):
     email = body.email.lower().strip()
     if await db.users.find_one({"email": email}):
         raise HTTPException(400, "An account with this email already exists")
+    mobile = (body.mobile or "").strip()
+    if mobile and await db.users.find_one({"mobile": mobile}):
+        raise HTTPException(400, "An account with this mobile number already exists")
     if len(body.password) < 6:
         raise HTTPException(400, "Password must be at least 6 characters")
     user_id = str(uuid.uuid4())
-    await db.users.insert_one({
+    user_doc = {
         "id": user_id, "email": email, "name": body.contact_person or body.company_name,
         "role": "sponsor", "password_hash": hash_password(body.password),
         "email_verified": True, "created_at": datetime.now(timezone.utc).isoformat(),
-    })
+    }
+    if mobile:
+        user_doc["mobile"] = mobile
+    await db.users.insert_one(user_doc)
     profile = SponsorProfile(user_id=user_id, company_name=body.company_name.strip(), contact_person=body.contact_person or "")
     await db.sponsor_profiles.insert_one(profile.model_dump())
     token = create_access_token(user_id, email, "sponsor", None)
@@ -4616,11 +4627,20 @@ async def listing_availability(listing_id: str, date: str, sub_unit_id: Optional
     booked = list(booked) + list(privates)
 
     slots = []
+    # Filter out past-time slots for the current day so users can't book slots
+    # that have already elapsed. Uses the server's naive local date/time; if
+    # the deployment is UTC-only, the filter is still correct because clients
+    # send date+start_time in the same reference frame as `date`.
+    now = datetime.now(timezone.utc)
+    is_today = date == now.date().isoformat()
+    now_min = now.hour * 60 + now.minute if is_today else -1
     for s in _slots_between(opening, closing, minutes):
         s_end = _hhmm_add(s, max(1, minutes // 60))
         status = "available"
+        if is_today and _hhmm_to_min(s) <= now_min:
+            status = "past"
         for b in booked:
-            if _overlaps(s, s_end, b["start_time"], b["end_time"]):
+            if status == "available" and _overlaps(s, s_end, b["start_time"], b["end_time"]):
                 status = "booked"
                 break
         if status == "available":

@@ -13,7 +13,7 @@ import { Megaphone } from "lucide-react";
 export default function SignupSponsor() {
   const { refreshMe } = useAuth();
   const nav = useNavigate();
-  const [form, setForm] = useState({ company_name: "", contact_person: "", email: "", password: "" });
+  const [form, setForm] = useState({ company_name: "", contact_person: "", email: "", mobile: "", password: "" });
   const [busy, setBusy] = useState(false);
 
   const submit = async (e) => {
@@ -26,6 +26,7 @@ export default function SignupSponsor() {
         company_name: form.company_name.trim(),
         contact_person: form.contact_person.trim(),
         email: form.email.trim().toLowerCase(),
+        mobile: form.mobile.trim(),
         password: form.password,
       });
       await refreshMe();
@@ -64,6 +65,12 @@ export default function SignupSponsor() {
             <Label className="text-xs font-mono uppercase text-neutral-500">Work email *</Label>
             <Input data-testid="sponsor-signup-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
               placeholder="alice@acmerealty.com" className="mt-1 bg-black/40 border-white/10 text-white" />
+          </div>
+          <div>
+            <Label className="text-xs font-mono uppercase text-neutral-500">Mobile number</Label>
+            <Input data-testid="sponsor-signup-mobile" type="tel" value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })}
+              placeholder="+91 98xxxxxxxx" className="mt-1 bg-black/40 border-white/10 text-white" />
+            <p className="text-[10px] text-neutral-500 mt-1">Log in with email or mobile.</p>
           </div>
           <div>
             <Label className="text-xs font-mono uppercase text-neutral-500">Password *</Label>

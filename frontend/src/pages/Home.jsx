@@ -6,14 +6,38 @@ import Footer from "@/components/Footer";
 import SponsorBanner from "@/components/SponsorBanner";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Users, CalendarDays, Activity, Trophy, Sparkles } from "lucide-react";
-import { renderScore, sportColor } from "@/lib/sports";
+import { renderScore, sportColor, SPORT_IMAGES } from "@/lib/sports";
 import useFixtureSocket from "@/lib/useFixtureSocket";
+
+// Rotating hero backdrop — cycles through cricket, badminton, tennis, snooker,
+// pickleball, basketball etc. Uses an incrementing counter stored in
+// localStorage so every fresh visit lands on a different sport image.
+const HERO_ROTATION = [
+  "cricket", "badminton", "tennis", "basketball", "pickleball",
+  "football", "tabletennis", "snooker", "volleyball", "chess",
+];
+
+function pickHeroImage() {
+  try {
+    const key = "kn_home_hero_idx";
+    const prev = parseInt(localStorage.getItem(key) || "-1", 10);
+    const next = (prev + 1) % HERO_ROTATION.length;
+    localStorage.setItem(key, String(next));
+    return SPORT_IMAGES[HERO_ROTATION[next]] || SPORT_IMAGES.football;
+  } catch {
+    // Private-mode / storage-blocked fallback: rotate by wall-clock minute.
+    const idx = Math.floor(Date.now() / 60000) % HERO_ROTATION.length;
+    return SPORT_IMAGES[HERO_ROTATION[idx]] || SPORT_IMAGES.football;
+  }
+}
 
 export default function Home() {
   const [stats, setStats] = useState({ events: 0, teams: 0, players: 0, live: 0 });
   const [events, setEvents] = useState([]);
   const [liveFixtures, setLiveFixtures] = useState([]);
   const [teamMap, setTeamMap] = useState({});
+  // Frozen for the lifetime of this mount — advances on the NEXT navigation to /.
+  const [heroImage] = useState(pickHeroImage);
 
   const loadLive = async () => {
     const evRes = await api.get("/events");
@@ -61,7 +85,8 @@ export default function Home() {
       <section data-testid="hero-section" className="relative overflow-hidden grain">
         <div className="absolute inset-0">
           <img
-            src="https://images.pexels.com/photos/1657324/pexels-photo-1657324.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+            data-testid="hero-image"
+            src={heroImage}
             alt=""
             className="w-full h-full object-cover opacity-40"
           />
@@ -214,7 +239,7 @@ export default function Home() {
               className="group relative overflow-hidden rounded-sm border border-white/10 bg-[#141414] hover-lift"
             >
               <div className="h-44 overflow-hidden">
-                <img src={e.banner_url || "https://images.pexels.com/photos/1657324/pexels-photo-1657324.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-80" />
+                <img src={e.banner_url || SPORT_IMAGES[e.sport] || SPORT_IMAGES.football} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 opacity-80" />
               </div>
               <div className="p-5">
                 <div className="flex items-center gap-2">

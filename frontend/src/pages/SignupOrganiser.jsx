@@ -102,8 +102,9 @@ export default function SignupOrganiser() {
                 <Input data-testid="org-signup-admin-name" required value={form.admin_name} onChange={(e) => setForm({ ...form, admin_name: e.target.value })} className="mt-2 bg-[#141414] border-white/10 text-white" />
               </div>
               <div>
-                <Label className="text-xs font-mono uppercase text-neutral-500">Phone</Label>
-                <Input data-testid="org-signup-phone" value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} className="mt-2 bg-[#141414] border-white/10 text-white" />
+                <Label className="text-xs font-mono uppercase text-neutral-500">Mobile number</Label>
+                <Input data-testid="org-signup-mobile" type="tel" placeholder="+91 98xxxxxxxx" value={form.contact_phone} onChange={(e) => setForm({ ...form, contact_phone: e.target.value })} className="mt-2 bg-[#141414] border-white/10 text-white" />
+                <p className="text-[10px] text-neutral-500 mt-1">Log in with email or mobile.</p>
               </div>
             </div>
             <div>

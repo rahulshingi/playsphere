@@ -719,6 +719,34 @@ def register(api, db, deps):
         await db.fixtures.delete_many({"event_id": event_id})
         return {"ok": True}
 
+    @api.post("/events/{event_id}/cancel", response_model=Event)
+    async def cancel_event(event_id: str, body: dict = None, user: dict = Depends(get_current_user)):
+        """Soft-cancel an event: mark status=cancelled without deleting data.
+
+        Preserves fixtures, teams, photos, awards — useful for record-keeping
+        and future audit. Creator + platform admin + company admins of the
+        owning company can call this. Optional body `{reason}` is stored on
+        the event as `cancellation_reason`.
+        """
+        existing = await db.events.find_one({"id": event_id}, {"_id": 0})
+        if not existing:
+            raise HTTPException(404, "Event not found")
+        if not await _can_manage_event(user, existing):
+            raise HTTPException(403, "Not your event")
+        if existing.get("status") == "cancelled":
+            raise HTTPException(400, "Event already cancelled")
+        upd = {
+            "status": "cancelled",
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            "cancelled_by": user.get("id"),
+        }
+        reason = (body or {}).get("reason") or ""
+        if reason:
+            upd["cancellation_reason"] = reason.strip()[:500]
+        await db.events.update_one({"id": event_id}, {"$set": upd})
+        doc = await db.events.find_one({"id": event_id}, {"_id": 0})
+        return Event(**doc)
+
     # ---------- Teams ----------
     @api.get("/teams", response_model=List[Team])
     async def list_teams(event_id: Optional[str] = None, user: Optional[dict] = Depends(get_current_user_optional)):

@@ -11,9 +11,10 @@ import { useSports, getPlayerFormat } from "@/hooks/useSports";
 import ImageUpload from "@/components/ImageUpload";
 import VenuePicker from "@/components/VenuePicker";
 import SuggestVenueButton from "@/components/event/SuggestVenueButton";
+import { todayLocalISO } from "@/lib/dateConstraints";
 
 const INDIVIDUAL_SPORTS = new Set(["chess", "quiz", "hackathon"]);
-const BLANK_EVENT = { name: "", sport: "cricket", format: "round_robin", event_type: "playsphere_organized", description: "", venue: "", banner_url: "", stream_url: "", player_format: "", contact_name: "", contact_email: "", contact_phone: "" };
+const BLANK_EVENT = { name: "", sport: "cricket", format: "round_robin", event_type: "playsphere_organized", description: "", venue: "", banner_url: "", stream_url: "", player_format: "", contact_name: "", contact_email: "", contact_phone: "", start_date: "", end_date: "" };
 const onSportChange = (current, value, sports) => {
   const fmt = getPlayerFormat(sports, value);
   return {
@@ -112,6 +113,16 @@ export default function EventsTab({ events, companies = [], reload, canManage })
           <Input data-testid="pa-event-venue" placeholder="Venue" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
           <Button type="button" data-testid="pa-event-venue-pick" variant="outline" onClick={() => setVenuePickerOpen(true)} className="rounded-sm border-white/10 text-white whitespace-nowrap">Pick verified venue</Button>
           <SuggestVenueButton onPick={(label) => setNewEvent({ ...newEvent, venue: label })} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Start date</div>
+            <Input data-testid="pa-event-start" type="date" value={newEvent.start_date} min={todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          </div>
+          <div>
+            <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ End date</div>
+            <Input data-testid="pa-event-end" type="date" value={newEvent.end_date} min={newEvent.start_date || todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+          </div>
         </div>
         <ImageUpload value={newEvent.banner_url} onChange={(v) => setNewEvent({ ...newEvent, banner_url: v })} testid="pa-event-banner" placeholder="Banner image — paste URL or upload" />
         <Input data-testid="pa-event-stream" placeholder="Live stream URL (YouTube / Twitch / any)" value={newEvent.stream_url} onChange={(e) => setNewEvent({ ...newEvent, stream_url: e.target.value })} className="bg-black/40 border-white/10 text-white" />

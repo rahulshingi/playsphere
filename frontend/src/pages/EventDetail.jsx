@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { renderScore, sportColor } from "@/lib/sports";
+import { renderScore, sportColor, sportImage } from "@/lib/sports";
 import { useAuth } from "@/context/AuthContext";
 import { Trophy, MapPin, Calendar, Wifi, Youtube, Edit3 } from "lucide-react";
 import LiveScorer from "@/components/LiveScorer";
@@ -156,7 +156,7 @@ export default function EventDetail() {
       {/* HERO */}
       <section className="relative">
         <div className="absolute inset-0 h-72">
-          {event.banner_url && <img src={event.banner_url} className="w-full h-full object-cover opacity-40" alt="" />}
+          {(event.banner_url || event.sport) && <img src={event.banner_url || sportImage(event.sport)} className="w-full h-full object-cover opacity-40" alt="" />}
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0a0a0a]/60 to-[#0a0a0a]" />
         </div>
         <div className="relative max-w-7xl mx-auto px-6 pt-16 pb-10">
@@ -239,6 +239,33 @@ export default function EventDetail() {
               <Button data-testid="event-edit-btn" size="sm" variant="outline" onClick={() => { setEventDraft({ name: event.name, description: event.description || "", venue: event.venue || "", start_date: event.start_date || "", end_date: event.end_date || "", contact_name: event.contact_name || "", contact_email: event.contact_email || "", contact_phone: event.contact_phone || "" }); setEditingEvent(true); }} className="rounded-sm border-white/10 text-white">
                 <Edit3 className="w-3.5 h-3.5 mr-1" /> Edit event
               </Button>
+              {event.status !== "cancelled" && (
+                <Button
+                  data-testid="event-cancel-btn"
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    const reason = window.prompt("Cancel this event? Data (fixtures, teams, awards, photos) is preserved for records. Optional reason:", "");
+                    if (reason === null) return; // user hit Cancel on prompt
+                    try {
+                      await api.post(`/events/${id}/cancel`, { reason });
+                      toast.success("Event cancelled");
+                      loadAll();
+                    } catch (e) {
+                      toast.error(e.response?.data?.detail || "Failed to cancel event");
+                    }
+                  }}
+                  className="rounded-sm border-[#FF3B30]/40 text-[#FF3B30] hover:bg-[#FF3B30]/10"
+                >
+                  Cancel event
+                </Button>
+              )}
+            </div>
+          )}
+          {event.status === "cancelled" && (
+            <div data-testid="event-cancelled-banner" className="mt-4 border border-[#FF3B30]/40 bg-[#FF3B30]/5 rounded-sm p-3 text-sm text-[#FF3B30]">
+              <b>This event has been cancelled.</b>
+              {event.cancellation_reason && <span className="text-neutral-400 ml-2">· {event.cancellation_reason}</span>}
             </div>
           )}
         </div>

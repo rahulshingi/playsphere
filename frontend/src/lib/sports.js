@@ -106,6 +106,35 @@ export function sportColor(sport) {
 }
 
 /**
+ * Sport-specific fallback banner images. Used by Events.jsx + EventDetail.jsx
+ * whenever an event has no `banner_url` set — high-quality Pexels photos one
+ * per sport so cricket / badminton / tennis / snooker etc. get themed images
+ * instead of the generic football fallback.
+ */
+export const SPORT_IMAGES = {
+  cricket: "https://images.pexels.com/photos/3628912/pexels-photo-3628912.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  football: "https://images.pexels.com/photos/1657324/pexels-photo-1657324.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  basketball: "https://images.pexels.com/photos/1080882/pexels-photo-1080882.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  badminton: "https://images.pexels.com/photos/6203519/pexels-photo-6203519.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  tabletennis: "https://images.pexels.com/photos/976873/pexels-photo-976873.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  tennis: "https://images.pexels.com/photos/1432034/pexels-photo-1432034.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  lawntennis: "https://images.pexels.com/photos/8224057/pexels-photo-8224057.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  pickleball: "https://images.pexels.com/photos/8224706/pexels-photo-8224706.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  volleyball: "https://images.pexels.com/photos/1263426/pexels-photo-1263426.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  squash: "https://images.pexels.com/photos/8007488/pexels-photo-8007488.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  snooker: "https://images.pexels.com/photos/1329717/pexels-photo-1329717.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  pool: "https://images.pexels.com/photos/1329717/pexels-photo-1329717.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  chess: "https://images.pexels.com/photos/163150/chess-play-checkmate-black-163150.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  quiz: "https://images.pexels.com/photos/5428003/pexels-photo-5428003.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+  hackathon: "https://images.pexels.com/photos/1181677/pexels-photo-1181677.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+};
+
+export function sportImage(sport) {
+  return SPORT_IMAGES[sport] || "https://images.pexels.com/photos/2263436/pexels-photo-2263436.jpeg?auto=compress&cs=tinysrgb&h=650&w=940";
+}
+
+
+/**
  * Compute suggested winner + auto-complete for a match given a score dict.
  *
  * Returns { winner_id, isComplete, note } where:

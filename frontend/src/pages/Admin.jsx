@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { todayLocalISO } from "@/lib/dateConstraints";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useSports, getPlayerFormat } from "@/hooks/useSports";
 import { toast } from "sonner";
@@ -38,7 +39,7 @@ export default function Admin() {
   const [venuePickerOpen, setVenuePickerOpen] = useState(false);
   const [teams, setTeams] = useState([]);
   const [sponsors, setSponsors] = useState([]);
-  const [newEvent, setNewEvent] = useState({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "", player_format: "", contact_name: "", contact_email: "", contact_phone: "", listed_publicly: true });
+  const [newEvent, setNewEvent] = useState({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "", player_format: "", contact_name: "", contact_email: "", contact_phone: "", listed_publicly: true, start_date: "", end_date: "" });
   const [newSponsor, setNewSponsor] = useState({ name: "", tier: "bronze", logo_url: "", website: "", description: "", show_in_banner: true });
   const currentPF = getPlayerFormat(sports, newEvent.sport);
 
@@ -73,7 +74,7 @@ export default function Admin() {
       if (currentPF !== "both") delete payload.player_format;
       const { data } = await api.post("/events", payload);
       toast.success(playerHost ? "Local match created — set up teams next" : "Event created");
-      setNewEvent({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "", player_format: "", contact_name: "", contact_email: "", contact_phone: "", listed_publicly: true });
+      setNewEvent({ name: "", sport: "football", format: "round_robin", event_type: "single_company", description: "", venue: "", banner_url: "", stream_url: "", player_format: "", contact_name: "", contact_email: "", contact_phone: "", listed_publicly: true, start_date: "", end_date: "" });
       // For players, jump straight to the event so they can add teams + members.
       if (playerHost && data?.id) {
         nav(`/events/${data.id}`);
@@ -128,6 +129,16 @@ export default function Admin() {
                 </div>
               )}
               <Input data-testid="player-event-venue" placeholder="Venue (ground, court, backyard…)" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Start date</div>
+                  <Input data-testid="player-event-start" type="date" value={newEvent.start_date} min={todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ End date</div>
+                  <Input data-testid="player-event-end" type="date" value={newEvent.end_date} min={newEvent.start_date || todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                </div>
+              </div>
               <div>
                 <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Banner image (optional)</div>
                 <ImageUpload value={newEvent.banner_url} onChange={(v) => setNewEvent({ ...newEvent, banner_url: v })} testid="player-event-banner" placeholder="Paste image URL or click Upload →" />
@@ -307,6 +318,16 @@ export default function Admin() {
                   <SuggestVenueButton onPick={(label) => setNewEvent({ ...newEvent, venue: label })} />
                 </div>
                 <div className="text-[10px] font-mono text-neutral-500 -mt-1">Can&apos;t find your venue? Click <span className="text-[#84CC16]">Suggest new venue</span> — Kreeda Nation admin will reach out to onboard it.</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Start date</div>
+                    <Input data-testid="admin-event-start" type="date" value={newEvent.start_date} min={todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                  </div>
+                  <div>
+                    <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ End date</div>
+                    <Input data-testid="admin-event-end" type="date" value={newEvent.end_date} min={newEvent.start_date || todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                  </div>
+                </div>
                 <div>
                   <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Banner image</div>
                   <ImageUpload value={newEvent.banner_url} onChange={(v) => setNewEvent({ ...newEvent, banner_url: v })} testid="admin-event-banner" placeholder="Paste image URL or click Upload →" />

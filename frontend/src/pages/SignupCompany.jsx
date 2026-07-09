@@ -149,13 +149,16 @@ export default function SignupCompany() {
                 />
               </div>
               <div>
-                <Label className="text-xs font-mono uppercase text-neutral-500">Phone</Label>
+                <Label className="text-xs font-mono uppercase text-neutral-500">Mobile number</Label>
                 <Input
-                  data-testid="signup-phone"
+                  data-testid="signup-mobile"
+                  type="tel"
+                  placeholder="+91 98xxxxxxxx"
                   value={form.contact_phone}
                   onChange={(e) => setForm({ ...form, contact_phone: e.target.value })}
                   className="mt-2 bg-[#141414] border-white/10 text-white"
                 />
+                <p className="text-[10px] text-neutral-500 mt-1">Use for login (with email or mobile) + OTP recovery.</p>
               </div>
             </div>
             <div>

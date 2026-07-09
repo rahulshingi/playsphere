@@ -3,7 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
-import { sportColor } from "@/lib/sports";
+import { sportColor, sportImage } from "@/lib/sports";
 import { useAuth } from "@/context/AuthContext";
 import { Megaphone, Zap } from "lucide-react";
 
@@ -129,7 +129,7 @@ function EventCard({ e }) {
       className="group relative overflow-hidden rounded-sm border border-white/10 bg-[#141414] hover-lift block"
     >
       <div className="h-44 relative">
-        <img src={e.banner_url || "https://images.pexels.com/photos/1657324/pexels-photo-1657324.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"} className="w-full h-full object-cover opacity-70 group-hover:opacity-90" alt="" />
+        <img src={e.banner_url || sportImage(e.sport)} className="w-full h-full object-cover opacity-70 group-hover:opacity-90" alt="" />
         <div className="absolute top-3 left-3 flex gap-2 flex-wrap">
           <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm border bg-black/60" style={{ borderColor: sportColor(e.sport), color: sportColor(e.sport) }}>
             {e.sport}

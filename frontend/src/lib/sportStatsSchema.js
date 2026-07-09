@@ -43,10 +43,13 @@ export const STATS_SCHEMAS = {
   football: {
     label: "Football",
     color: "#84CC16",
-    auto: [],
+    auto: [
+      NUM("matches", "Matches played"),
+      NUM("won", "Matches won"),
+      NUM("goals", "Goals scored"),
+      NUM("mom", "MoM awards"),
+    ],
     manual: [
-      NUM("matches", "Matches"),
-      NUM("goals", "Goals"),
       NUM("assists", "Assists"),
       NUM("clean_sheets", "Clean sheets (GK)"),
       NUM("yellow_cards", "Yellow cards"),
@@ -56,10 +59,13 @@ export const STATS_SCHEMAS = {
   basketball: {
     label: "Basketball",
     color: "#F59E0B",
-    auto: [],
+    auto: [
+      NUM("matches", "Games played"),
+      NUM("won", "Games won"),
+      NUM("points", "Points scored"),
+      NUM("mom", "MoM awards"),
+    ],
     manual: [
-      NUM("games", "Games"),
-      NUM("points", "Points"),
       NUM("rebounds", "Rebounds"),
       NUM("assists", "Assists"),
       NUM("steals", "Steals"),
@@ -69,23 +75,70 @@ export const STATS_SCHEMAS = {
   badminton: {
     label: "Badminton",
     color: "#A855F7",
-    auto: [],
+    auto: [
+      NUM("matches", "Matches played"),
+      NUM("won", "Matches won"),
+      NUM("sets_won", "Sets won"),
+      NUM("mom", "MoM awards"),
+    ],
     manual: [
-      NUM("matches", "Matches"),
-      NUM("wins", "Wins"),
+      NUM("wins", "Wins (external)"),
       NUM("tournament_titles", "Tournament titles"),
       TXT("highest_ranking", "Highest ranking"),
+    ],
+  },
+  pickleball: {
+    label: "Pickleball",
+    color: "#F97316",
+    auto: [
+      NUM("matches", "Matches played"),
+      NUM("won", "Matches won"),
+      NUM("sets_won", "Sets won"),
+      NUM("mom", "MoM awards"),
+    ],
+    manual: [
+      NUM("tournament_titles", "Tournament titles"),
     ],
   },
   tabletennis: {
     label: "Table Tennis",
     color: "#EC4899",
-    auto: [],
+    auto: [
+      NUM("matches", "Matches played"),
+      NUM("won", "Matches won"),
+      NUM("sets_won", "Games won"),
+      NUM("mom", "MoM awards"),
+    ],
     manual: [
-      NUM("matches", "Matches"),
-      NUM("wins", "Wins"),
+      NUM("wins", "Wins (external)"),
       NUM("tournament_titles", "Tournament titles"),
       TXT("highest_ranking", "Highest ranking"),
+    ],
+  },
+  tennis: {
+    label: "Lawn Tennis",
+    color: "#22C55E",
+    auto: [
+      NUM("matches", "Matches played"),
+      NUM("won", "Matches won"),
+      NUM("sets_won", "Sets won"),
+      NUM("mom", "MoM awards"),
+    ],
+    manual: [
+      NUM("tournament_titles", "Tournament titles"),
+      TXT("highest_ranking", "Highest ranking"),
+    ],
+  },
+  snooker: {
+    label: "Snooker / Pool",
+    color: "#0EA5E9",
+    auto: [
+      NUM("matches", "Frames played"),
+      NUM("won", "Frames won"),
+      NUM("mom", "MoM awards"),
+    ],
+    manual: [
+      NUM("tournament_titles", "Tournament titles"),
     ],
   },
   volleyball: {

@@ -1759,7 +1759,7 @@ async def list_player_profiles(
 
 
 @api.get("/players/profiles/{profile_id}/stats")
-async def player_lifetime_stats(profile_id: str, _: dict = Depends(get_current_user)):
+async def player_lifetime_stats(profile_id: str, _: Optional[dict] = Depends(get_current_user_optional)):
     """Career stats per sport. Cricket is auto-aggregated from completed fixtures where the
     player appeared in the playing XI; other sports return the player's manually-entered
     lifetime_stats dict. Manual entries always merge over auto values for fields the player
@@ -1812,6 +1812,57 @@ async def player_lifetime_stats(profile_id: str, _: dict = Depends(get_current_u
                     cricket_auto["balls_bowled"] += int(bw.get("balls", 0) or 0)
                     cricket_auto["runs_conceded"] += int(bw.get("runs", 0) or 0)
                     cricket_auto["wickets"] += int(bw.get("wickets", 0) or 0)
+    # ---- Simple-cricket shape: score = {team_a:{batters,bowlers,total}, team_b:{...}} ----
+    # Local matches / quick-score events store batters/bowlers directly on the side. Walk
+    # every completed fixture where this player was rostered.
+    team_ids = [t["id"] async for t in db.teams.find(
+        {"$or": [
+            {"members": profile_id}, {"player_ids": profile_id},
+            {"players.id": profile_id}, {"players.player_id": profile_id},
+        ]},
+        {"_id": 0, "id": 1}
+    )]
+    async for fx in db.fixtures.find(
+        {
+            "status": "completed",
+            "$or": [{"team_a_id": {"$in": team_ids}}, {"team_b_id": {"$in": team_ids}}],
+        },
+        {"_id": 0, "id": 1, "score": 1, "event_id": 1, "winner_id": 1, "awards": 1,
+         "team_a_id": 1, "team_b_id": 1}
+    ):
+        if fx["id"] in seen_fixtures:
+            continue
+        # Skip if event isn't cricket — we're only aggregating cricket right here.
+        ev = await db.events.find_one({"id": fx["event_id"]}, {"_id": 0, "sport": 1})
+        if not ev or ev.get("sport") != "cricket":
+            continue
+        score = fx.get("score") or {}
+        counted = False
+        for side_key in ("team_a", "team_b"):
+            side = score.get(side_key) or {}
+            for b in side.get("batters") or []:
+                if b.get("player_id") == profile_id or b.get("id") == profile_id:
+                    if not counted:
+                        cricket_auto["matches"] += 1
+                        counted = True
+                    cricket_auto["innings_batted"] += 1
+                    cricket_auto["runs"] += int(b.get("runs", 0) or 0)
+                    cricket_auto["balls_faced"] += int(b.get("balls", 0) or 0)
+                    cricket_auto["fours"] += int(b.get("fours", 0) or 0)
+                    cricket_auto["sixes"] += int(b.get("sixes", 0) or 0)
+                    cricket_auto["highest_score"] = max(cricket_auto["highest_score"], int(b.get("runs", 0) or 0))
+                    if b.get("out"):
+                        cricket_auto["dismissals"] += 1
+            for bw in side.get("bowlers") or []:
+                if bw.get("player_id") == profile_id or bw.get("id") == profile_id:
+                    if not counted:
+                        cricket_auto["matches"] += 1
+                        counted = True
+                    cricket_auto["innings_bowled"] += 1
+                    balls = int(bw.get("balls", 0) or 0) or int(float(bw.get("overs", 0) or 0) * 6)
+                    cricket_auto["balls_bowled"] += balls
+                    cricket_auto["runs_conceded"] += int(bw.get("runs_conceded", bw.get("runs", 0)) or 0)
+                    cricket_auto["wickets"] += int(bw.get("wickets", 0) or 0)
     cricket_auto["overs_bowled"] = float(f"{cricket_auto['balls_bowled'] // 6}.{cricket_auto['balls_bowled'] % 6}")
     # Derived: average + strike rate + economy
     cricket_auto["batting_average"] = round(cricket_auto["runs"] / cricket_auto["dismissals"], 2) if cricket_auto["dismissals"] else None
@@ -1828,6 +1879,72 @@ async def player_lifetime_stats(profile_id: str, _: dict = Depends(get_current_u
         if sport == "cricket":
             continue
         result[sport] = {"auto": {}, "manual": entries or {}}
+
+    # ---- Auto-aggregation for non-cricket sports ----
+    # Walk every completed fixture where this player was rostered, group by
+    # event.sport, and roll up simple counters. Rendered as chips on the
+    # SportStatsDashboard next to any manual overrides the player entered.
+    if team_ids:
+        # Bulk-fetch events for team's fixtures so we don't hit the DB per row.
+        fx_docs = await db.fixtures.find(
+            {
+                "status": "completed",
+                "$or": [{"team_a_id": {"$in": team_ids}}, {"team_b_id": {"$in": team_ids}}],
+            },
+            {"_id": 0, "id": 1, "score": 1, "event_id": 1, "winner_id": 1,
+             "awards": 1, "team_a_id": 1, "team_b_id": 1}
+        ).to_list(2000)
+        ev_ids = list({f["event_id"] for f in fx_docs})
+        ev_docs = await db.events.find({"id": {"$in": ev_ids}}, {"_id": 0, "id": 1, "sport": 1}).to_list(2000)
+        sport_by_event = {e["id"]: e.get("sport") or "" for e in ev_docs}
+        per_sport: Dict[str, Dict[str, Any]] = {}
+        for fx in fx_docs:
+            sport = sport_by_event.get(fx["event_id"], "")
+            if not sport or sport == "cricket":
+                continue  # cricket already handled above; other sports fall through here.
+            bucket = per_sport.setdefault(sport, {
+                "matches": 0, "won": 0, "lost": 0, "draw": 0,
+                "goals": 0, "points": 0, "sets_won": 0, "sets_lost": 0,
+                "mom": 0, "top_scorer": 0,
+            })
+            bucket["matches"] += 1
+            my_side_key = "team_a" if fx["team_a_id"] in team_ids else "team_b"
+            my_team_id = fx["team_a_id"] if my_side_key == "team_a" else fx["team_b_id"]
+            winner_id = fx.get("winner_id")
+            if not winner_id:
+                bucket["draw"] += 1
+            elif winner_id == my_team_id:
+                bucket["won"] += 1
+            else:
+                bucket["lost"] += 1
+            my_side = (fx.get("score") or {}).get(my_side_key) or {}
+            opp_side = (fx.get("score") or {}).get("team_b" if my_side_key == "team_a" else "team_a") or {}
+            # Racket sports store `sets: [...]`. Count sets won as sum(my > opp).
+            if isinstance(my_side.get("sets"), list) and isinstance(opp_side.get("sets"), list):
+                for i in range(min(len(my_side["sets"]), len(opp_side["sets"]))):
+                    if (my_side["sets"][i] or 0) > (opp_side["sets"][i] or 0):
+                        bucket["sets_won"] += 1
+                    elif (opp_side["sets"][i] or 0) > (my_side["sets"][i] or 0):
+                        bucket["sets_lost"] += 1
+            # Per-player scorers list (football, basketball, etc.).
+            for s in my_side.get("scorers") or []:
+                if s.get("player_id") == profile_id or s.get("id") == profile_id:
+                    bucket["goals"] += int(s.get("goals", 0) or 0)
+                    bucket["points"] += int(s.get("points", 0) or s.get("score", 0) or 0)
+            # Award chips
+            awards = fx.get("awards") or {}
+            for key in ("mom", "top_scorer"):
+                who = awards.get(key)
+                pid = who.get("player_id") if isinstance(who, dict) else who
+                if pid == profile_id:
+                    bucket[key] += 1
+        # Merge into result.
+        for sport, bag in per_sport.items():
+            # Drop empty counters so the UI shows a "No stats yet" state cleanly.
+            clean = {k: v for k, v in bag.items() if v}
+            existing = result.get(sport) or {"auto": {}, "manual": manual.get(sport) or {}}
+            existing["auto"] = clean
+            result[sport] = existing
 
     return result
 

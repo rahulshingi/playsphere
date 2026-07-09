@@ -48,9 +48,15 @@ export default function PlayerTournamentsSection({ profileId, isOwner, playerNam
   if (!isOwner && hosted.length === 0 && localMatches.length === 0 && nonLocalPlayed.length === 0) return null;
 
   return (
-    <div className="space-y-8 mt-10" data-testid="player-tournaments-section">
+    <div className="space-y-8 mt-10" data-testid="player-tournaments-section" id="my-matches">
+      <div className="flex items-center gap-3 flex-wrap border border-white/10 rounded-sm bg-[#0f0f0f] p-3">
+        <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 mr-2">Jump to</div>
+        <a href="#my-matches-local-scores" className="text-[11px] font-mono uppercase tracking-widest px-2 py-1 rounded-sm bg-[#84CC16]/10 text-[#84CC16] border border-[#84CC16]/30 hover:bg-[#84CC16]/20">Local scores ({localMatches.length})</a>
+        <a href="#my-matches-hosted" className="text-[11px] font-mono uppercase tracking-widest px-2 py-1 rounded-sm bg-white/5 text-neutral-300 border border-white/10 hover:bg-white/10">Hosted ({hosted.length})</a>
+        <a href="#my-matches-played" className="text-[11px] font-mono uppercase tracking-widest px-2 py-1 rounded-sm bg-[#06B6D4]/10 text-[#06B6D4] border border-[#06B6D4]/30 hover:bg-[#06B6D4]/20">Tournaments ({nonLocalPlayed.length})</a>
+      </div>
       {/* HOSTED */}
-      <section className="border border-white/10 rounded-sm bg-[#141414] p-5">
+      <section id="my-matches-hosted" className="border border-white/10 rounded-sm bg-[#141414] p-5 scroll-mt-24">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Local matches hosted</div>
@@ -79,7 +85,7 @@ export default function PlayerTournamentsSection({ profileId, isOwner, playerNam
 
       {/* LOCAL MATCH SCORES — per-match cards for local tournaments played */}
       {localMatches.length > 0 && (
-        <section className="border border-white/10 rounded-sm bg-[#141414] p-5" data-testid="local-match-scores-section">
+        <section id="my-matches-local-scores" className="border border-white/10 rounded-sm bg-[#141414] p-5 scroll-mt-24" data-testid="local-match-scores-section">
           <div className="mb-4">
             <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Local match scores</div>
             <div className="font-display tracking-wider text-2xl mt-1">LOCAL MATCH SCORES ({localMatches.length})</div>
@@ -94,7 +100,7 @@ export default function PlayerTournamentsSection({ profileId, isOwner, playerNam
 
       {/* NON-LOCAL TOURNAMENTS PLAYED */}
       {nonLocalPlayed.length > 0 && (
-        <section className="border border-white/10 rounded-sm bg-[#141414] p-5">
+        <section id="my-matches-played" className="border border-white/10 rounded-sm bg-[#141414] p-5 scroll-mt-24">
           <div className="mb-4">
             <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#06B6D4]">/ Tournaments played</div>
             <div className="font-display tracking-wider text-2xl mt-1">TOURNAMENTS PLAYED ({nonLocalPlayed.length})</div>

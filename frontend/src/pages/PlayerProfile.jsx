@@ -149,6 +149,11 @@ export default function PlayerProfile() {
                 <Pencil className="w-4 h-4 mr-1" /> Edit profile
               </Button>
             )}
+            {!editing && (
+              <a href="#my-matches" data-testid="pp-my-matches-link" className="inline-flex items-center gap-1 px-3 py-2 rounded-sm bg-white/5 hover:bg-white/10 text-white text-sm border border-white/10 font-mono uppercase tracking-widest">
+                My matches ↓
+              </a>
+            )}
           </div>
         </div>
 

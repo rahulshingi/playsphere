@@ -1715,7 +1715,8 @@ async def player_login(body: PlayerLoginBody, response: Response):
 
 @api.get("/players/me")
 async def get_my_player_profile(user: dict = Depends(get_current_user)):
-    if user.get("role") != "player":
+    # Native `role=player` OR HR/organiser/admin who opted-in via /auth/also-player.
+    if user.get("role") != "player" and not user.get("also_player"):
         raise HTTPException(403, "Player only")
     doc = await db.player_profiles.find_one({"user_id": user["id"]}, {"_id": 0})
     if not doc:
@@ -1725,7 +1726,7 @@ async def get_my_player_profile(user: dict = Depends(get_current_user)):
 
 @api.patch("/players/me")
 async def update_my_profile(body: dict, user: dict = Depends(get_current_user)):
-    if user.get("role") != "player":
+    if user.get("role") != "player" and not user.get("also_player"):
         raise HTTPException(403, "Player only")
     body.pop("id", None)
     body.pop("user_id", None)

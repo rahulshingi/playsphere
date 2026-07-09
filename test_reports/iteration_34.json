@@ -1,0 +1,27 @@
+{
+  "summary": "Retest of iter41 HIGH bug: /api/players/me (GET + PATCH) 403 for also_player users. Fix (server.py lines 1719 & 1729 guard widened to `role=='player' OR user.get('also_player')`) verified. Backend pytest suite now 15/15 green (test_batch_bugs_iter40.py 8/8 + test_iter41_extended.py 7/7 — extended the also_player test to also cover PATCH persistence). Browser E2E: logged in admin, enabled also_player, navigated to /players/me — page renders profile (no dev-mode red overlay, no Uncaught Axios 403). Feature #4 is now fully functional end-to-end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iter41_extended.py",
+    "/app/backend/tests/test_batch_bugs_iter40.py",
+    "/app/test_reports/pytest/iter34.xml",
+    "/app/test_reports/players_me_after_fix.png"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py::get_my_player_profile & update_my_profile — profile is resolved via db.player_profiles.find_one({'user_id': user['id']}). This is correct for both native players AND also_player users because /auth/also-player creates a PlayerProfile with user_id=user['id'] on opt-in. Guard fix is minimal and correct.",
+    "PATCH /players/me still pops 'view_count' and 'mobile' — good hardening, no regression.",
+    "The route allows any also_player user (once opted-in) to edit their PlayerProfile. As long as toggle-off cleans up appropriately (leaves the doc but sets also_player=false), behaviour is consistent; no security regression observed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter41_extended.py (extended TestAlsoPlayerUnlocksPlayersMe to also cover PATCH persistence + GET re-verify)"
+  ],
+  "success_rate": {"backend": "15/15 (100%)", "frontend": "1/1 (browser reload of /players/me for also_player admin renders profile cleanly)"},
+  "test_credentials": "admin@kreedanation.com/admin123 ✓ (used); testplayer@example.com/player123 available.",
+  "seed_data_creation": "None. Also_player toggle was cleaned up after test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter41 HIGH bug closed. Feature #4 (HR/organiser/admin opt-in as also-player) now works E2E: /api/auth/also-player toggles the flag AND auto-creates a PlayerProfile linked by user_id; /api/players/me GET+PATCH both accept role=='player' OR also_player=True. Only remaining optional item from iter41 report (no P0/P1): (a) decide whether platform_admin should see the also-player banner in Admin.jsx (currently hidden by !isPlatformAdmin), and (b) seed an HR/organiser QA account with documented password to exercise the banner UI in preview.",
+  "rca of the issue": "Original iter41 defect: /api/players/me (server.py 1716-1744) gated strictly on user.role=='player', returning 403 for HR/organiser/admin who opted in via /auth/also-player. Frontend PlayerProfile.jsx had already widened its route guard, so the SPA navigated in and then axios.get('/players/me') threw a 403, triggering the CRA dev-mode 'Uncaught runtime errors' red overlay. Fix (already applied by main agent): change `if user.get('role') != 'player'` to `if user.get('role') != 'player' and not user.get('also_player')` in BOTH get_my_player_profile (line 1719) and update_my_profile (line 1729). Verified end-to-end: backend GET/PATCH return 200 with persisted jersey_number=42, browser /players/me route renders admin profile with no overlay."
+}

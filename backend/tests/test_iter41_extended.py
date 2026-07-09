@@ -128,5 +128,18 @@ class TestAlsoPlayerUnlocksPlayersMe:
             # /players/me should be accessible (returns the player profile)
             pm = admin_session.get(f"{API}/players/me", timeout=10)
             assert pm.status_code == 200, pm.text
+            profile = pm.json()
+            assert profile.get("user_id"), "profile should include user_id"
+
+            # PATCH /players/me should also be allowed for also_player users
+            jersey = 7
+            patch = admin_session.patch(f"{API}/players/me", json={"jersey_number": jersey}, timeout=10)
+            assert patch.status_code == 200, patch.text
+            updated = patch.json()
+            assert updated.get("jersey_number") == jersey, f"jersey_number not persisted: {updated}"
+
+            # Verify persistence via a follow-up GET
+            pm2 = admin_session.get(f"{API}/players/me", timeout=10).json()
+            assert pm2.get("jersey_number") == jersey
         finally:
             admin_session.post(f"{API}/auth/also-player", json={"enabled": False}, timeout=10)

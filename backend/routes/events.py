@@ -162,6 +162,19 @@ def register(api, db, deps):
             q = {"$and": [q, hide_hidden]} if q else hide_hidden
 
         docs = await db.events.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
+        # Auto-mark events whose end_date passed as `completed`. The status
+        # field is only stored by admins during setup; without this cascade,
+        # a Sunday-morning match still says "upcoming" a week later. We flip
+        # in-memory here + persist so subsequent reads are stable.
+        today = datetime.now(timezone.utc).date().isoformat()
+        stale_ids = [d["id"] for d in docs
+                     if d.get("status") in ("upcoming", "ongoing")
+                     and (d.get("end_date") or d.get("start_date") or "9999-99-99") < today]
+        if stale_ids:
+            await db.events.update_many({"id": {"$in": stale_ids}}, {"$set": {"status": "completed"}})
+            for d in docs:
+                if d["id"] in stale_ids:
+                    d["status"] = "completed"
         return [Event(**d) for d in docs]
 
     @api.get("/my/teams", response_model=List[Team])
@@ -233,6 +246,12 @@ def register(api, db, deps):
         doc = await db.events.find_one({"id": event_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Event not found")
+        # Auto-complete stale events whose end_date has passed.
+        today = datetime.now(timezone.utc).date().isoformat()
+        if (doc.get("status") in ("upcoming", "ongoing")
+                and (doc.get("end_date") or doc.get("start_date") or "9999-99-99") < today):
+            await db.events.update_one({"id": event_id}, {"$set": {"status": "completed"}})
+            doc["status"] = "completed"
         return Event(**doc)
 
     @api.post("/events", response_model=Event)
@@ -296,6 +315,16 @@ def register(api, db, deps):
         if not url:
             raise HTTPException(400, "url required")
         photos = list(ev.get("photos") or [])
+        # Cap at 7 — keeps the gallery visually tight (single 3-2-2 grid row on
+        # mobile) and prevents runaway storage costs on popular local matches.
+        if url in photos:
+            return {"ok": True, "photos": photos}
+        if len(photos) >= 7:
+            raise HTTPException(
+                400,
+                "Photo limit reached — you can have up to 7 photos in the gallery. "
+                "Remove one before adding another.",
+            )
         photos.append(url)
         await db.events.update_one({"id": event_id}, {"$set": {"photos": photos}})
         return {"ok": True, "photos": photos}

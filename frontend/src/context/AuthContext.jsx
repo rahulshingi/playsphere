@@ -98,7 +98,11 @@ export const AuthProvider = ({ children }) => {
     hasPermission: (perm) => !!user && (user.role === "platform_admin" || user.role === "admin") && (user.is_super_admin || (user.permissions || []).includes(perm)),
     isCompanyAdmin: !!user && (user.role === "company_admin" || user.role === "organiser"),
     isOrganiser: !!user && user.role === "organiser",
-    isPlayer: !!user && user.role === "player",
+    // Native player role OR any user (HR/organiser/admin) who opted in
+    // as a player via `POST /auth/also-player`. Every place we check
+    // `isPlayer` also needs to be reachable by these dual-role users —
+    // /players/me, /admin (host match), match-history, etc.
+    isPlayer: !!user && (user.role === "player" || user.also_player === true),
     isVendor: !!user && user.role === "vendor",
     isSponsor: !!user && user.role === "sponsor",
     isScorer: !!user && user.role === "scorer",

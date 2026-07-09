@@ -41,8 +41,8 @@ export default function Login() {
 
         <form onSubmit={submit} className="mt-10 space-y-4">
           <div>
-            <Label className="text-xs font-mono uppercase text-neutral-500">Email</Label>
-            <Input data-testid="login-email" value={email} onChange={(e) => setEmail(e.target.value)} required type="email" className="mt-2 bg-[#141414] border-white/10 text-white" />
+            <Label className="text-xs font-mono uppercase text-neutral-500">Email or mobile number</Label>
+            <Input data-testid="login-email" value={email} onChange={(e) => setEmail(e.target.value)} required type="text" autoComplete="username" placeholder="you@company.com or 98765..." className="mt-2 bg-[#141414] border-white/10 text-white" />
           </div>
           <div>
             <Label className="text-xs font-mono uppercase text-neutral-500">Password</Label>

@@ -1,0 +1,44 @@
+{
+  "summary": "Iter41 verification of 6 user-reported bugs/features from iter40. Backend suite iter40 (8/8) reruns green. Added 7 new extended tests (test_iter41_extended.py) covering future-date event stays upcoming, mobile-login format variants, quick-add welcome-email path, and also_player E2E. 14/15 passing. One critical E2E gap discovered: /api/players/me still gates on role=='player' and returns 403 for also_player=true users, breaking Feature #4 end-to-end (frontend shows Axios 403 red-screen when admin/HR/organiser navigates to /players/me after opting in).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET/PATCH /api/players/me", "issue": "Backend gate `user.role != 'player'` returns 403 even when `also_player=true`. Frontend PlayerProfile.jsx already widened its route guard to allow also_player users; backend must match. Response body: {\"detail\":\"Player only\"}. This breaks the whole Feature #4 UX (Uncaught AxiosError overlay).", "priority": "HIGH"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PlayerProfile.jsx (/players/me)", "issue": "Route allows also_player user in, then GET /api/players/me returns 403 → dev overlay 'Uncaught runtime errors: Request failed with status code 403'. Add try/catch around the fetch OR wait for backend fix.", "selector": "n/a", "priority": "HIGH"},
+      {"component": "Admin.jsx also-player-banner", "issue": "Banner is intentionally hidden for `isPlatformAdmin` (`!isPlatformAdmin` guard on line 209). Review request expected platform admin to see the banner too; either update banner condition OR update review expectation. Currently the banner will only show for HR/company_admin/organiser roles — none of which have documented QA credentials in test_credentials.md, so this UI cannot be exercised end-to-end in preview.", "selector": "[data-testid='also-player-banner']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Feature #4 also-player E2E (login → enable → /players/me)", "issue": "Frontend allows navigation to /players/me for also_player users but backend rejects the API call → dev-overlay error. See critical backend issue above.", "affected_selectors": ["/api/players/me"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_batch_bugs_iter40.py",
+    "/app/backend/tests/test_iter41_extended.py",
+    "/app/test_reports/pytest/iter41_all.xml"
+  ],
+  "action_items": [
+    "Widen backend guard in /app/backend/server.py::get_my_player_profile (line 1716) and update_my_profile (line 1726) to allow `user.get('also_player') is True` in addition to `role == 'player'`. Resolve player_profile_id from the user document when role != 'player'.",
+    "Optional: decide whether platform_admin should see the also-player banner in Admin.jsx (currently hidden by `!isPlatformAdmin`).",
+    "Optional: create a seeded HR/organiser QA account with documented password so the also-player UI banner + badge can be exercised end-to-end in preview."
+  ],
+  "critical_code_review_comments": [
+    "backend/server.py::get_my_player_profile (1716-1723) and update_my_profile (1726-1744) — role gate needs widening for also_player parity with the frontend PlayerProfile.jsx (line 65) and AuthContext.isPlayer.",
+    "backend/server.py::_user_with_company already surfaces `player_profile_id` (line 978+) — reuse that logic inside /players/me to look up profile by id when role!=player.",
+    "test_credentials.md — no seeded HR / company_admin account with a documented password (acme@example.com is listed but not verifiable in the clean-slate preview). Blocks HR-path browser tests for Feature #4."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter41_extended.py (new — 7 extended tests)"
+  ],
+  "success_rate": {"backend": "14/15 (93%)", "frontend": "5/6 flows working (login email+mobile+wrong-pw ✓, /hire sport picker ✓, event auto-complete via backend ✓, also-player UI blocked by backend 403)"},
+  "test_credentials": "admin@kreedanation.com/admin123 ✓; testplayer@example.com/player123 ✓; mobile 9000000001 ✓; +919000000001 ✓. No HR/organiser account with documented password (blocks Feature #4 UI banner test).",
+  "seed_data_creation": "None. Test users are created ephemerally per test and cleaned up.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The only failure is backend /api/players/me still rejecting also_player=true users. Fix is a 2-line change: allow role=='player' OR user.get('also_player') and resolve profile via user['player_profile_id']. All other iter40 features verified end-to-end (login mobile/email/+91 prefix, event auto-complete, photo cap enforced by backend, /vendor-listings/sports endpoint contract, quick-add temp_password path, also_player toggle API). Ran BACKEND_URL=https://live-scoring-hub-5.preview.emergentagent.com pytest backend/tests/test_batch_bugs_iter40.py backend/tests/test_iter41_extended.py — 14 pass, 1 fail. Photo-cap UI not exercised in browser (backend contract already green); if needed, upload 7 photos to any test event and confirm 'n/7 photos' + disabled Upload button.",
+  "rca of the issue": "Feature #4 (HR/organiser opt-in as also-player) shipped iter40 with the frontend gates widened (PlayerProfile.jsx line 65 and AuthContext.isPlayer) and a new /auth/also-player endpoint, but the /api/players/me GET+PATCH endpoints (server.py 1716-1744) were NOT updated to accept also_player users. Reproduction: login admin@kreedanation.com/admin123 → POST /api/auth/also-player {enabled:true} (200) → GET /api/auth/me returns also_player=true & player_profile_id → GET /api/players/me returns 403 'Player only'. Frontend PlayerProfile.jsx navigates in based on the widened gate but the axios.get('/players/me') then throws, popping the dev-mode red overlay. Fix: change `if user.get('role') != 'player'` to `if user.get('role') != 'player' and not user.get('also_player')` in both endpoints, and when also_player is set, look up profile by `user['player_profile_id']` (already stored on the user doc by toggle_also_player)."
+}

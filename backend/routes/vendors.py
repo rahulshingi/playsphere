@@ -279,6 +279,15 @@ def register(api, db, deps):
         cities = await db.vendor_listings.distinct("city", flt)
         return sorted([c for c in cities if c])
 
+    @api.get("/vendor-listings/sports")
+    async def list_listing_sports():
+        """Distinct sport slugs that have at least one approved+active listing.
+        Consumed by the /hire wizard to filter its sport-picker so admin-added
+        sports (e.g. snooker/pool) show up as soon as a vendor lists a table."""
+        flt = {"approved": True, "active": True}
+        sports = await db.vendor_listings.distinct("sports", flt)
+        return sorted([s for s in sports if s])
+
     @api.get("/vendor-listings/{listing_id}")
     async def get_public_listing(listing_id: str):
         doc = await db.vendor_listings.find_one({"id": listing_id, "approved": True, "active": True}, {"_id": 0})

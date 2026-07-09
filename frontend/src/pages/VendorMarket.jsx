@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
 import { SPORTS } from "@/lib/sports";
+import { useSports } from "@/hooks/useSports";
 import { MapPin, BadgeCheck, ChevronRight, Calendar, Clock, Sparkles } from "lucide-react";
 import VerifiedBadge from "@/components/VerifiedBadge";
 import { minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
@@ -29,6 +30,16 @@ const VENUE_TYPES = ["ground", "court"];
 export default function VendorMarket() {
   const { ready, user } = useAuth();
   const nav = useNavigate();
+
+  // Live sport list — includes admin-added sports (e.g. snooker/pool) that
+  // aren't in the hardcoded fallback in /lib/sports.js. Filter to ONLY sports
+  // that at least one active vendor listing actually offers, so the picker
+  // doesn't show empty categories.
+  const { sports: allSports } = useSports();
+  const [availableSportValues, setAvailableSportValues] = useState(null);
+  const dynamicSports = (availableSportValues
+    ? allSports.filter((s) => availableSportValues.has(s.value))
+    : allSports.length > 0 ? allSports : SPORTS);
 
   // Wizard state
   const [vendorType, setVendorType] = useState("ground");
@@ -53,6 +64,15 @@ export default function VendorMarket() {
   };
 
   // When sport is picked, fetch cities
+  useEffect(() => {
+    // Which sports have at least one active vendor listing? Filters the
+    // sport-picker so we don't show buckets that would return zero results.
+    api.get("/vendor-listings/sports").then((r) => {
+      const values = new Set(r.data || []);
+      setAvailableSportValues(values);
+    }).catch(() => setAvailableSportValues(null));
+  }, []);
+
   useEffect(() => {
     if (!sport) { setCities([]); setCity(""); setListings([]); return; }
     api.get(`/vendor-listings/cities?sport=${encodeURIComponent(sport)}&vendor_type=${vendorType}`)
@@ -161,7 +181,7 @@ export default function VendorMarket() {
           <SectionTitle n="1" title="Pick a sport" />
         )}
         <div className="mt-3 flex flex-wrap gap-2">
-          {SPORTS.map((s) => (
+          {dynamicSports.map((s) => (
             <button
               key={s.value}
               data-testid={`vm-sport-${s.value}`}

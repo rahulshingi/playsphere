@@ -204,6 +204,39 @@ export default function Admin() {
         <h1 className="font-display text-6xl tracking-wide mt-3">ADMIN</h1>
         <p className="text-neutral-400 mt-2">Manage tournaments, teams and sponsors.</p>
 
+        {/* HR / Organiser opt-in to also act as a player. Rendered only for
+            non-platform-admin roles who haven't already opted in. */}
+        {isAdmin && !isPlatformAdmin && !user?.also_player && (
+          <div data-testid="also-player-banner" className="mt-5 border border-[#84CC16]/30 rounded-sm bg-[#84CC16]/5 p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Personal player profile</div>
+              <div className="text-white text-sm mt-1">Play in the events you organise?</div>
+              <div className="text-xs text-neutral-400 mt-0.5">Turn on your player profile to be rostered on teams and track your own stats — same login, no extra account.</div>
+            </div>
+            <Button
+              data-testid="enable-also-player-btn"
+              onClick={async () => {
+                try {
+                  await api.post("/auth/also-player", { enabled: true });
+                  toast.success("Player profile enabled — refresh to see your new menu items");
+                  setTimeout(() => window.location.reload(), 800);
+                } catch (err) {
+                  toast.error(err.response?.data?.detail || "Failed to enable");
+                }
+              }}
+              className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm whitespace-nowrap"
+            >
+              Enable my player profile
+            </Button>
+          </div>
+        )}
+        {isAdmin && !isPlatformAdmin && user?.also_player && (
+          <div data-testid="also-player-active" className="mt-5 border border-[#84CC16]/30 rounded-sm bg-[#84CC16]/5 p-3 flex items-center gap-3">
+            <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm bg-[#84CC16] text-black">PLAYER PROFILE ACTIVE</span>
+            <span className="text-xs text-neutral-400">You can now be rostered on teams &amp; visible in the player directory as <b className="text-white">{user.role === "organiser" ? "ORGANISER" : "HR"}</b>.</span>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-6 gap-px bg-white/10 mt-8 border border-white/10 rounded-sm overflow-hidden">
           {[
             ["Events", stats.events], ["Teams", stats.teams], ["Players", stats.players],

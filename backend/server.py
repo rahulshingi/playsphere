@@ -204,6 +204,11 @@ class UserPublic(BaseModel):
     company_name: Optional[str] = None
     is_super_admin: Optional[bool] = False
     permissions: Optional[List[str]] = None
+    # HR / Organiser opt-in to also act as a player. When true they get a
+    # PlayerProfile (auto-created below) and can host local matches, be
+    # rostered onto teams, and accrue player stats — all under the same login.
+    also_player: Optional[bool] = False
+    player_profile_id: Optional[str] = None
 
 
 class RegisterBody(BaseModel):
@@ -213,7 +218,11 @@ class RegisterBody(BaseModel):
 
 
 class LoginBody(BaseModel):
-    email: EmailStr
+    # Accept either an email or a mobile number in the same field. The route
+    # detects which and looks up the user accordingly. Kept the name `email`
+    # for wire-format backwards compatibility; the FE now labels it
+    # "Email or mobile number".
+    email: str
     password: str
 
 
@@ -923,6 +932,31 @@ class SiteSettings(BaseModel):
     offline_subscription_locks_existing_price: bool = True
 
 
+@api.post("/auth/also-player")
+async def toggle_also_player(body: dict, user: dict = Depends(get_current_user)):
+    """HR / organiser opts in (or out) of being a player too. On opt-in,
+    creates a PlayerProfile keyed to their user_id if one doesn't exist yet
+    (idempotent). On opt-out, keeps the profile but sets `also_player=False`
+    so the top-nav player links disappear — no data loss."""
+    if user.get("role") not in ("company_admin", "organiser", "platform_admin", "admin"):
+        raise HTTPException(403, "Only HR, organiser, or admin accounts can opt-in as a player")
+    enabled = bool((body or {}).get("enabled", True))
+    await db.users.update_one({"id": user["id"]}, {"$set": {"also_player": enabled}})
+    if enabled:
+        existing = await db.player_profiles.find_one({"user_id": user["id"]}, {"_id": 0})
+        if not existing:
+            prof = PlayerProfile(
+                user_id=user["id"],
+                name=user.get("name") or user.get("email", "").split("@")[0],
+                mobile=user.get("mobile") or "",
+                email=user.get("email"),
+                company_id=user.get("company_id"),
+                slug=await _unique_player_slug(user.get("name") or "player"),
+            )
+            await db.player_profiles.insert_one(prof.model_dump())
+    return {"ok": True, "also_player": enabled}
+
+
 async def _user_with_company(user: dict) -> dict:
     """Attach company_name (if any) and strip password fields."""
     out = {k: user.get(k) for k in ["id", "email", "name", "role", "company_id"]}
@@ -939,6 +973,13 @@ async def _user_with_company(user: dict) -> dict:
             out["permissions"] = list(ALL_PERMISSIONS)
         else:
             out["permissions"] = list(user.get("permissions") or [])
+    # `also_player` opt-in — surfaces PlayerProfile.id so the frontend can
+    # jump straight to /players/me (and enable "Host match" for HR/organiser).
+    if user.get("also_player"):
+        out["also_player"] = True
+        prof = await db.player_profiles.find_one({"user_id": user.get("id")}, {"_id": 0, "id": 1})
+        if prof:
+            out["player_profile_id"] = prof["id"]
     return out
 
 
@@ -1247,6 +1288,17 @@ async def _quick_add_player(quick: dict, team: dict) -> tuple:
     await db.player_profiles.insert_one(prof.model_dump())
     logger.warning("Quick-add player created: name=%s mobile=%s email=%s temp_password=%s",
                    name, mobile, login_email, temp_password)
+    # Best-effort email — only sent when a real email was provided (not the
+    # synthetic `player_<mobile>@players.playsphere.app`). SendGrid failures
+    # are swallowed here so the caller still succeeds; the API response
+    # returns `temp_password` for the organiser to share manually.
+    if email:
+        try:
+            from email_service import send_welcome_email  # type: ignore
+            send_welcome_email(to=email, name=name, temp_password=temp_password,
+                               login_url=(os.environ.get("FRONTEND_URL", "") + "/login"))
+        except Exception as exc:  # pragma: no cover — best-effort
+            logger.info("Welcome email skipped for %s: %s", email, exc)
     return prof.id, temp_password
 
 

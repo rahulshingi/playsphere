@@ -181,13 +181,26 @@ def _register_core_auth(api, db, ctx: SimpleNamespace):
     async def auth_login(body: LoginBody, response: Response):
         # Guard against copy-paste whitespace — a common cause of "correct
         # password but still fails" reports from real users.
-        email = (body.email or "").strip().lower()
+        raw = (body.email or "").strip()
         password = (body.password or "").rstrip("\r\n\t ")
-        user = await db.users.find_one({"email": email})
+        # Detect mobile input — anything without an @ that contains digits.
+        # We normalise by keeping only digits (users often paste "+91 98765-…"
+        # variants) and then match against user.mobile suffix or exact.
+        if "@" in raw:
+            user = await db.users.find_one({"email": raw.lower()})
+        else:
+            digits = "".join(c for c in raw if c.isdigit())
+            if not digits:
+                raise HTTPException(status_code=401, detail="Invalid email or mobile")
+            # Try exact match on `mobile` first, then a suffix match to be
+            # tolerant of +91 vs plain 10-digit inputs.
+            user = await db.users.find_one({"mobile": raw})
+            if not user:
+                user = await db.users.find_one({"mobile": {"$regex": f"{digits[-10:]}$"}})
         if not user or not ctx.verify_password(password, user["password_hash"]):
             reason = "no-user" if not user else "bad-password"
-            logger.info("LOGIN FAIL email=%s reason=%s", email, reason)
-            raise HTTPException(status_code=401, detail="Invalid email or password")
+            logger.info("LOGIN FAIL input=%s reason=%s", raw[:40], reason)
+            raise HTTPException(status_code=401, detail="Invalid credentials — check your email/mobile and password.")
         if user.get("disabled"):
             raise HTTPException(
                 status_code=403,

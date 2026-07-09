@@ -21,16 +21,15 @@ import VendorMembershipsPanel from "@/components/vendor/VendorMembershipsPanel";
 import OfflineModeCard from "@/components/vendor/OfflineModeCard";
 import InvoiceSettingsPanel from "@/components/vendor/InvoiceSettingsPanel";
 import OfflineBusinessSuite from "@/components/vendor/OfflineBusinessSuite";
+import { useSports } from "@/hooks/useSports";
 
-const SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
+// Fallback sport list used when /api/sports hasn't loaded yet. The live list
+// comes from `useSports()` inside the component so admin-added sports (e.g.
+// snooker/pool, pickleball) appear immediately in the listing form.
+const FALLBACK_SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
 
+// Per-type activity overrides — e.g. `gym` uses fitness activities, not sports.
 const ACTIVITY_BY_TYPE = {
-  ground: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
-  court: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
-  coach: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
-  referee: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
-  umpire: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
-  trainer: ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
   gym: ["gym", "yoga", "zumba", "crossfit", "pilates", "cardio", "strength"],
   studio: ["yoga", "zumba", "pilates", "dance", "aerobics"],
 };
@@ -263,6 +262,9 @@ export default function VendorDashboard() {
 }
 
 function ListingEditor({ listing, setListing, onSave, onClose }) {
+  const { sports: liveSports } = useSports();
+  const sportValues = (liveSports || []).map((s) => s.value).filter((v) => v && v !== "other");
+  const availableSports = sportValues.length > 0 ? sportValues : FALLBACK_SPORTS;
   const upd = (patch) => setListing({ ...listing, ...patch });
   const addImage = () => upd({ images: [...(listing.images || []), ""] });
   const updImage = (i, v) => { const next = [...listing.images]; next[i] = v; upd({ images: next }); };
@@ -353,7 +355,7 @@ function ListingEditor({ listing, setListing, onSave, onClose }) {
           <div>
             <Label className="text-xs font-mono uppercase text-neutral-500">{t === "ground" || t === "court" ? "Suitable sports" : (t === "gym" || t === "studio") ? "Activities offered" : "Specialises in"}</Label>
             <div className="flex flex-wrap gap-2 mt-2">
-              {(ACTIVITY_BY_TYPE[t] || SPORTS).map((s) => (
+              {(ACTIVITY_BY_TYPE[t] || availableSports).map((s) => (
                 <button key={s} type="button" onClick={() => toggleSport(s)} data-testid={`vl-sport-${s}`}
                   className={`px-3 py-1.5 text-xs font-mono uppercase rounded-sm border ${listing.sports?.includes(s) ? "bg-[#84CC16] text-black border-[#84CC16]" : "border-white/10 text-neutral-400"}`}>
                   {s}

@@ -61,7 +61,8 @@ export default function PlayerProfile() {
   const [editing, setEditing] = useState(false);
 
   useEffect(() => {
-    if (ready && (!user || user.role !== "player")) { nav("/players/login"); return; }
+    // Native player OR HR/organiser opted-in via `also_player`.
+    if (ready && (!user || (user.role !== "player" && !user.also_player))) { nav("/players/login"); return; }
     if (ready) {
       api.get("/players/me").then((r) => {
         const migrated = withLegacyMigration(r.data);
@@ -131,6 +132,11 @@ export default function PlayerProfile() {
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Your Profile</div>
             <h1 className="font-display text-5xl tracking-wide mt-2">{profile.name?.toUpperCase()}</h1>
+            {user?.also_player && user?.role !== "player" && (
+              <span data-testid="pp-role-badge" className="inline-block mt-2 font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm bg-[#06B6D4] text-black">
+                {user.role === "organiser" ? "ORGANISER · PLAYER" : "HR · PLAYER"}
+              </span>
+            )}
             <p className="text-neutral-400 text-sm mt-2 font-mono">{profile.mobile}</p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">

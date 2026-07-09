@@ -75,12 +75,15 @@ export default function EventPhotoGallery({ event, canManage, onChange }) {
               onChange={(e) => onPickFile(e.target.files?.[0])}
               className="hidden"
             />
+            <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+              {photos.length}/7 photos
+            </div>
             <Button
               type="button"
               data-testid="gallery-upload-btn"
-              disabled={uploading}
+              disabled={uploading || photos.length >= 7}
               onClick={() => fileRef.current?.click()}
-              className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm"
+              className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm disabled:opacity-50"
             >
               <Upload className="w-4 h-4 mr-1.5" /> {uploading ? "Uploading…" : "Upload photo"}
             </Button>

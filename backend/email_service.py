@@ -116,3 +116,36 @@ def send_password_reset_email(to: str, reset_url: str, name: str = "") -> bool:
     </div>
     """
     return send_email(to=to, subject=subject, html=html)
+
+
+
+def send_welcome_email(to: str, name: str, temp_password: Optional[str], login_url: str = "") -> bool:
+    """Sent to a player when an organiser/HR/admin auto-creates their account
+    while adding them to a team. Includes the login URL, their email, and a
+    temporary password. Player must reset on first login (must_reset flag on
+    the user doc)."""
+    subject = "Welcome to Kreeda Nation — your account is ready"
+    login_link = login_url or "https://kreedanation.com/login"
+    greeting = f"Hi{(' ' + name) if name else ''},"
+    html = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#e5e5e5;padding:32px 20px;">
+      <div style="max-width:560px;margin:auto;background:#141414;border:1px solid #ffffff14;border-radius:6px;padding:32px;">
+        <div style="font-size:11px;letter-spacing:.3em;color:#84CC16;text-transform:uppercase;font-family:ui-monospace,monospace;">/ Welcome to Kreeda Nation</div>
+        <h1 style="font-size:30px;letter-spacing:.05em;margin:12px 0 24px;color:#fff;">YOUR PLAYER ACCOUNT IS READY</h1>
+        <p>{greeting}</p>
+        <p>Someone added you to a match team on Kreeda Nation, so we've created a player profile for you. Log in with the details below to see your matches, record your stats, and connect with teammates.</p>
+        <div style="background:#0a0a0a;border:1px solid #ffffff14;border-radius:4px;padding:16px;margin:20px 0;font-family:ui-monospace,monospace;">
+          <div style="font-size:10px;color:#737373;text-transform:uppercase;letter-spacing:.2em;margin-bottom:8px;">Login</div>
+          <div style="font-size:14px;color:#84CC16;">Email: {to}</div>
+          <div style="font-size:14px;color:#84CC16;margin-top:6px;">Temporary password: <b>{temp_password or '(please use forgot-password)'}</b></div>
+        </div>
+        <p style="text-align:center;margin:28px 0;">
+          <a href="{login_link}" style="display:inline-block;background:#84CC16;color:#000;font-weight:700;padding:14px 32px;border-radius:4px;text-decoration:none;letter-spacing:.05em;">SIGN IN &amp; SET YOUR PASSWORD</a>
+        </p>
+        <p style="font-size:13px;color:#a3a3a3;">You'll be asked to change this temporary password on first login for security. If you'd rather not use this account, ignore this email — the profile won't affect your privacy.</p>
+        <hr style="border:none;border-top:1px solid #ffffff14;margin:28px 0;"/>
+        <p style="font-size:11px;color:#737373;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.2em;">Kreeda Nation · Where teams compete, connect &amp; grow</p>
+      </div>
+    </div>
+    """
+    return send_email(to=to, subject=subject, html=html)

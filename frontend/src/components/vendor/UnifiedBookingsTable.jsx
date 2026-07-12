@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { CheckCircle2, XCircle, Filter, Calendar as CalendarIcon, Clock, Users } from "lucide-react";
 import { fmtPrice } from "@/lib/currency";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 /**
  * Unified booking table for the vendor dashboard (Task 44 · Feb 2026).
@@ -21,8 +25,8 @@ import { fmtPrice } from "@/lib/currency";
  */
 const RANGE_OPTIONS = [
   { key: "today", label: "Today" },
-  { key: "week", label: "This week" },
-  { key: "month", label: "This month" },
+  { key: "week", label: "Last 7 days" },
+  { key: "month", label: "Last 30 days" },
   { key: "all", label: "All" },
 ];
 const STATUS_OPTIONS = [
@@ -66,13 +70,17 @@ function inRange(dateStr, key) {
   if (key === "today") {
     return d.toDateString() === now.toDateString();
   }
+  // "Last 7 days" — strictly past-7-day window ending today (inclusive of both).
   if (key === "week") {
-    const weekAgo = new Date(now.getTime() - 7 * 86400000);
-    return d >= weekAgo && d <= new Date(now.getTime() + 7 * 86400000);
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    return d >= start && d < end;
   }
+  // "Last 30 days" — strictly past-30-day window ending today (inclusive).
   if (key === "month") {
-    const monthAgo = new Date(now.getTime() - 30 * 86400000);
-    return d >= monthAgo && d <= new Date(now.getTime() + 30 * 86400000);
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29);
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+    return d >= start && d < end;
   }
   return true;
 }
@@ -83,6 +91,8 @@ export default function UnifiedBookingsTable() {
   const [range, setRange] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [busy, setBusy] = useState(null);
+  // No-show confirmation dialog — row-scoped
+  const [noShowTarget, setNoShowTarget] = useState(null);
 
   const load = () => {
     api.get("/vendor-bookings").then((r) => setOnline(r.data)).catch(() => {});
@@ -148,7 +158,6 @@ export default function UnifiedBookingsTable() {
   };
 
   const markNoShow = async (row) => {
-    if (!window.confirm("Mark this booking as no-show? The slot will be marked expired.")) return;
     setBusy(row.id);
     try {
       const url = row.source === "platform"
@@ -161,6 +170,7 @@ export default function UnifiedBookingsTable() {
       toast.error(e.response?.data?.detail || "Failed");
     } finally {
       setBusy(null);
+      setNoShowTarget(null);
     }
   };
 
@@ -259,7 +269,7 @@ export default function UnifiedBookingsTable() {
                           variant="outline"
                           data-testid={`ub-noshow-${r.id}`}
                           disabled={busy === r.id}
-                          onClick={() => markNoShow(r)}
+                          onClick={() => setNoShowTarget(r)}
                           className="border-[#FF3B30]/40 bg-transparent text-[#FF3B30] hover:bg-[#FF3B30]/10 h-7 rounded-sm text-[10px] px-2"
                         >
                           <XCircle className="w-3 h-3 mr-1" /> No-show
@@ -281,6 +291,29 @@ export default function UnifiedBookingsTable() {
           </tbody>
         </table>
       </div>
+
+      {/* No-show confirmation dialog (P2 UX polish — replaces window.confirm) */}
+      <AlertDialog open={!!noShowTarget} onOpenChange={(v) => !v && setNoShowTarget(null)}>
+        <AlertDialogContent data-testid="ub-noshow-dialog" className="bg-[#0c0c0c] border-white/10 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Mark customer as no-show?</AlertDialogTitle>
+            <AlertDialogDescription className="text-neutral-400">
+              The slot will be marked <span className="text-[#FF3B30] font-semibold">expired</span>.
+              This is reversible only by the platform admin.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="ub-noshow-cancel" className="bg-transparent border-white/10 text-neutral-400 hover:bg-white/5">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              data-testid="ub-noshow-confirm"
+              onClick={() => noShowTarget && markNoShow(noShowTarget)}
+              className="bg-[#FF3B30] hover:bg-[#d72f24] text-white"
+            >
+              Yes, mark no-show
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

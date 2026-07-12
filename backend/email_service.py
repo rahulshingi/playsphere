@@ -30,7 +30,14 @@ def send_email(
     """Send a single email. Returns True on SendGrid 2xx, False otherwise.
 
     Never raises — caller decides how to react to a failure.
+
+    Test-mode: when `EMAIL_MODE=mock` (set by the test runner via
+    conftest.py), returns True without hitting SendGrid — prevents test
+    suites from burning through the daily quota.
     """
+    if os.environ.get("EMAIL_MODE") == "mock":
+        logger.info("[EMAIL MOCK] to=%s subject=%s", to, subject)
+        return True
     api_key = os.environ.get("SENDGRID_API_KEY")
     sender = os.environ.get("SENDER_EMAIL")
     sender_name = os.environ.get("SENDER_NAME", "Kreeda Nation")

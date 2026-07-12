@@ -75,8 +75,31 @@ export default function WelcomeModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" data-testid="welcome-modal">
-      <div className="bg-[#0c0c0c] border rounded-sm w-full max-w-lg p-7 text-white shadow-2xl relative" style={{ borderColor: `${pitch.accent}40` }}>
+    <ModalShell dismiss={dismiss} pitch={pitch} guide={guide} user={user} />
+  );
+}
+
+/** Actual modal DOM — split so we can hook ESC/backdrop dismissal without
+ *  breaking the SSR-safe early-return above. */
+function ModalShell({ dismiss, pitch, guide, user }) {
+  // ESC key dismissal (Task P3)
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") dismiss(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dismiss]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6"
+      data-testid="welcome-modal"
+      onClick={dismiss}
+    >
+      <div
+        className="bg-[#0c0c0c] border rounded-sm w-full max-w-lg p-7 text-white shadow-2xl relative"
+        style={{ borderColor: `${pitch.accent}40` }}
+        onClick={(e) => e.stopPropagation()}
+      >
         <button onClick={dismiss} aria-label="Close" data-testid="welcome-close"
           className="absolute top-3 right-3 text-neutral-500 hover:text-white">
           <X className="w-4 h-4" />

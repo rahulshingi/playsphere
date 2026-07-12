@@ -22,6 +22,16 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 28, 2026 — Iteration 45) P2 + P3 quality polish
+- **WelcomeModal ESC + backdrop dismissal (P3)**: `WelcomeModal.jsx` now dismisses on ESC keypress + backdrop click (event stops propagating inside the content pane). Same localStorage-key persistence — modal never re-shows for the same user. Fixes the recurring "modal intercepts pointer events" report surfaced by testing agents iter35 + iter36.
+- **Range filter labels (P2)**: `UnifiedBookingsTable.jsx` — "This week" → "Last 7 days"; "This month" → "Last 30 days". `inRange()` reimplemented to use strict past-N-day windows ending today (previously used ±N days spanning 14/60 days centered on today).
+- **AlertDialog for no-show (P2)**: replaced `window.confirm` in `UnifiedBookingsTable` with a shadcn `AlertDialog` (data-testid `ub-noshow-dialog` / `ub-noshow-confirm` / `ub-noshow-cancel`) — mobile-friendly, styled consistently with the rest of the app.
+- **Throttled sweep (P2)**: `booking_lifecycle.py` gained `_should_sweep()` — before writing expired-status updates to Mongo, checks a `_sweep_{collection}_at` timestamp on `site_settings` (singleton doc); if the previous sweep ran <60s ago the write is skipped (in-memory statuses still reflect expiration for the returned list). Prevents high-QPS dashboards from re-scanning on every read.
+- **SendGrid mocking in tests (P2)**: new `EMAIL_MODE=mock` env flag on `email_service.send_email()` — short-circuits with a log line, returns True without hitting SendGrid. Set globally in `backend/tests/conftest.py` so pytest runs never burn quota. Production behaviour unchanged (flag unset → normal SendGrid path).
+- **ROADMAP.md extracted (P2 partial)**: new `/app/memory/ROADMAP.md` — prioritised backlog + rolling completed summary. PRD.md remains authoritative for iteration detail; full 3-file split (PRD/CHANGELOG/ROADMAP) still pending on the P2 backlog.
+- **Tests**: 37/37 pre-existing tests still pass (task44 + batch_feb2026 + phase3+4 + phase5). Zero regressions.
+
+
 ## Implemented (Feb 27, 2026 — Iteration 44) Vendor commission, show-up tracking, unified bookings
 - **Task 1 — Per-vendor commission**: `Vendor` model gained `commission_percent` (default 10.0) and `commission_min_flat` (default ₹100). `PATCH /api/vendors/{id}/approve` now accepts these two fields; validates `0 ≤ percent ≤ 100` and `flat ≥ 0`. On every new `vendor_booking`, the platform's take is `max(gross × pct/100, flat_min)` — snapshot into `commission_amount` + `commission_min_flat` fields on the booking itself for audit. Offline-source players (referred by the vendor) still get commission=0.
 - **Task 2 — Admin bookings analytics**: new `GET /api/admin/bookings-analytics?range=day|week|month` returns `totals` (online count/revenue/commission + offline count/revenue), `by_vendor` (per-vendor rollup with rate config), and `timeseries` (per-date buckets). New PlatformAdmin `Bookings` tab renders 5 stat cards, per-vendor table (highlighting commission column), and daily breakdown.

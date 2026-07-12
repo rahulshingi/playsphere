@@ -763,6 +763,12 @@ class Vendor(BaseModel):
     invoice_tax_percent: Optional[float] = 18.0
     invoice_logo_url: Optional[str] = ""
     invoice_footer_note: Optional[str] = ""
+    # ---- Task 44 (Feb 2026) — Per-vendor commission (set by platform admin) ----
+    # Effective platform commission = max(gross * commission_percent / 100,
+    # commission_min_flat). Both defaults may be tuned per vendor at approval
+    # time. commission_min_flat is in the same currency as the listing.
+    commission_percent: float = 10.0
+    commission_min_flat: float = 100.0
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -917,6 +923,12 @@ class VendorBooking(BaseModel):
     offline_source: bool = False
     commission_percent: float = 0
     commission_amount: float = 0  # rupees the platform will collect from the vendor
+    commission_min_flat: float = 0  # snapshot of vendor's flat floor at time of booking
+    # ---- Show-up tracking (Task 44 Feb 2026) ----
+    checked_in_at: Optional[str] = None   # ISO — vendor confirmed customer arrived
+    checked_in_by: Optional[str] = None   # user id of vendor who marked arrival
+    no_show_at: Optional[str] = None       # explicit "no-show" mark (manual or auto)
+    completed_at: Optional[str] = None     # completion timestamp (arrival OR endtime)
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -2364,12 +2376,17 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         pp = await db.player_profiles.find_one({"user_id": user["id"]}, {"_id": 0, "offline_source_vendor_id": 1})
         if pp and pp.get("offline_source_vendor_id") == listing["vendor_id"]:
             offline_source = True
-    # Commission % from site settings — applied on the booking total only when
-    # NOT an offline-source booking.
-    settings = await db.site_settings.find_one({}, {"_id": 0}) or {}
-    commission_percent = float(settings.get("commission_percentage") or 0)
+    # ---- Per-vendor commission (Task 44 Feb 2026) ----
+    # Vendor's `commission_percent` + `commission_min_flat` set at approval
+    # time govern the platform's take. Effective commission = max(gross * pct
+    # / 100, flat). Falls back to site-wide default (10% / ₹100) when vendor
+    # has legacy null fields.
+    vendor_doc = await db.vendors.find_one({"id": listing["vendor_id"]}, {"_id": 0, "commission_percent": 1, "commission_min_flat": 1}) or {}
+    commission_percent = float(vendor_doc.get("commission_percent") if vendor_doc.get("commission_percent") is not None else 10.0)
+    commission_flat = float(vendor_doc.get("commission_min_flat") if vendor_doc.get("commission_min_flat") is not None else 100.0)
     if offline_source:
         commission_percent = 0
+        commission_flat = 0
     # Note: per-occurrence commission is computed inside the loop below as
     # `this_commission`, since a recurring series may include a membership-paid
     # first occurrence (zero commission) alongside hourly-paid subsequent ones.
@@ -2409,7 +2426,9 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         # billed against a single membership counter for 4 slots.
         this_price = total_price if i == 0 else (price * hours)
         this_membership = applied_membership_id if i == 0 else None
-        this_commission = round(float(this_price) * commission_percent / 100.0, 2)
+        # max(pct * price, flat). Membership-covered slots waive commission.
+        _pct_amt = float(this_price) * commission_percent / 100.0
+        this_commission = round(max(_pct_amt, commission_flat if float(this_price) > 0 else 0), 2)
         booking = VendorBooking(
             listing_id=listing["id"], listing_title=listing["title"],
             vendor_id=listing["vendor_id"], vendor_type=listing["vendor_type"],
@@ -2423,6 +2442,7 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
             offline_source=offline_source,
             commission_percent=commission_percent if not this_membership else 0,
             commission_amount=this_commission if not this_membership else 0,
+            commission_min_flat=commission_flat if not this_membership else 0,
             recurrence_group_id=group_id,
         )
         payload = booking.model_dump()
@@ -2467,6 +2487,7 @@ def _mask_for_vendor(doc: dict) -> dict:
 
 @api.get("/vendor-bookings", response_model=List[VendorBooking])
 async def list_vendor_bookings(user: dict = Depends(get_current_user)):
+    from routes.booking_lifecycle import sweep_online_bookings
     role = user.get("role")
     if role == "vendor":
         vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
@@ -2481,9 +2502,60 @@ async def list_vendor_bookings(user: dict = Depends(get_current_user)):
     else:
         raise HTTPException(403, "Forbidden")
     docs = await db.vendor_bookings.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+    # Auto-expire any elapsed active bookings (4h grace) BEFORE returning.
+    docs = await sweep_online_bookings(db, docs)
     if role == "vendor":
         docs = [_mask_for_vendor(d) for d in docs]
     return [VendorBooking(**d) for d in docs]
+
+
+@api.post("/vendor-bookings/{booking_id}/check-in", response_model=VendorBooking)
+async def check_in_vendor_booking(booking_id: str, user: dict = Depends(get_current_user)):
+    """Vendor confirms the customer arrived. Marks status=completed."""
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Booking not found")
+    role = user.get("role")
+    if role == "vendor":
+        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+        if not vendor or doc["vendor_id"] != vendor["id"]:
+            raise HTTPException(403, "Not your booking")
+    elif role not in ("platform_admin", "admin"):
+        raise HTTPException(403, "Only the vendor or platform admin can mark arrival")
+    if doc.get("status") in ("cancelled", "rejected", "expired", "no_show"):
+        raise HTTPException(400, f"Booking is {doc['status']} — cannot mark arrival")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.vendor_bookings.update_one(
+        {"id": booking_id},
+        {"$set": {"status": "completed", "completed_at": now_iso,
+                  "checked_in_at": now_iso, "checked_in_by": user["id"]}},
+    )
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    return VendorBooking(**doc)
+
+
+@api.post("/vendor-bookings/{booking_id}/no-show", response_model=VendorBooking)
+async def mark_no_show_vendor_booking(booking_id: str, user: dict = Depends(get_current_user)):
+    """Vendor / admin explicitly marks a booking as customer no-show."""
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Booking not found")
+    role = user.get("role")
+    if role == "vendor":
+        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+        if not vendor or doc["vendor_id"] != vendor["id"]:
+            raise HTTPException(403, "Not your booking")
+    elif role not in ("platform_admin", "admin"):
+        raise HTTPException(403, "Only the vendor or platform admin can mark a no-show")
+    if doc.get("status") in ("cancelled", "rejected", "completed"):
+        raise HTTPException(400, f"Booking is {doc['status']} — cannot mark no-show")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.vendor_bookings.update_one(
+        {"id": booking_id},
+        {"$set": {"status": "expired", "no_show_at": now_iso}},
+    )
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    return VendorBooking(**doc)
 
 
 VENDOR_STATUSES = {"vendor_accepted", "vendor_declined"}

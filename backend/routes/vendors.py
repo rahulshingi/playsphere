@@ -198,14 +198,33 @@ def register(api, db, deps):
         ev = await db.vendors.find_one({"id": vendor_id}, {"_id": 0})
         if not ev:
             raise HTTPException(404, "Vendor not found")
-        await db.vendors.update_one({"id": vendor_id}, {"$set": {"approved": approved}})
+        upd: dict = {"approved": approved}
+        # Admin may set/update per-vendor commission at approve/re-approve time.
+        # Commission model: max(gross * pct/100, flat). Accept either or both.
+        if "commission_percent" in body:
+            try:
+                pct = float(body["commission_percent"])
+                if pct < 0 or pct > 100:
+                    raise ValueError()
+                upd["commission_percent"] = pct
+            except (TypeError, ValueError):
+                raise HTTPException(400, "commission_percent must be a number 0–100")
+        if "commission_min_flat" in body:
+            try:
+                flat = float(body["commission_min_flat"])
+                if flat < 0:
+                    raise ValueError()
+                upd["commission_min_flat"] = flat
+            except (TypeError, ValueError):
+                raise HTTPException(400, "commission_min_flat must be a non-negative number")
+        await db.vendors.update_one({"id": vendor_id}, {"$set": upd})
         # Approved → always notify. Rejected → notify only if a reason is provided
         # (avoids spamming on internal toggles).
         if approved:
             await _notify_vendor_decision(db, vendor_doc=ev, kind="vendor", status="approved")
         elif reason:
             await _notify_vendor_decision(db, vendor_doc=ev, kind="vendor", status="rejected", reason=reason)
-        return {"ok": True, "approved": approved}
+        return {"ok": True, "approved": approved, "commission_percent": upd.get("commission_percent", ev.get("commission_percent", 10.0)), "commission_min_flat": upd.get("commission_min_flat", ev.get("commission_min_flat", 100.0))}
 
     # ---------- Public vendor listings ----------
     @api.get("/vendor-listings")

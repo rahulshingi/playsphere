@@ -18,6 +18,7 @@ import DashboardPanel from "@/components/DashboardPanel";
 import VenueScheduleEditor from "@/components/VenueScheduleEditor";
 import { VendorReviewsInbox } from "@/components/Reviews";
 import VendorMembershipsPanel from "@/components/vendor/VendorMembershipsPanel";
+import UnifiedBookingsTable from "@/components/vendor/UnifiedBookingsTable";
 import OfflineModeCard from "@/components/vendor/OfflineModeCard";
 import InvoiceSettingsPanel from "@/components/vendor/InvoiceSettingsPanel";
 import OfflineBusinessSuite from "@/components/vendor/OfflineBusinessSuite";
@@ -212,34 +213,8 @@ export default function VendorDashboard() {
             <VendorMembershipsPanel listings={listings} />
 
             <div className="mt-12">
-              <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Booking requests ({bookings.length})</div>
-              <div className="border border-white/10 rounded-sm overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-[#141414] font-mono text-[10px] uppercase tracking-widest text-neutral-500">
-                    <tr><th className="text-left px-4 py-3">Listing</th><th className="text-left px-3 py-3">Company</th><th className="text-left px-3 py-3">Date / Time</th><th className="text-right px-3 py-3">Price</th><th className="text-left px-3 py-3">Status</th><th></th></tr>
-                  </thead>
-                  <tbody>
-                    {bookings.map((b) => (
-                      <tr key={b.id} className="border-t border-white/5">
-                        <td className="px-4 py-3">{b.listing_title}</td>
-                        <td className="px-3 py-3 font-mono text-neutral-300">{b.company_name}</td>
-                        <td className="px-3 py-3 font-mono text-neutral-300">{b.requested_date} · {b.start_time}–{b.end_time}</td>
-                        <td className="px-3 py-3 text-right font-mono">{fmtPrice(b.price, b.currency)}</td>
-                        <td className="px-3 py-3"><span className={`text-[10px] font-mono uppercase border rounded-sm px-2 py-0.5 ${b.status === "confirmed" ? "text-[#84CC16] border-[#84CC16]/40" : b.status === "declined" ? "text-[#FF3B30] border-[#FF3B30]/40" : b.status === "cancelled" ? "text-neutral-500 border-white/10" : "text-amber-400 border-amber-500/40"}`}>{b.status}</span></td>
-                        <td className="px-3 py-3 text-right">
-                          {b.status === "pending" && (
-                            <div className="flex gap-1 justify-end">
-                              <Button size="sm" data-testid={`vb-confirm-${b.id}`} onClick={() => respondBooking(b.id, "confirmed")} className="bg-[#84CC16] hover:bg-[#65A30D] text-black h-7 rounded-sm">Confirm</Button>
-                              <Button size="sm" variant="outline" data-testid={`vb-decline-${b.id}`} onClick={() => respondBooking(b.id, "declined")} className="border-white/10 bg-transparent text-[#FF3B30] h-7 rounded-sm">Decline</Button>
-                            </div>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {bookings.length === 0 && <tr><td colSpan={6} className="text-center py-10 text-neutral-500">No booking requests yet.</td></tr>}
-                  </tbody>
-                </table>
-              </div>
+              <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Bookings — platform + offline</div>
+              <UnifiedBookingsTable />
             </div>
 
             <VendorReviewsInbox />

@@ -20,6 +20,7 @@ import EventsTab from "@/components/admin/EventsTab";
 import PendingApprovalsTab from "@/components/admin/PendingApprovalsTab";
 import UsersTab from "@/components/admin/UsersTab";
 import VendorsTab from "@/components/admin/VendorsTab";
+import BookingsAnalyticsTab from "@/components/admin/BookingsAnalyticsTab";
 import ListingsTab from "@/components/admin/ListingsTab";
 import SettingsTab from "@/components/admin/SettingsTab";
 import AboutTab from "@/components/admin/AboutTab";
@@ -223,16 +224,7 @@ export default function PlatformAdmin() {
           </TabsContent>
 
           <TabsContent value="bookings" className="mt-6">
-            <Link to="/bookings" className="text-[#84CC16] hover:underline text-sm">→ Manage all bookings</Link>
-            <div className="grid md:grid-cols-3 gap-3 mt-4">
-              {bookings.slice(0, 12).map((b) => (
-                <div key={b.id} className="border border-white/10 rounded-sm p-4 bg-[#141414]">
-                  <div className="text-[10px] font-mono uppercase text-neutral-500">{b.company_name}</div>
-                  <div className="font-semibold mt-1">{b.service_name}</div>
-                  <div className="text-xs text-neutral-400 mt-1">qty {b.quantity} · {fmtPrice(b.total_price, b.currency)} · {b.status}</div>
-                </div>
-              ))}
-            </div>
+            <BookingsAnalyticsTab />
           </TabsContent>
 
           <TabsContent value="vendors" className="mt-6">

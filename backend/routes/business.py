@@ -129,8 +129,13 @@ class PrivateBooking(BaseModel):
     amount: float = 0  # final total to be paid — always the source of truth for revenue
     currency: str = "INR"
     notes: Optional[str] = ""
-    status: str = "active"  # active | completed | cancelled
+    status: str = "active"  # active | completed | cancelled | expired
     invoice_id: Optional[str] = None
+    # ---- Show-up tracking (Task 44 Feb 2026) ----
+    checked_in_at: Optional[str] = None
+    checked_in_by: Optional[str] = None
+    no_show_at: Optional[str] = None
+    completed_at: Optional[str] = None
     # Recurrence (Phase 5 — basic weekly pattern)
     recurrence: Optional[str] = None  # None | "weekly"
     recurrence_until: Optional[str] = None  # YYYY-MM-DD
@@ -841,6 +846,7 @@ def register(api, db, deps):
 
     @api.get("/vendor/private-bookings", response_model=List[PrivateBooking])
     async def list_private_bookings(listing_id: Optional[str] = None, status: Optional[str] = None, user: dict = Depends(get_current_user)):
+        from .booking_lifecycle import sweep_offline_bookings
         vendor = await _vendor_for_user(user)
         flt = {"vendor_id": vendor["id"]}
         if listing_id:
@@ -848,7 +854,44 @@ def register(api, db, deps):
         if status:
             flt["status"] = status
         docs = await db.private_bookings.find(flt, {"_id": 0}).sort("requested_date", -1).to_list(500)
+        # Auto-expire elapsed active offline bookings (4h grace) before returning.
+        docs = await sweep_offline_bookings(db, docs)
         return [PrivateBooking(**d) for d in docs]
+
+    @api.post("/vendor/private-bookings/{booking_id}/check-in", response_model=PrivateBooking)
+    async def check_in_private_booking(booking_id: str, user: dict = Depends(get_current_user)):
+        """Vendor confirms the walk-in customer arrived. Marks status=completed."""
+        vendor = await _vendor_for_user(user)
+        doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Booking not found")
+        if doc.get("status") in ("cancelled", "completed", "expired"):
+            raise HTTPException(400, f"Booking is {doc['status']} — cannot mark arrival")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.private_bookings.update_one(
+            {"id": booking_id, "vendor_id": vendor["id"]},
+            {"$set": {"status": "completed", "completed_at": now_iso,
+                      "checked_in_at": now_iso, "checked_in_by": user["id"]}},
+        )
+        doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        return PrivateBooking(**doc)
+
+    @api.post("/vendor/private-bookings/{booking_id}/no-show", response_model=PrivateBooking)
+    async def mark_private_booking_no_show(booking_id: str, user: dict = Depends(get_current_user)):
+        """Vendor marks a walk-in customer as no-show (early expiration)."""
+        vendor = await _vendor_for_user(user)
+        doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Booking not found")
+        if doc.get("status") in ("cancelled", "completed"):
+            raise HTTPException(400, f"Booking is {doc['status']} — cannot mark no-show")
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.private_bookings.update_one(
+            {"id": booking_id, "vendor_id": vendor["id"]},
+            {"$set": {"status": "expired", "no_show_at": now_iso}},
+        )
+        doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        return PrivateBooking(**doc)
 
     @api.patch("/vendor/private-bookings/{booking_id}", response_model=PrivateBooking)
     async def update_private_booking(booking_id: str, body: dict, user: dict = Depends(get_current_user)):
@@ -860,7 +903,7 @@ def register(api, db, deps):
             "recurrence", "recurrence_until", "recurrence_days_of_week",
         }
         upd = {k: v for k, v in body.items() if k in allowed}
-        if upd.get("status") and upd["status"] not in ("active", "completed", "cancelled"):
+        if upd.get("status") and upd["status"] not in ("active", "completed", "cancelled", "expired"):
             raise HTTPException(400, "Invalid status")
         if upd.get("recurrence") and upd["recurrence"] not in ("weekly", "", None):
             raise HTTPException(400, "recurrence must be 'weekly' or omitted")
@@ -1126,6 +1169,111 @@ def register(api, db, deps):
             },
             "calendar": month_bookings,
             "generated_at": now_iso,
+        }
+
+    # ============================================================
+    # Admin — bookings analytics (day / week / month) with commission
+    # ============================================================
+    @api.get("/admin/bookings-analytics")
+    async def admin_bookings_analytics(
+        range: str = "day", _: dict = Depends(require_platform_admin)
+    ):
+        """Aggregate booking counts + commission for platform bookings, plus a
+        holistic count of vendor **offline** bookings (which do NOT contribute
+        commission but count toward vendor utilisation).
+
+        `range` — one of `day` | `week` | `month`. Buckets ISO dates.
+        """
+        now = datetime.now(timezone.utc)
+        if range == "week":
+            start = (now - timedelta(days=7)).date().isoformat()
+        elif range == "month":
+            start = (now - timedelta(days=30)).date().isoformat()
+        else:
+            start = now.date().isoformat()
+
+        # ---- Online (platform) bookings — count + revenue + commission ----
+        online_agg = await db.vendor_bookings.aggregate([
+            {"$match": {"requested_date": {"$gte": start}}},
+            {"$group": {
+                "_id": {"date": "$requested_date", "vendor_id": "$vendor_id"},
+                "count": {"$sum": 1},
+                "revenue": {"$sum": "$total"},
+                "commission": {"$sum": "$commission_amount"},
+            }},
+            {"$sort": {"_id.date": 1}},
+        ]).to_list(1000)
+
+        # ---- Offline (private) bookings — count + revenue only (no commission) ----
+        offline_agg = await db.private_bookings.aggregate([
+            {"$match": {"requested_date": {"$gte": start}}},
+            {"$group": {
+                "_id": {"date": "$requested_date", "vendor_id": "$vendor_id"},
+                "count": {"$sum": 1},
+                "revenue": {"$sum": "$amount"},
+            }},
+            {"$sort": {"_id.date": 1}},
+        ]).to_list(1000)
+
+        # ---- Vendor-level rollup (holistic view) ----
+        vendor_rollup: dict = {}
+        for r in online_agg:
+            vid = r["_id"]["vendor_id"]
+            v = vendor_rollup.setdefault(vid, {"vendor_id": vid, "online_bookings": 0, "online_revenue": 0.0, "commission": 0.0, "offline_bookings": 0, "offline_revenue": 0.0})
+            v["online_bookings"] += int(r["count"])
+            v["online_revenue"] += float(r["revenue"] or 0)
+            v["commission"] += float(r["commission"] or 0)
+        for r in offline_agg:
+            vid = r["_id"]["vendor_id"]
+            v = vendor_rollup.setdefault(vid, {"vendor_id": vid, "online_bookings": 0, "online_revenue": 0.0, "commission": 0.0, "offline_bookings": 0, "offline_revenue": 0.0})
+            v["offline_bookings"] += int(r["count"])
+            v["offline_revenue"] += float(r["revenue"] or 0)
+
+        # Enrich with vendor business names + commission rate
+        vendor_ids = list(vendor_rollup.keys())
+        vendors = await db.vendors.find({"id": {"$in": vendor_ids}}, {"_id": 0, "id": 1, "business_name": 1, "commission_percent": 1, "commission_min_flat": 1}).to_list(500)
+        vmap = {v["id"]: v for v in vendors}
+        vendor_list = []
+        for vid, r in vendor_rollup.items():
+            v = vmap.get(vid) or {}
+            r["business_name"] = v.get("business_name", "—")
+            r["commission_percent"] = v.get("commission_percent", 10.0)
+            r["commission_min_flat"] = v.get("commission_min_flat", 100.0)
+            vendor_list.append(r)
+        vendor_list.sort(key=lambda x: -x["commission"])
+
+        # ---- Grand totals ----
+        total_online = sum(int(r["count"]) for r in online_agg)
+        total_online_revenue = sum(float(r["revenue"] or 0) for r in online_agg)
+        total_commission = sum(float(r["commission"] or 0) for r in online_agg)
+        total_offline = sum(int(r["count"]) for r in offline_agg)
+        total_offline_revenue = sum(float(r["revenue"] or 0) for r in offline_agg)
+
+        # ---- Time-series buckets (date-indexed) for chart use ----
+        by_date: dict = {}
+        for r in online_agg:
+            d = r["_id"]["date"]
+            by_date.setdefault(d, {"date": d, "online": 0, "offline": 0, "commission": 0.0})
+            by_date[d]["online"] += int(r["count"])
+            by_date[d]["commission"] += float(r["commission"] or 0)
+        for r in offline_agg:
+            d = r["_id"]["date"]
+            by_date.setdefault(d, {"date": d, "online": 0, "offline": 0, "commission": 0.0})
+            by_date[d]["offline"] += int(r["count"])
+        timeseries = sorted(by_date.values(), key=lambda x: x["date"])
+
+        return {
+            "range": range,
+            "start_date": start,
+            "totals": {
+                "online_bookings": total_online,
+                "online_revenue": round(total_online_revenue, 2),
+                "commission_earned": round(total_commission, 2),
+                "offline_bookings": total_offline,
+                "offline_revenue": round(total_offline_revenue, 2),
+            },
+            "by_vendor": vendor_list,
+            "timeseries": timeseries,
         }
 
     # =========================================================================

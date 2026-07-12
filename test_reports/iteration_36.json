@@ -1,0 +1,31 @@
+{
+  "summary": "Task 44 (Feb 27, 2026) — Vendor commission + admin bookings analytics + unified vendor bookings table + show-up tracking. Full E2E validation on preview URL. 6/6 frontend test flows PASSED. Backend regression not re-run (main agent noted 7/7 pytest already green for task44).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_36.json"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "UnifiedBookingsTable.jsx `inRange('week')` uses `>=weekAgo && <=now+7d` — spans 14 days centered on today rather than the intuitive 'past 7 days' or 'ISO week'. Same story for `month`. Consider clarifying label to 'Last 7 days' / 'Last 30 days' or using date-fns startOfWeek. Not a bug per se; observed working correctly for the QA data set.",
+    "UnifiedBookingsTable line 111 sets `listing_title: b.listing_id` for OFFLINE rows — user-facing UI ends up showing the raw listing_id string on offline rows (currently the `Customer` column is used, but if a future column adds title this will regress). Suggest resolving listing title from a lookup or omitting altogether.",
+    "VendorsTab.jsx `saveCommission` uses `Number()` on percent/flat — empty string coerces to 0 (valid), which silently sets 0% / ₹0 without warning. Consider treating empty-string as invalid.",
+    "BookingsAnalyticsTab.jsx polls `/admin/bookings-analytics?range=...` on every range change with no debounce or cancellation — rapid tab clicks stack requests. Acceptable for scale but note for future.",
+    "Commission form auto-restores to the previously-saved values when re-opening the form (uses `v.commission_percent ?? 10`) — good UX; verified during TEST 2.",
+    "backend/routes/booking_lifecycle.py lazy-sweep on read triggers a write inside a GET handler — verified working (past-date PLATFORM booking auto-flipped to expired in Test 6). Idempotent + fast, but consider caching last-sweep timestamp to avoid re-scanning on every request under load.",
+    "Vendor unified table `markNoShow` uses `window.confirm()` — automation friendly but a native confirm dialog is a UX friction on mobile web. Consider a custom shadcn AlertDialog for consistency.",
+    "Vendor `p5b_vendor_1` (offline_mode: true) shows business tab correctly. Other vendors in the QA DB have `offline_mode: None` — commission edits work regardless (approval endpoint accepts commission_percent + commission_min_flat on any vendor)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not re-tested — 7/7 pytest per main agent)", "frontend": "6/6 (100%)"},
+  "test_credentials": "Admin: admin@kreedanation.com / admin123 · Vendor: phase5b.vendor@example.com / vendor5b! (offline_mode enabled, p5b_vendor_1)",
+  "seed_data_creation": "Created 2 offline bookings on p5b_vendor_1 for 2026-07-14 via POST /api/vendor/private-bookings: (a) id=c9f40c66-f6f9-49bf-8a4b-0a64eb103ca4 client=TEST_iter36_ArrivedGuy 10:00-11:00 ₹500 → now status=completed; (b) id=6854586d-a139-4a89-9b32-ec7c359b391d client=TEST_iter36_NoShowGuy 12:00-13:00 ₹500 → now status=expired. Both marked with iter36 UI action. Also mutated one vendor's commission during test (v-lock.owner.cbff1@k.io set to 15/200 then restored to 10/100).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Task 44 E2E validated on https://live-scoring-hub-5.preview.emergentagent.com. Verified: (1) Admin /platform-admin → Vendors tab: pa-commission-vendor-* button opens pa-commission-form-* inline form; saving valid pct/flat updates the button label from '10% or ₹100' to '15% or ₹200' with green 'Commission set' toast. (2) Validation: pct=150 → toast 'Percent must be 0–100'; flat=-50 → toast 'Flat floor must be ≥ 0'. (3) /platform-admin → Bookings tab renders <bookings-analytics/> with 5 stat cards (ba-online-count=20, ba-online-revenue=₹13,500, ba-commission=₹1,550, ba-offline-count=31, ba-offline-revenue=₹22,500 for week range). Range tabs day/week/month all switch numbers without page reload (day → count dropped 20→15). Per-vendor rollup table renders 9 rows; rate config shown as '10% or ₹100 min' and commission cell in pink. (4) Vendor /vendor/dashboard → Marketplace tab renders <unified-bookings-table/> with all 4 range filters (ub-range-today/week/month/all), all 7 status filters (ub-status-all/pending/confirmed/active/completed/expired/cancelled), header stats (ub-total + active/done/no-show pills), rows showing PLATFORM or OFFLINE chip. (5) ub-arrived-{id} POSTs /vendor/private-bookings/{id}/check-in — toast 'Customer arrival marked' + row status → completed (green) + Arrived/No-show buttons disappear. (6) ub-noshow-{id} POSTs /vendor/private-bookings/{id}/no-show after window.confirm — toast 'Marked as no-show' + row status → expired (red) + buttons disappear. Auto-expire regression also observed: a past-date PLATFORM booking (Marketplace Test Org 2026-07-06) had auto-flipped to 'expired' on unified table read (lazy sweep). Login flow required Enter-key press (button click didn't submit the react form reliably in Playwright) — future automation should press Enter on password field.",
+  "rca of the issue": "N/A — no bugs found in this iteration."
+}

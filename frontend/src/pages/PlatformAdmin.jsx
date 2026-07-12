@@ -25,6 +25,7 @@ import ListingsTab from "@/components/admin/ListingsTab";
 import SettingsTab from "@/components/admin/SettingsTab";
 import AboutTab from "@/components/admin/AboutTab";
 import BusinessTab from "@/components/admin/BusinessTab";
+import { DashboardShell } from "@/components/dashboard/DashboardKit";
 
 const BLANK_SERVICE = {
   name: "",
@@ -117,21 +118,31 @@ export default function PlatformAdmin() {
   };
 
   return (
-    <div className="bg-[#0a0a0a] min-h-screen text-white">
-      <Nav />
-      <div className="max-w-7xl mx-auto px-6 pt-12 pb-24">
+    <DashboardShell activePath="home" title="Platform Admin" headerRight={
+      isSuperAdmin ? (
+        <Button data-testid="platform-new-service" onClick={() => setEditing(BLANK_SERVICE)} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-full h-9 px-4">
+          <Plus className="w-4 h-4 mr-1" /> New service
+        </Button>
+      ) : null
+    }>
+      <div className="max-w-[1600px]">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#FF3B30]">/ Kreeda Nation HQ</div>
-        <div className="flex items-end justify-between">
-          <h1 className="font-display text-6xl tracking-wide mt-3">PLATFORM ADMIN</h1>
-          {isSuperAdmin && (
-            <Button data-testid="platform-new-service" onClick={() => setEditing(BLANK_SERVICE)} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
-              <Plus className="w-4 h-4 mr-1" /> New service
-            </Button>
-          )}
+        <div className="flex items-end justify-between mt-3">
+          <div>
+            <h1 className="text-3xl font-bold text-white tracking-tight">Platform overview</h1>
+            <p className="text-sm text-neutral-500 mt-1">Manage services, vendors, bookings, and everything in between.</p>
+          </div>
+          <Link
+            to="/platform-admin/overview"
+            data-testid="pa-open-overview"
+            className="inline-flex items-center gap-1 rounded-full px-4 py-2 bg-transparent border border-[#06B6D4] text-[#06B6D4] hover:bg-[#06B6D4]/10 font-semibold text-sm"
+          >
+            ✨ Try new Overview
+          </Link>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-10">
-          <TabsList className="bg-[#141414] border border-white/10 rounded-sm flex-wrap">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
+          <TabsList className="bg-[#141414] border border-white/10 rounded-lg flex-wrap p-1">
             <TabsTrigger value="dashboard" data-testid="pa-tab-dashboard" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Dashboard</TabsTrigger>
             <TabsTrigger value="services" data-testid="pa-tab-services" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Services ({services.length})</TabsTrigger>
             <TabsTrigger value="events" data-testid="pa-tab-events" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Events ({events.length})</TabsTrigger>
@@ -264,8 +275,6 @@ export default function PlatformAdmin() {
       </div>
 
       {editing && <ServiceEditor service={editing} setService={setEditing} onSave={saveService} onClose={() => setEditing(null)} />}
-
-      <Footer />
-    </div>
+    </DashboardShell>
   );
 }

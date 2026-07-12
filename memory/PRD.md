@@ -22,6 +22,17 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 28, 2026 — Iteration 46) Admin Dashboard V2 (dark Pepper-style, all tabs)
+- **Reverted to full dark theme** — per user feedback. `.dashboard-light` CSS class kept as a marker but no longer applies light-theme overrides (inherits `:root` dark palette). `DashboardKit.jsx` rewritten with dark surfaces: nav `bg-black`, top bar `bg-[#0f0f0f]`, cards `bg-[#141414]` + `border-white/10`.
+- **PlatformAdmin wrapped with `<DashboardShell>`** — every tab (Dashboard, Services, Events, Approvals, Users, Sports, Companies, Organisers, Bookings, Vendors, Listings, Business, Settings, About, Reviews, Accounts, Team) inherits the same Pepper-style shell: dark 80px left icon nav (KN brand + 6 icons) + top bar (search pill + `+ New service` teal CTA + notifications bell + user avatar). Nav + Footer removed from PlatformAdmin (shell provides them).
+- **Reusable Dashboard Kit** at `/app/frontend/src/components/dashboard/DashboardKit.jsx` — 9 dark-themed components ready to roll out to the 5 remaining role dashboards: `DashboardShell`, `LeftIconNav`, `TopBar`, `KpiDonutCard` (recharts donut + custom legend), `StatusPill`, `PriorityFlag`, `Avatar`, `SortableTable`, `ViewToggle`, `DashboardTabs`.
+- **Admin Overview page** at `/platform-admin/overview` — Pepper reference recreated in dark: 4 KPI donut cards (Bookings 55 · Revenue ₹39,950 · Events 150 · Ecosystem 371), Table/Board segmented toggle, sortable table with avatars/status pills/priority flags, Kanban board view when toggled. Consumes only existing endpoints (bookings-analytics + events + vendors + players + vendor-bookings).
+- **Zero backend changes** — all data comes from endpoints that were already live.
+
+
+## Implemented (Feb 28, 2026 — Iteration 45) P2 + P3 quality polish
+
+
 ## Implemented (Feb 28, 2026 — Iteration 45) P2 + P3 quality polish
 - **WelcomeModal ESC + backdrop dismissal (P3)**: `WelcomeModal.jsx` now dismisses on ESC keypress + backdrop click (event stops propagating inside the content pane). Same localStorage-key persistence — modal never re-shows for the same user. Fixes the recurring "modal intercepts pointer events" report surfaced by testing agents iter35 + iter36.
 - **Range filter labels (P2)**: `UnifiedBookingsTable.jsx` — "This week" → "Last 7 days"; "This month" → "Last 30 days". `inRange()` reimplemented to use strict past-N-day windows ending today (previously used ±N days spanning 14/60 days centered on today).

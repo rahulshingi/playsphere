@@ -27,6 +27,17 @@
     --ring: 82 78% 44%;
     --radius: 0.375rem;
   }
+
+  /* ---- Dashboard workspace scope (iter 46 update — all-dark) -----------
+     `.dashboard-light` originally overrode Shadcn variables to a light
+     palette, but the user reverted the direction to keep the workspace
+     dark. The class is retained as a marker (used by DashboardShell) but
+     the variables now stay identical to the parent dark theme — so no
+     conflicting overrides live here.
+     ---------------------------------------------------------------- */
+  .dashboard-light {
+    /* No overrides — inherits :root dark palette. */
+  }
 }
 
 body {

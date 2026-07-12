@@ -22,6 +22,16 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 28, 2026 — Iteration 47) Vendor Overview + clickable KPI + bulk-action bar
+- **Vendor Overview page** at `/vendor/overview` — mirrors Admin Overview shell with vendor-native KPI donuts: **Today's slots** (confirmed/completed/no-show), **Booking mix** (platform vs offline), **By status** (pending/confirmed/completed/expired), **Revenue** (platform ₹ + offline ₹ + commission owed). Range pill tabs (Today · Last 7d · Last 30d · All) drive filter for both KPI donuts and the table. Merges `/vendor-bookings` (platform) + `/vendor/private-bookings` (offline) with source chips (PLAT / OFF). "✨ Try new Overview" CTA added to the classic `/vendor` page header.
+- **Clickable KPI cards**: `KpiDonutCard` gained an `onClick` prop — cards now show a ↗ chevron in the top-right and navigate to the relevant tab. Admin Overview cards drill down to `/platform-admin?tab={bookings|events|users}`. Vendor Overview cards drive filter/view changes in-place.
+- **Bulk-action bar**: `SortableTable` gained a `bulkActions` prop — when ≥1 row is checked, a teal bar slides in above the header showing "N selected" + configurable action buttons + Clear. Selected rows get a subtle `bg-[#06B6D4]/5` highlight.
+  - **Admin bulk actions**: Mark arrived (loops POST `/vendor-bookings/{id}/check-in`) · Mark no-show (loops POST `/no-show`) · Export CSV.
+  - **Vendor bulk actions**: same three, with per-row source dispatch (platform → `/vendor-bookings/{id}/*`, offline → `/vendor/private-bookings/{id}/*`).
+- **Route**: `/vendor/overview` added to `App.js`; VendorOverview page mounts the same `DashboardShell` as Admin so left icon nav / top bar / theme scoping are identical across both.
+- Backend already exposes every endpoint the page needs — zero backend churn.
+
+
 ## Implemented (Feb 28, 2026 — Iteration 46) Admin Dashboard V2 (dark Pepper-style, all tabs)
 - **Reverted to full dark theme** — per user feedback. `.dashboard-light` CSS class kept as a marker but no longer applies light-theme overrides (inherits `:root` dark palette). `DashboardKit.jsx` rewritten with dark surfaces: nav `bg-black`, top bar `bg-[#0f0f0f]`, cards `bg-[#141414]` + `border-white/10`.
 - **PlatformAdmin wrapped with `<DashboardShell>`** — every tab (Dashboard, Services, Events, Approvals, Users, Sports, Companies, Organisers, Bookings, Vendors, Listings, Business, Settings, About, Reviews, Accounts, Team) inherits the same Pepper-style shell: dark 80px left icon nav (KN brand + 6 icons) + top bar (search pill + `+ New service` teal CTA + notifications bell + user avatar). Nav + Footer removed from PlatformAdmin (shell provides them).

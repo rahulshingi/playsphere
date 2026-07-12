@@ -160,10 +160,10 @@ export default function AdminOverview() {
 
       {/* KPI donut cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8" data-testid="admin-kpi-grid">
-        <KpiDonutCard testid="kpi-bookings" title="Bookings" data={bookingsKpi} />
-        <KpiDonutCard testid="kpi-revenue" title="Revenue" data={revenueKpi} totalLabel="Total ₹" />
-        <KpiDonutCard testid="kpi-events" title="Events" data={eventsKpi} />
-        <KpiDonutCard testid="kpi-ecosystem" title="Ecosystem" data={ecosystemKpi} />
+        <KpiDonutCard testid="kpi-bookings" title="Bookings" data={bookingsKpi} onClick={() => nav("/platform-admin?tab=bookings")} />
+        <KpiDonutCard testid="kpi-revenue" title="Revenue" data={revenueKpi} totalLabel="Total ₹" onClick={() => nav("/platform-admin?tab=bookings")} />
+        <KpiDonutCard testid="kpi-events" title="Events" data={eventsKpi} onClick={() => nav("/platform-admin?tab=events")} />
+        <KpiDonutCard testid="kpi-ecosystem" title="Ecosystem" data={ecosystemKpi} onClick={() => nav("/platform-admin?tab=users")} />
       </div>
 
       {/* Table toolbar */}
@@ -183,7 +183,55 @@ export default function AdminOverview() {
       </div>
 
       {view === "table" ? (
-        <SortableTable columns={columns} data={tableRows} testid="admin-bookings-table" />
+        <SortableTable
+          columns={columns}
+          data={tableRows}
+          testid="admin-bookings-table"
+          bulkActions={[
+            {
+              key: "check-in",
+              label: "Mark arrived",
+              className: "bg-[#84CC16]/15 text-[#84CC16] hover:bg-[#84CC16]/25",
+              onClick: async (rows) => {
+                let ok = 0;
+                for (const r of rows) {
+                  try { await api.post(`/vendor-bookings/${r.id}/check-in`); ok += 1; } catch (e) { /* noop */ }
+                }
+                toast.success(`${ok}/${rows.length} marked arrived`);
+                const b = await api.get("/vendor-bookings").catch(() => ({ data: [] }));
+                setBookings(b.data || []);
+              },
+            },
+            {
+              key: "no-show",
+              label: "Mark no-show",
+              className: "bg-[#FF3B30]/15 text-[#FF3B30] hover:bg-[#FF3B30]/25",
+              onClick: async (rows) => {
+                if (!window.confirm(`Mark ${rows.length} booking(s) as no-show?`)) return;
+                let ok = 0;
+                for (const r of rows) {
+                  try { await api.post(`/vendor-bookings/${r.id}/no-show`); ok += 1; } catch (e) { /* noop */ }
+                }
+                toast.success(`${ok}/${rows.length} marked no-show`);
+                const b = await api.get("/vendor-bookings").catch(() => ({ data: [] }));
+                setBookings(b.data || []);
+              },
+            },
+            {
+              key: "export",
+              label: "Export CSV",
+              onClick: async (rows) => {
+                const header = ["id", "title", "created_by", "amount", "status", "next_date"].join(",");
+                const body = rows.map((r) => [r.id, r.title, r.created_by, r.amount, r.status, r.next_date].map((v) => `"${String(v || "").replace(/"/g, '""')}"`).join(",")).join("\n");
+                const blob = new Blob([`${header}\n${body}`], { type: "text/csv" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a"); a.href = url; a.download = `bookings-${new Date().toISOString().slice(0,10)}.csv`; a.click();
+                URL.revokeObjectURL(url);
+                toast.success(`Exported ${rows.length} rows`);
+              },
+            },
+          ]}
+        />
       ) : (
         <BoardView rows={tableRows} />
       )}

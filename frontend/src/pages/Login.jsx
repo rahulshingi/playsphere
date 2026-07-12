@@ -24,7 +24,7 @@ export default function Login() {
       const role = r.user?.role || (r && r.user ? r.user.role : null);
       if (role === "platform_admin" || role === "admin") nav("/platform-admin");
       else if (role === "company_admin" || role === "organiser") nav("/dashboard");
-      else if (role === "vendor") nav("/vendor/dashboard");
+      else if (role === "vendor") nav("/vendor/overview");
       else if (role === "player") nav("/players/me");
       else nav("/");
     }

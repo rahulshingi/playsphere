@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Users, CalendarDays, Activity, Trophy, Sparkles } from "lucide-react";
 import { renderScore, sportColor, SPORT_IMAGES } from "@/lib/sports";
 import useFixtureSocket from "@/lib/useFixtureSocket";
+import { useAuth } from "@/context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 // Rotating hero backdrop — cycles through cricket, badminton, tennis, snooker,
 // pickleball, basketball etc. Uses an incrementing counter stored in

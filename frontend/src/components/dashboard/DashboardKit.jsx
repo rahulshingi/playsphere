@@ -106,12 +106,23 @@ function TopBar({ title, headerRight }) {
   );
 }
 
-export function KpiDonutCard({ title, data, totalLabel = "Total", testid }) {
+export function KpiDonutCard({ title, data, totalLabel = "Total", testid, onClick }) {
   const total = useMemo(() => data.reduce((s, d) => s + (Number(d.value) || 0), 0), [data]);
   const chartData = data.length ? data : [{ name: "empty", value: 1, color: "#1F2937" }];
+  const clickable = typeof onClick === "function";
   return (
-    <div data-testid={testid || "kpi-donut-card"} className="bg-[#141414] rounded-xl border border-white/10 p-5 flex flex-col gap-3 hover:border-white/20 transition-colors">
-      <div className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">{title}</div>
+    <div
+      data-testid={testid || "kpi-donut-card"}
+      onClick={onClick}
+      role={clickable ? "button" : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      onKeyDown={(e) => { if (clickable && (e.key === "Enter" || e.key === " ")) onClick(); }}
+      className={`bg-[#141414] rounded-xl border border-white/10 p-5 flex flex-col gap-3 transition-all ${clickable ? "cursor-pointer hover:border-[#06B6D4]/50 hover:shadow-lg hover:shadow-[#06B6D4]/5" : "hover:border-white/20"}`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold text-neutral-400 uppercase tracking-widest">{title}</div>
+        {clickable && <span className="text-[10px] font-mono text-[#06B6D4]/70">↗</span>}
+      </div>
       <div className="flex items-center gap-5">
         <div className="relative w-[100px] h-[100px] shrink-0">
           <ResponsiveContainer width="100%" height="100%">
@@ -205,7 +216,7 @@ function pickColorFromString(s) {
   return PALETTE[hash % PALETTE.length];
 }
 
-export function SortableTable({ columns, data, defaultSort, testid }) {
+export function SortableTable({ columns, data, defaultSort, testid, bulkActions }) {
   const [sortKey, setSortKey] = useState(defaultSort?.key || columns[0]?.key);
   const [sortDir, setSortDir] = useState(defaultSort?.dir || "asc");
   const [selected, setSelected] = useState(new Set());
@@ -239,9 +250,41 @@ export function SortableTable({ columns, data, defaultSort, testid }) {
     if (selected.size === sorted.length) setSelected(new Set());
     else setSelected(new Set(sorted.map((r) => r.id)));
   };
+  const clearSelection = () => setSelected(new Set());
+  const selectedRows = useMemo(() => sorted.filter((r) => selected.has(r.id)), [sorted, selected]);
 
   return (
     <div data-testid={testid || "sortable-table"} className="bg-[#141414] rounded-xl border border-white/10 overflow-hidden">
+      {/* Bulk action toolbar (visible when ≥1 row selected) */}
+      {bulkActions && selected.size > 0 && (
+        <div data-testid="bulk-action-bar" className="flex items-center justify-between px-4 py-2.5 bg-[#06B6D4]/10 border-b border-[#06B6D4]/30">
+          <div className="text-xs font-mono text-[#06B6D4]">
+            <span className="font-semibold" data-testid="bulk-count">{selected.size}</span> selected
+          </div>
+          <div className="flex items-center gap-2">
+            {bulkActions.map((a) => (
+              <button
+                key={a.key}
+                data-testid={`bulk-${a.key}`}
+                onClick={async () => {
+                  await a.onClick(selectedRows);
+                  clearSelection();
+                }}
+                className={`text-xs font-medium rounded-md px-3 py-1.5 transition-colors ${a.className || "bg-white/5 text-white hover:bg-white/10"}`}
+              >
+                {a.icon} {a.label}
+              </button>
+            ))}
+            <button
+              data-testid="bulk-clear"
+              onClick={clearSelection}
+              className="text-xs text-neutral-400 hover:text-white px-2"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-[#0f0f0f] border-b border-white/10">
@@ -274,7 +317,7 @@ export function SortableTable({ columns, data, defaultSort, testid }) {
           </thead>
           <tbody>
             {sorted.map((row) => (
-              <tr key={row.id} data-testid={`st-row-${row.id}`} className="border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+              <tr key={row.id} data-testid={`st-row-${row.id}`} className={`border-b border-white/5 hover:bg-white/[0.02] transition-colors ${selected.has(row.id) ? "bg-[#06B6D4]/5" : ""}`}>
                 <td className="px-4 py-3">
                   <input
                     type="checkbox"

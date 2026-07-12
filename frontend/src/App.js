@@ -24,6 +24,7 @@ import Dashboard from "@/pages/Dashboard";
 import Bookings from "@/pages/Bookings";
 import PlatformAdmin from "@/pages/PlatformAdmin";
 import AdminOverview from "@/pages/admin/AdminOverview";
+import VendorOverview from "@/pages/vendor/VendorOverview";
 import PlayerSignup from "@/pages/PlayerSignup";
 import PlayerLogin from "@/pages/PlayerLogin";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -63,6 +64,7 @@ function App() {
           <Route path="/platform-admin/companies/:id" element={<AdminDetail type="company" />} />
           <Route path="/platform-admin/players/:id" element={<AdminDetail type="player" />} />
           <Route path="/platform-admin/overview" element={<AdminOverview />} />
+          <Route path="/vendor/overview" element={<VendorOverview />} />
           <Route path="/teams/:id" element={<TeamDetail />} />
           <Route path="/team-players/:id" element={<PlayerDetail />} />
           <Route path="/standings" element={<Standings />} />

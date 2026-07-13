@@ -7,32 +7,46 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Edit3, Save, X, Package, Tag, Sparkles } from "lucide-react";
+import { Plus, Trash2, Edit3, Save, X, Package, Tag, Sparkles, Inbox, Users } from "lucide-react";
 import ImageUpload from "@/components/ImageUpload";
+import AdminRFQsTab from "@/components/admin/AdminRFQsTab";
+import AdminServiceVendorsTab from "@/components/admin/AdminServiceVendorsTab";
 
 /**
- * AdminCorporateServicesTab — admin CRUD for the RFQ-based corporate services
- * catalogue (Phase 1). Four sub-tabs mirroring the domain: Categories,
- * Services, Add-ons, Packages. No pricing anywhere — quotations arrive in
- * Phase 3 as a separate admin surface.
+ * AdminCorporateServicesTab — admin workspace for the RFQ-based corporate
+ * services module. Consolidates six sub-tabs into one meta-tab so the
+ * platform-admin nav bar stays uncluttered:
+ *   1. RFQs           — incoming HR/Organiser requests, cost sheets, quotes, chat (Phase 3)
+ *   2. Service Vendors — internal vendor ledger + rate cards (Phase 3, admin-only)
+ *   3. Packages       — HR-facing tiered packages composed from services + addons
+ *   4. Categories     — top-level buckets ("Yoga", "Tournament", …)
+ *   5. Services       — atomic inclusions ("Referee", "Water bottles")
+ *   6. Add-ons        — optional line-items ("Photography", "Trophies")
+ *
+ * Pricing rule: NO prices live in the catalogue tabs. Prices only appear
+ * inside the RFQs sub-tab, and only once the admin composes a quotation.
  */
 export default function AdminCorporateServicesTab() {
   return (
     <div data-testid="admin-cs-tab" className="space-y-6">
       <div>
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#06B6D4]">/ Corporate Services</div>
-        <h2 className="text-2xl font-display tracking-wide mt-1">Catalogue admin</h2>
-        <p className="text-sm text-neutral-500 mt-1">Configure categories, atomic services and add-ons — then compose them into HR-facing packages. No pricing lives here; pricing is set only when you send a quotation.</p>
+        <h2 className="text-2xl font-display tracking-wide mt-1">Workspace</h2>
+        <p className="text-sm text-neutral-500 mt-1">RFQs, internal vendors, and the catalogue that powers HR&rsquo;s package builder — all in one place.</p>
       </div>
 
-      <Tabs defaultValue="packages" className="mt-4">
+      <Tabs defaultValue="rfqs" className="mt-4">
         <TabsList className="bg-black/40 border border-white/10 rounded-sm p-1 flex-wrap">
+          <TabsTrigger data-testid="cs-tab-rfqs" value="rfqs" className="data-[state=active]:bg-[#06B6D4] data-[state=active]:text-black rounded-sm"><Inbox className="w-3.5 h-3.5 mr-1.5" /> RFQs</TabsTrigger>
+          <TabsTrigger data-testid="cs-tab-svendors" value="svendors" className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-black rounded-sm"><Users className="w-3.5 h-3.5 mr-1.5" /> Service Vendors</TabsTrigger>
           <TabsTrigger data-testid="cs-tab-packages" value="packages" className="data-[state=active]:bg-[#06B6D4] data-[state=active]:text-black rounded-sm"><Package className="w-3.5 h-3.5 mr-1.5" /> Packages</TabsTrigger>
           <TabsTrigger data-testid="cs-tab-categories" value="categories" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm"><Tag className="w-3.5 h-3.5 mr-1.5" /> Categories</TabsTrigger>
           <TabsTrigger data-testid="cs-tab-services" value="services" className="data-[state=active]:bg-[#FACC15] data-[state=active]:text-black rounded-sm">Services</TabsTrigger>
           <TabsTrigger data-testid="cs-tab-addons" value="addons" className="data-[state=active]:bg-[#EC4899] data-[state=active]:text-white rounded-sm"><Sparkles className="w-3.5 h-3.5 mr-1.5" /> Add-ons</TabsTrigger>
         </TabsList>
 
+        <TabsContent value="rfqs" className="mt-4"><AdminRFQsTab /></TabsContent>
+        <TabsContent value="svendors" className="mt-4"><AdminServiceVendorsTab /></TabsContent>
         <TabsContent value="packages" className="mt-4"><PackagesPanel /></TabsContent>
         <TabsContent value="categories" className="mt-4"><CategoriesPanel /></TabsContent>
         <TabsContent value="services" className="mt-4"><ServicesPanel /></TabsContent>

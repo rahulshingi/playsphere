@@ -22,6 +22,33 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Jul 13, 2026) Corporate Services Phase 3 + Internal Service Vendor Management
+- **Backend** (`/app/backend/routes/corporate_services.py`, ~600 new lines) — 20 new endpoints:
+  - Service Vendors: `GET/POST/PATCH/DELETE /api/admin/service-vendors[/{id}]` with delete-guard when referenced by cost sheets.
+  - Rate Cards: `GET/POST/DELETE /api/admin/service-vendors/{id}/rates[/{rate_id}]`, upsert on (vendor_id, service_id).
+  - Admin RFQ Inbox: `GET /api/admin/rfqs`, `GET /api/admin/rfqs/summary`, `POST /api/admin/rfqs/{id}/mark-under-review`.
+  - Vendor auto-suggest: `GET /api/admin/rfqs/{id}/suggest-vendors` ranked by city_match → preferred → state_match → lowest rate.
+  - Cost sheet: `GET/PUT /api/admin/rfqs/{id}/cost-sheet` auto-seeded from RFQ selections.
+  - Quotations: `GET/POST /api/admin/rfqs/{id}/quotations`, `POST .../send`, `DELETE` (drafts only). Per-line pricing_mode = `markup` | `fixed`. Versioning v1, v2, v3… Send auto-supersedes prior sent quotes.
+  - HR quote view: `GET /api/rfqs/{id}/quotation` (role-aware sanitisation — strips internal_cost, margin_percent, gross_margin from HR response).
+  - HR actions: `POST /api/rfqs/{id}/quotation/{accept|reject}` — reject moves RFQ to `negotiation` and posts reason into chat.
+  - Chat: `GET/POST /api/rfqs/{id}/messages` — 400 before first quote sent (`chat_open` gate); admin post on `quoted` transitions to `negotiation`.
+  - Audit: `GET /api/rfqs/{id}/history`.
+- **Frontend**:
+  - `AdminServiceVendorsTab.jsx` — vendor ledger + inline rate-card modal.
+  - `AdminRFQsTab.jsx` — inbox (status filters) + detail (event snapshot / cost sheet with vendor auto-pick / quotation builder / chat).
+  - `AdminCorporateServicesTab.jsx` — consolidated to 6 sub-tabs (RFQs / Service Vendors / Packages / Categories / Services / Add-ons) to avoid top-nav wrap.
+  - `MyRFQs.jsx` — HR-side `QuotationView` (accept/reject) + `HRChatPanel`.
+- **Privacy contract enforced**: `_hr_safe_quote` strips internal_cost / margin_percent / pricing_mode / gross_margin / created_by / sent_by before returning to HR. HR also cannot see draft quotes.
+- **Pricing model**: per user choice, BOTH markup % and fixed selling price allowed per line item. Default margin % + discount + tax % + valid_until at quote level.
+- **Vendor ranking**: per user choice, city_match desc → preferred desc → state_match desc → rate asc.
+- **Chat gate**: per user choice, chat opens only after admin sends first quote.
+- **Revisions**: unlimited — every new quote gets a fresh version number; previous sent quotes marked superseded.
+- **Testing**: 30/30 pytest cases pass (`/app/backend/tests/test_corporate_services_phase3.py`) + Playwright smoke test on admin + HR flows.
+
+
+
+
 ## Implemented (Feb 28, 2026 — Iteration 47) Vendor Overview + clickable KPI + bulk-action bar
 - **Vendor Overview page** at `/vendor/overview` — mirrors Admin Overview shell with vendor-native KPI donuts: **Today's slots** (confirmed/completed/no-show), **Booking mix** (platform vs offline), **By status** (pending/confirmed/completed/expired), **Revenue** (platform ₹ + offline ₹ + commission owed). Range pill tabs (Today · Last 7d · Last 30d · All) drive filter for both KPI donuts and the table. Merges `/vendor-bookings` (platform) + `/vendor/private-bookings` (offline) with source chips (PLAT / OFF). "✨ Try new Overview" CTA added to the classic `/vendor` page header.
 - **Clickable KPI cards**: `KpiDonutCard` gained an `onClick` prop — cards now show a ↗ chevron in the top-right and navigate to the relevant tab. Admin Overview cards drill down to `/platform-admin?tab={bookings|events|users}`. Vendor Overview cards drive filter/view changes in-place.

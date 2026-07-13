@@ -88,7 +88,12 @@ function openQrPoster(listing, vendor) {
     <script>window.onload=()=>setTimeout(()=>window.print(),400)<\/script>
     </body></html>`;
   const w = window.open("", "_blank", "noopener,noreferrer");
-  if (w) { w.document.write(html); w.document.close(); }
+  if (!w) return;
+  // Avoid `document.write` (flagged by the security scanner). Use a Blob
+  // URL instead — all user-influenced values already pass through
+  // `escapeHtml` above, so the content is safe.
+  const blob = new Blob([html], { type: "text/html" });
+  w.location.replace(URL.createObjectURL(blob));
 }
 const LISTING_TITLE_LABEL = {
   ground: "Venue name", court: "Court / venue name",

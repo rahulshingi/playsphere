@@ -520,20 +520,36 @@ function TeamRolesEditor({ event, team, allPlayers, members, open, onOpenChange,
   );
 }
 
-function CaptainAssigner({ team, allPlayers, onAssign }) {
+function CaptainAssigner({ team, allPlayers, members, onAssign }) {
   const [captainPick, setCaptainPick] = useState("");
   const submit = () => {
     if (!captainPick) return toast.error("Pick a player");
     onAssign(captainPick).then(() => setCaptainPick(""));
   };
+  // Priority: this team's roster first (natural captains), then remaining
+  // players in the directory (in case the captain wasn't a member yet — the
+  // backend will add them). This ensures a freshly quick-added player is
+  // visible immediately without waiting for the global `/players` refresh.
+  const candidates = useMemo(() => {
+    const memberIds = new Set((members || []).map((m) => m.id));
+    const inTeam = (members || []).map((m) => ({ id: m.id, name: m.name, company_name: m.company_name, in_team: true }));
+    const others = (allPlayers || [])
+      .filter((p) => !memberIds.has(p.id))
+      .map((p) => ({ id: p.id, name: p.name, company_name: p.company_name, in_team: false }));
+    return [...inTeam, ...others];
+  }, [members, allPlayers]);
   return (
     <div className="flex gap-2 mb-3">
       <Select value={captainPick} onValueChange={setCaptainPick}>
         <SelectTrigger data-testid={`tc-captain-pick-${team.id}`} className="bg-black/40 border-white/10 text-white">
-          <SelectValue placeholder="Assign captain (registered player)" />
+          <SelectValue placeholder="Assign captain (roster first)" />
         </SelectTrigger>
         <SelectContent className="bg-[#141414] text-white border-white/10 max-h-[260px]">
-          {allPlayers.map((p) => (<SelectItem key={p.id} value={p.id}>{p.name} {p.company_name ? `· ${p.company_name}` : ""}</SelectItem>))}
+          {candidates.map((p) => (
+            <SelectItem key={p.id} value={p.id}>
+              {p.in_team ? "★ " : ""}{p.name}{p.company_name ? ` · ${p.company_name}` : ""}
+            </SelectItem>
+          ))}
         </SelectContent>
       </Select>
       <Button data-testid={`tc-captain-set-${team.id}`} onClick={submit} className="bg-[#F59E0B] hover:bg-[#D97706] text-black rounded-sm">Set</Button>
@@ -629,6 +645,7 @@ function TeamCard({ team, event, companies, allPlayers, canManage, reload, setCr
       toast.success("Player added");
       setOpen(false);
       await refreshMembers();
+      reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
 
@@ -646,6 +663,9 @@ function TeamCard({ team, event, companies, allPlayers, canManage, reload, setCr
       }
       setOpen(false);
       await refreshMembers();
+      // Refresh the global player directory so the newly-created player also
+      // appears in the captain / VC / add-existing dropdowns without a reload.
+      reload();
     } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
   };
 
@@ -662,7 +682,7 @@ function TeamCard({ team, event, companies, allPlayers, canManage, reload, setCr
     <div data-testid={`team-card-${team.id}`} className="border border-white/10 rounded-sm bg-[#141414] p-5">
       <TeamCardHeader team={team} company={company} canManage={canManage} onEditRoles={() => setRolesOpen(true)} />
       {canManage && !team.captain_player_id && (
-        <CaptainAssigner team={team} allPlayers={allPlayers} onAssign={handleAssignCaptain} />
+        <CaptainAssigner team={team} allPlayers={allPlayers} members={members} onAssign={handleAssignCaptain} />
       )}
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs font-mono uppercase tracking-widest text-neutral-500 flex items-center gap-1.5">

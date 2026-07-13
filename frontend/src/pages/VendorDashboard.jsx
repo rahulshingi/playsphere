@@ -170,9 +170,6 @@ export default function VendorDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Link to="/vendor/overview" data-testid="vendor-open-overview" className="inline-flex items-center gap-1 rounded-full px-4 py-2 bg-transparent border border-[#06B6D4] text-[#06B6D4] hover:bg-[#06B6D4]/10 font-semibold text-sm">
-              ✨ Try new Overview
-            </Link>
             <Button data-testid="vendor-new-listing" onClick={() => setEditing({ ...blank, city: vendor.city })} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
               <Plus className="w-4 h-4 mr-1" /> New listing
             </Button>

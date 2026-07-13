@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/context/AuthContext";
 import "@/App.css";
@@ -63,8 +63,8 @@ function App() {
           <Route path="/platform-admin/vendors/:id" element={<AdminDetail type="vendor" />} />
           <Route path="/platform-admin/companies/:id" element={<AdminDetail type="company" />} />
           <Route path="/platform-admin/players/:id" element={<AdminDetail type="player" />} />
-          <Route path="/platform-admin/overview" element={<AdminOverview />} />
-          <Route path="/vendor/overview" element={<VendorOverview />} />
+          <Route path="/platform-admin/overview" element={<Navigate to="/platform-admin" replace />} />
+          <Route path="/vendor/overview" element={<Navigate to="/vendor/dashboard" replace />} />
           <Route path="/teams/:id" element={<TeamDetail />} />
           <Route path="/team-players/:id" element={<PlayerDetail />} />
           <Route path="/standings" element={<Standings />} />

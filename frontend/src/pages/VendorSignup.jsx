@@ -70,7 +70,7 @@ export default function VendorSignup() {
     try {
       await api.post("/vendors/signup", { ...form, email: form.email.trim().toLowerCase(), otp });
       toast.success("Vendor account created — pending platform approval");
-      window.location.href = "/vendor/overview";
+      window.location.href = "/vendor/dashboard";
     } catch (err) {
       toast.error(formatApiErrorDetail(err.response?.data?.detail) || "Sign up failed");
     } finally { setBusy(false); }

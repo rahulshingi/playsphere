@@ -4858,6 +4858,16 @@ business_routes.register(api, db, SimpleNamespace(
 ))
 
 
+# Commission invoices — vendor's platform commission dues + admin reminders
+from routes import commission_invoices as commission_routes  # noqa: E402
+
+commission_routes.register(api, db, SimpleNamespace(
+    get_current_user=get_current_user,
+    require_platform_admin=require_platform_admin,
+    send_email=send_email,
+))
+
+
 # Register router + static mount AFTER all @api.x definitions above
 app.include_router(api)
 api_router = api  # alias kept for any callers

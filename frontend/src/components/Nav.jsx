@@ -45,7 +45,7 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
     more.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
   }
   if (isVendor) {
-    primary.push({ to: "/vendor/overview", label: "Dashboard", icon: Store, accent: "#EC4899" });
+    primary.push({ to: "/vendor/dashboard", label: "Dashboard", icon: Store, accent: "#EC4899" });
     primary.push({ to: "/bookings", label: "Requests" });
   }
   if (isSponsor) {

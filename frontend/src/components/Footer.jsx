@@ -51,7 +51,7 @@ export default function Footer() {
             <li><Link className="hover:text-[#84CC16]" to="/events">Events</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/players/profiles">Players</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/standings">Standings</Link></li>
-            <li><Link className="hover:text-[#84CC16]" to="/services">Services</Link></li>
+            <li><Link className="hover:text-[#84CC16]" to="/hire">Marketplace</Link></li>
             <li><Link className="hover:text-[#84CC16]" to="/sponsors">Sponsors</Link></li>
           </ul>
         </div>

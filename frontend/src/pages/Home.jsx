@@ -190,9 +190,9 @@ export default function Home() {
                   Onboard your company <ArrowRight className="ml-2 w-4 h-4" />
                 </Button>
               </Link>
-              <Link to="/services">
+              <Link to="/hire">
                 <Button data-testid="home-browse-services" size="lg" variant="outline" className="border-white/20 bg-white/0 text-white rounded-sm px-6 h-12 hover:bg-white/5">
-                  Browse services
+                  Browse marketplace
                 </Button>
               </Link>
             </div>

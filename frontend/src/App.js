@@ -18,8 +18,7 @@ import Register from "@/pages/Register";
 import RegisterTeam from "@/pages/RegisterTeam";
 import SignupCompany from "@/pages/SignupCompany";
 import SignupOrganiser from "@/pages/SignupOrganiser";
-import Services from "@/pages/Services";
-import ServiceDetail from "@/pages/ServiceDetail";
+import CorporateServices from "@/pages/CorporateServices";
 import Dashboard from "@/pages/Dashboard";
 import Bookings from "@/pages/Bookings";
 import PlatformAdmin from "@/pages/PlatformAdmin";
@@ -68,8 +67,11 @@ function App() {
           <Route path="/team-players/:id" element={<PlayerDetail />} />
           <Route path="/standings" element={<Standings />} />
           <Route path="/sponsors" element={<Sponsors />} />
-          <Route path="/services" element={<Services />} />
-          <Route path="/services/:id" element={<ServiceDetail />} />
+          {/* Legacy /services route → auto-redirects HR/Organiser to the new
+              Corporate Services module; other roles hit 404 further down. */}
+          <Route path="/services" element={<Navigate to="/corporate-services" replace />} />
+          <Route path="/services/:id" element={<Navigate to="/corporate-services" replace />} />
+          <Route path="/corporate-services" element={<CorporateServices />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/hire" element={<VendorMarket />} />

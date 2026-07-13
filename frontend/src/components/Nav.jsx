@@ -15,10 +15,13 @@ const LOGO_URL = "/kreeda-mark.png";
 const publicLinks = [
   { to: "/", label: "Home" },
   { to: "/events", label: "Events" },
-  { to: "/services", label: "Services" },
   { to: "/about", label: "About" },
   { to: "/contact", label: "Contact" },
 ];
+
+// Extra link injected only for HR / Organiser roles — the new Corporate
+// Services (RFQ) module replaces the old public /services page.
+const CORPORATE_SERVICES_LINK = { to: "/corporate-services", label: "Corporate Services" };
 
 /**
  * Each role exposes a `primary` list (rendered horizontally in the header) and
@@ -31,6 +34,7 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
   if (isCompanyAdmin) {
     primary.push({ to: "/dashboard", label: "Dashboard", icon: Briefcase, accent: "#84CC16" });
     primary.push({ to: "/admin", label: "Manage", icon: Shield, accent: "#84CC16" });
+    more.push({ to: CORPORATE_SERVICES_LINK.to, label: CORPORATE_SERVICES_LINK.label, icon: Store, accent: "#06B6D4" });
     more.push({ to: "/hire", label: "Hire vendors", icon: Store });
     more.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
     more.push({ to: "/players/profiles", label: "Players", icon: User });

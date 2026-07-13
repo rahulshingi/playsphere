@@ -47,7 +47,7 @@ export default function Dashboard() {
             <Button data-testid="dashboard-new-event" onClick={() => nav("/admin")} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
               <Plus className="w-4 h-4 mr-1" /> New tournament
             </Button>
-            <Button data-testid="dashboard-browse-services" onClick={() => nav("/services")} variant="outline" className="border-white/10 bg-transparent text-white rounded-sm">Browse services</Button>
+            <Button data-testid="dashboard-browse-services" onClick={() => nav("/corporate-services")} variant="outline" className="border-white/10 bg-transparent text-white rounded-sm">Corporate Services</Button>
           </div>
         </div>
 

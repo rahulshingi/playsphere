@@ -49,7 +49,7 @@ export default function Bookings() {
             {isVendor ? "INCOMING REQUESTS" : isPlatformAdmin ? "ALL BOOKINGS" : "YOUR BOOKINGS"}
           </h1>
           {!isVendor && hasServiceBookings && (
-            <Link to="/services"><Button data-testid="bookings-browse" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Browse services</Button></Link>
+            <Link to="/hire"><Button data-testid="bookings-browse" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Browse services</Button></Link>
           )}
           {isPlayer && (
             <Link to="/hire"><Button data-testid="bookings-browse-hire" className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Book a venue</Button></Link>

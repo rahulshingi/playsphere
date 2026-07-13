@@ -244,7 +244,11 @@ export async function shareMatchImage(match, { playerName = "" } = {}) {
       });
       return { ok: true, mode: "native" };
     } catch (err) {
-      // User cancelled OR host blocked — fall through to download.
+      // User cancelled OR host blocked native share — fall through to
+      // download. AbortError is expected on cancel, so don't surface it.
+      if (process.env.NODE_ENV !== "production" && err?.name !== "AbortError") {
+        console.debug("shareMatchImage native share failed:", err?.message);
+      }
     }
   }
 

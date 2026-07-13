@@ -23,8 +23,6 @@ import ServiceDetail from "@/pages/ServiceDetail";
 import Dashboard from "@/pages/Dashboard";
 import Bookings from "@/pages/Bookings";
 import PlatformAdmin from "@/pages/PlatformAdmin";
-import AdminOverview from "@/pages/admin/AdminOverview";
-import VendorOverview from "@/pages/vendor/VendorOverview";
 import PlayerSignup from "@/pages/PlayerSignup";
 import PlayerLogin from "@/pages/PlayerLogin";
 import AuthCallback from "@/pages/AuthCallback";

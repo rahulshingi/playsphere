@@ -49,7 +49,12 @@ export default function Home() {
         evRes.data.map((e) => api.get(`/events/${e.id}/fixtures`).then((res) => res.data.map((f) => ({ ...f, event: e }))).catch(() => []))
       );
       setLiveFixtures(all.flat().filter((f) => f.status === "live").slice(0, 6));
-    } catch { /* anonymous visitors see zero live fixtures — safe fallback */ }
+    } catch (err) {
+      // Anonymous visitors will 401 on some list endpoints — treat as
+      // "zero live fixtures" for the marketing hero. Log in dev so any
+      // real failure (500, network) is still visible.
+      if (process.env.NODE_ENV !== "production") console.debug("Home.loadLive skipped:", err?.message);
+    }
   };
 
   useEffect(() => {

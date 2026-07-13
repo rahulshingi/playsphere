@@ -834,6 +834,14 @@ def register(api, db, deps):
         await _check_within_hours(body.listing_id, body.start_time, body.end_time)
         # Refuse if the vendor has declared a slot block on this window.
         await _check_no_slot_block(body.listing_id, body.requested_date, body.start_time, body.end_time)
+        # Cross-source slot-conflict guard — also refuse if the same window is
+        # already reserved by a platform booking or another offline booking.
+        _guard = getattr(deps, "guard_slot_conflict", None)
+        if _guard is not None:
+            await _guard(
+                listing_id=body.listing_id, date=body.requested_date,
+                start=body.start_time, end=body.end_time,
+            )
         # Normalise the payload BEFORE constructing PrivateBooking to avoid the
         # "got multiple values for keyword argument" TypeError when defaults
         # collide with explicit kwargs.

@@ -2436,6 +2436,47 @@ def _normalize_booking_time(start: str, end_time: Optional[str], hours: Optional
     return e, h
 
 
+async def _guard_slot_conflict(
+    listing_id: str, date: str, start: str, end: str,
+    sub_unit_id: Optional[str] = None, exclude_booking_id: Optional[str] = None,
+) -> None:
+    """Reject if the [start, end) window on `date` overlaps with any of:
+      • existing platform booking (vendor_bookings) in pending/accepted/confirmed
+      • vendor's own offline walk-in (private_bookings) not cancelled/expired
+      • explicit vendor block (venue_blocks)
+
+    Applied on BOTH `POST /vendor-bookings` (platform) and
+    `POST /vendor/private-bookings` (offline) so vendors and platform buyers
+    can't race each other into the same slot.
+    """
+    def _ov(a_s, a_e, b_s, b_e):
+        return a_s < (b_e or "24:00") and (a_e or "24:00") > (b_s or "00:00")
+    sub_flt = {"sub_unit_id": sub_unit_id} if sub_unit_id else {}
+    online_flt = {
+        "listing_id": listing_id, "requested_date": date,
+        "status": {"$in": ["pending", "vendor_accepted", "confirmed"]},
+        **sub_flt,
+    }
+    if exclude_booking_id:
+        online_flt["id"] = {"$ne": exclude_booking_id}
+    for b in await db.vendor_bookings.find(online_flt, {"_id": 0, "start_time": 1, "end_time": 1}).to_list(200):
+        if _ov(start, end, b.get("start_time"), b.get("end_time")):
+            raise HTTPException(409, "That slot has just been booked online — pick another slot.")
+    for b in await db.private_bookings.find({
+        "listing_id": listing_id, "requested_date": date,
+        "status": {"$nin": ["cancelled", "expired"]},
+        **sub_flt,
+    }, {"_id": 0, "start_time": 1, "end_time": 1}).to_list(200):
+        if _ov(start, end, b.get("start_time"), b.get("end_time")):
+            raise HTTPException(409, "The vendor has an offline booking on this slot — pick another.")
+    for b in await db.venue_blocks.find({
+        "listing_id": listing_id, "date": date, **sub_flt,
+    }, {"_id": 0, "start_time": 1, "end_time": 1, "reason": 1}).to_list(200):
+        if _ov(start, end, b.get("start_time"), b.get("end_time")):
+            raise HTTPException(409, f"That slot is blocked by the vendor ({b.get('reason', 'unavailable')}).")
+
+
+
 def _reject_past_slot(requested_date: str, start_time: str) -> None:
     """Defence-in-depth: reject any booking/reschedule slot in the past.
 
@@ -2477,6 +2518,14 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
         company = await db.companies.find_one({"id": user["company_id"]}, {"_id": 0})
 
     end_time, hours = _normalize_booking_time(body.start_time, body.end_time, body.hours)
+    # Slot conflict check — prevent double-booking across ALL sources
+    # (platform online, vendor offline walk-ins, and explicit vendor blocks).
+    # The frontend uses /availability to render slots, but this is the
+    # authoritative server-side guard against simultaneous booking attempts.
+    await _guard_slot_conflict(
+        listing_id=listing["id"], date=body.requested_date,
+        start=body.start_time, end=end_time, sub_unit_id=body.sub_unit_id,
+    )
     price = float(listing["price"])
     total_price = price * hours
     sport = _resolve_booking_sport(body.sport, listing.get("sports") or [])
@@ -5092,6 +5141,7 @@ business_routes.register(api, db, SimpleNamespace(
     require_platform_admin=require_platform_admin,
     VENDOR_CATEGORY_SPORTS=VENDOR_CATEGORY_SPORTS,
     send_email=send_email,
+    guard_slot_conflict=_guard_slot_conflict,
 ))
 
 

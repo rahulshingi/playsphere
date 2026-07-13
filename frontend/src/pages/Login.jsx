@@ -75,6 +75,9 @@ export default function Login() {
           </svg>
           Sign in with Google
         </button>
+        <p className="text-[10px] text-neutral-500 mt-2 text-center leading-relaxed">
+          Signs you in as a <b className="text-neutral-300">Player</b>. HR, Company, Organiser, Sponsor and Vendor accounts — please <Link to="/register" className="text-[#84CC16] hover:underline">use the signup form</Link>.
+        </p>
 
         <p className="text-xs text-neutral-500 mt-6 text-center">
           New here? <Link to="/register" className="text-[#84CC16] hover:underline">Create account</Link>

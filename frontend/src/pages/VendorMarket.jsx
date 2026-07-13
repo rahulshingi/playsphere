@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import Nav from "@/components/Nav";
@@ -145,6 +145,18 @@ export default function VendorMarket() {
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Hire</div>
         <h1 className="font-display text-5xl tracking-wide mt-2">BOOK A GROUND OR HIRE TALENT</h1>
         <p className="text-neutral-400 mt-2 text-sm max-w-2xl">Pick a sport and city to see verified Kreeda Nation venues with live rates. Submit a request — admin confirms with the vendor and you&apos;ll see the status update on your bookings page.</p>
+
+        {!user && (
+          <div data-testid="vm-guest-banner" className="mt-4 inline-flex items-center gap-2 border border-[#06B6D4]/30 bg-[#06B6D4]/5 rounded-sm px-3 py-2 text-xs text-neutral-300 max-w-2xl">
+            <span className="text-[#06B6D4]">👋</span>
+            <span>
+              Browsing as guest — filter, preview slots, no signup needed. Sign in only when you&rsquo;re ready to book.{" "}
+              <Link to="/login" className="text-[#06B6D4] hover:underline">Sign in</Link>
+              {" · "}
+              <Link to="/register" className="text-[#84CC16] hover:underline">Create account</Link>
+            </span>
+          </div>
+        )}
 
         {/* Vendor type selector — top bar */}
         <div className="mt-8 flex flex-wrap gap-2">

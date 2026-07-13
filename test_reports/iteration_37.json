@@ -1,0 +1,41 @@
+{
+  "summary": "Corporate Services Phase 3 (Admin RFQ inbox + quotation flow + negotiation chat) and Internal Service Vendor Management — full backend E2E via pytest (30/30 PASS) and frontend smoke test via Playwright PASS. All privacy contracts (HR never sees internal_cost/margin_percent/gross_margin) verified from both API and UI.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/platform-admin tabs", "issues": ["15+ TabsTrigger buttons now wrap to a second row on 1920px viewport (RFQs sits on row 1 far right; Service Vendors is on row 2). Radix Tabs first-click sometimes stays `data-state=inactive` on this second-row tab — 2nd click activates it. Reproduced twice with the RFQs tab; Service Vendors tab worked on first click. Recommend adding a horizontal scroll container or grouping tabs into a dropdown."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_corporate_services_phase3.py",
+    "/app/test_reports/pytest/phase3_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "corporate_services.py::admin_delete_draft_quote (line 857) — deleting the ONLY draft (v1) does NOT reset the version counter. Next POST /quotations returns v=2 (not v=1). That is intentional per PRD (immutable audit trail) but the UI card label reads 'v2' with no v1 in history — mildly confusing. Consider showing '(v1 was deleted)' badge or renumbering when there are no sent quotes. Verified in TestRFQFlow.test_delete_draft_quote_creates_new_v1.",
+    "corporate_services.py::_quote_line_from_body (line 742) — `cost` here is `cost_line.get('cost')` which is qty×unit_rate (LINE total). Fixed-mode `selling_price` must therefore ALSO be a LINE total, and markup mode multiplies the entire line. The admin UI must communicate this clearly (per-line, not per-unit). Frontend QuotationBuilder appears to do this correctly via the Preview.",
+    "corporate_services.py::_hr_safe_quote (line 869) — strips `pricing_mode` from HR line items too. Good. But `valid_until`, `notes`, `sent_at`, `created_at` remain visible; that is fine.",
+    "corporate_services.py::admin_send_quotation — supersedes only prior `sent` quotes, NOT `rejected` quotes. Verified in test_create_v2_and_send that after HR reject → status is `rejected` not `superseded`. Intentional (accurate audit trail) but ensure UI badges distinguish superseded vs rejected quotes clearly.",
+    "corporate_services.py::hr_reject_quotation (line 916) — reason string is trimmed and truncated to 120 chars in the audit note but stored FULL LENGTH in `rejection_reason`. Good.",
+    "corporate_services.py::post_rfq_message (line 962) — admin post on `quoted` transitions RFQ to `negotiation`; but admin post on `negotiation`/`approved`/`completed` is allowed too. Verified. HR post on quoted keeps status as `quoted` — is that intended? A follow-up HR message post-quote may signal negotiation too. Consider mirroring transition for HR posts.",
+    "corporate_services.py::suggest_vendors_for_rfq — ranking is sorted per-service. Vendors that supply multiple selected services show up once per service block. Good. Consider deduplicating so admin sees a cross-service vendor score too.",
+    "corporate_services.py::get_cost_sheet auto-seed — DOES NOT seed addon lines when RFQ has selected_addons. Wait — actually it does (line 664-676). Verified.",
+    "AdminServiceVendorsTab.jsx — sv-preferred is a native checkbox (line 238). Fine for automation, but per design guide the rest of the app uses shadcn Switch. Consider aligning.",
+    "AdminRFQsTab.jsx — the `arfq-cs-suggest-*` action pushes the top suggestion silently. Verified via UI (auto-pick TEST_vendor_1d4eae chip visible). Consider adding a tooltip showing why (city_match=true, preferred=true).",
+    "PlatformAdmin.jsx — 15+ tabs on the Platform Admin page is starting to be unwieldy. RFQs and Service Vendors were added on separate rows. Consider grouping under a 'Corporate Services' meta-tab.",
+    "MyRFQs.jsx (HRChatPanel) — chat input auto-focuses would help UX. Chat send on Enter keydown was not tested but recommend it.",
+    "All new endpoints correctly exclude MongoDB `_id`. Verified via test payload inspection."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_corporate_services_phase3.py (new)"
+  ],
+  "success_rate": {"backend": "30/30 (100%)", "frontend": "smoke test PASS (admin tabs + service vendors CRUD + RFQ inbox + detail + HR RFQ detail with quote & chat)"},
+  "test_credentials": "Platform Admin: admin@kreedanation.com / admin123 · HR (organiser): testorg@example.com / orgpass123",
+  "seed_data_creation": "Backend pytest created (all TEST_* prefixed, will remain in DB): 1 service vendor 'TEST_vendor_*' with 2 rate cards (1800, 2200), 1 RFQ 'TEST_rfq_*' in 'approved' status with cost sheet + 2 quotations (v1 rejected, v2 accepted), 1 RFQ 'TEST_chatgate' in 'submitted' status. Playwright UI test also created 1 service vendor 'TEST_UI_vendor_37' (Mumbai, preferred). None of this seed data references or mutates production entities.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 3 backend + frontend validated on https://live-scoring-hub-5.preview.emergentagent.com. Backend pytest at /app/backend/tests/test_corporate_services_phase3.py — reruns idempotently (creates fresh TEST_* rows each run). Verified: (1) service_vendors CRUD, deletion guard (409 if referenced by cost sheet), (2) vendor rate cards upsert on (vendor_id, service_id) — updating existing rate reuses id, (3) admin RFQ inbox list + summary counts + suggest-vendors ranking (city_match → preferred → state_match → rate), (4) cost sheet autoseed from RFQ selected_services + selected_addons, save recomputes cost=qty*rate, enriches vendor_name, (5) quotations: draft with default_margin OR per-line mode='markup'|'fixed', selling_price and margin_percent computation for fixed mode verified (5000 fixed on cost 3600 → 38.89%), delete-only-on-draft (400 on sent), send flips RFQ to 'quoted', supersedes prior 'sent', (6) HR-side quote endpoint returns None for drafts, returns sanitised shape for sent quotes (no internal_cost/margin_percent/gross_margin/pricing_mode). Admin sees full shape, (7) chat gate: GET returns [] and POST returns 400 before first quote. After quote sent, admin+HR can post. Admin post on 'quoted' flips to 'negotiation'. (8) HR reject → RFQ 'negotiation', reason posted into chat. HR accept → RFQ 'approved', quote 'accepted'. (9) Frontend: pa-tab-rfqs and pa-tab-svendors render correctly (Radix Tabs quirk — sometimes needs 2 clicks to activate the second row tab; page.click force=True twice fixes). Admin RFQ detail shows EventSnapshot, CostSheet with vendor select + auto-pick chip, QuotationBuilder with Create draft button, chat once quoted. HR /rfqs/{id} shows QuotationView (rfq-quote), quote total (rfq-quote-total), chat panel (rfq-chat-input/send). No banned strings (internal_cost/gross_margin/margin_percent) leak in HR page DOM.",
+  "rca of the issue": "N/A — no bugs. Only minor UX polish suggestions in critical_code_review_comments."
+}

@@ -6,8 +6,9 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Package, Clock, CheckCircle2, XCircle, MessageSquare, ArrowRight, FileText } from "lucide-react";
+import { Package, Clock, CheckCircle2, XCircle, MessageSquare, ArrowRight, FileText, Send, Receipt } from "lucide-react";
 
 /**
  * MyRFQs (Phase 2) — HR/Organiser list + detail of their Corporate Services
@@ -125,11 +126,14 @@ export function MyRFQsList() {
 export function RFQDetail() {
   const { rfqId } = useParams();
   const nav = useNavigate();
-  const { user } = useAuth();
   const [rfq, setRfq] = useState(null);
+  const [quote, setQuote] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  const load = () => { api.get(`/rfqs/${rfqId}`).then((r) => setRfq(r.data)).catch(() => nav("/rfqs")); };
+  const load = () => {
+    api.get(`/rfqs/${rfqId}`).then((r) => setRfq(r.data)).catch(() => nav("/rfqs"));
+    api.get(`/rfqs/${rfqId}/quotation`).then((r) => setQuote(r.data)).catch(() => setQuote(null));
+  };
   useEffect(load, [rfqId]); // eslint-disable-line
 
   const cancel = async () => {
@@ -142,8 +146,31 @@ export function RFQDetail() {
     } catch (err) { toast.error(err.response?.data?.detail || "Failed"); } finally { setBusy(false); }
   };
 
+  const acceptQuote = async () => {
+    if (!window.confirm("Accept this quotation? It will move the RFQ to Approved.")) return;
+    setBusy(true);
+    try {
+      await api.post(`/rfqs/${rfqId}/quotation/accept`);
+      toast.success("Quotation accepted"); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+    finally { setBusy(false); }
+  };
+
+  const rejectQuote = async () => {
+    const reason = window.prompt("Reason for rejection (this will be shared with admin):");
+    if (reason === null) return;
+    setBusy(true);
+    try {
+      await api.post(`/rfqs/${rfqId}/quotation/reject`, { reason });
+      toast.success("Quotation rejected — admin can send a revision."); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+    finally { setBusy(false); }
+  };
+
   if (!rfq) return null;
   const canCancel = ["submitted", "under_review", "quoted", "negotiation"].includes(rfq.status);
+  const chatOpen = ["quoted", "negotiation", "approved", "completed"].includes(rfq.status);
+  const canActOnQuote = quote && quote.status === "sent";
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white">
@@ -200,24 +227,187 @@ export function RFQDetail() {
           </div>
         </section>
 
-        <section className="mt-8 border border-[#06B6D4]/30 bg-[#06B6D4]/5 rounded-sm p-5">
-          <div className="flex items-start gap-3">
-            <MessageSquare className="w-5 h-5 text-[#06B6D4] mt-0.5 shrink-0" />
-            <div className="flex-1">
-              <div className="font-semibold">Awaiting quotation</div>
-              <p className="text-xs text-neutral-400 mt-1">The admin team is reviewing your RFQ. You&rsquo;ll receive an email once a quotation is ready. Negotiation + approval actions arrive in the next update.</p>
+        {!quote && (
+          <section className="mt-8 border border-[#06B6D4]/30 bg-[#06B6D4]/5 rounded-sm p-5">
+            <div className="flex items-start gap-3">
+              <MessageSquare className="w-5 h-5 text-[#06B6D4] mt-0.5 shrink-0" />
+              <div className="flex-1">
+                <div className="font-semibold">Awaiting quotation</div>
+                <p className="text-xs text-neutral-400 mt-1">The admin team is reviewing your RFQ. You&rsquo;ll receive an email once a quotation is ready.</p>
+              </div>
+              {canCancel && (
+                <Button data-testid="rfq-cancel" disabled={busy} onClick={cancel} variant="outline" className="border-[#FF3B30]/40 bg-transparent text-[#FF3B30] hover:bg-[#FF3B30]/10 h-9 rounded-sm text-xs">
+                  <XCircle className="w-3.5 h-3.5 mr-1" /> Cancel RFQ
+                </Button>
+              )}
             </div>
-            {canCancel && (
-              <Button data-testid="rfq-cancel" disabled={busy} onClick={cancel} variant="outline" className="border-[#FF3B30]/40 bg-transparent text-[#FF3B30] hover:bg-[#FF3B30]/10 h-9 rounded-sm text-xs">
-                <XCircle className="w-3.5 h-3.5 mr-1" /> Cancel RFQ
-              </Button>
-            )}
+          </section>
+        )}
+
+        {quote && <QuotationView quote={quote} canAct={canActOnQuote} onAccept={acceptQuote} onReject={rejectQuote} busy={busy} />}
+
+        {chatOpen && <HRChatPanel rfqId={rfq.id} />}
+
+        {canCancel && quote && (
+          <div className="mt-6 flex justify-end">
+            <Button data-testid="rfq-cancel" disabled={busy} onClick={cancel} variant="outline" className="border-[#FF3B30]/40 bg-transparent text-[#FF3B30] hover:bg-[#FF3B30]/10 h-9 rounded-sm text-xs">
+              <XCircle className="w-3.5 h-3.5 mr-1" /> Cancel RFQ
+            </Button>
           </div>
-        </section>
+        )}
       </div>
       <Footer />
     </div>
   );
+}
+
+// ─────────────── Quote View (HR side) ───────────────
+function QuotationView({ quote, canAct, onAccept, onReject, busy }) {
+  const isRejected = quote.status === "rejected";
+  const isSuperseded = quote.status === "superseded";
+  const isAccepted = quote.status === "accepted";
+  return (
+    <section data-testid="rfq-quote" className="mt-8 border border-[#06B6D4]/30 bg-[#06B6D4]/5 rounded-sm p-5">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-[#06B6D4]">/ Quotation · v{quote.version}</div>
+          <div className="mt-1 flex items-center gap-2 flex-wrap">
+            <Receipt className="w-4 h-4 text-[#06B6D4]" />
+            <span className="text-white font-semibold">Total ₹{Number(quote.total_selling).toLocaleString("en-IN")}</span>
+            <QuoteStatusBadge status={quote.status} />
+            {quote.valid_until && <span className="text-[10px] font-mono uppercase text-neutral-400">valid until {quote.valid_until}</span>}
+          </div>
+        </div>
+        {canAct && (
+          <div className="flex gap-2">
+            <Button data-testid="rfq-quote-accept" disabled={busy} onClick={onAccept} className="bg-[#84CC16] hover:bg-[#65A30D] text-black">
+              <CheckCircle2 className="w-4 h-4 mr-1" /> Accept
+            </Button>
+            <Button data-testid="rfq-quote-reject" disabled={busy} onClick={onReject} variant="outline"
+              className="border-[#FF3B30]/40 bg-transparent text-[#FF3B30] hover:bg-[#FF3B30]/10">
+              <XCircle className="w-4 h-4 mr-1" /> Reject / Counter
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {(isRejected || isSuperseded) && (
+        <div className="mt-3 text-xs text-neutral-400 border-l-2 border-[#FF3B30]/40 pl-3">
+          {isRejected ? "You rejected this quotation. Admin may send a revised version." : "This quote has been superseded by a newer version."}
+          {quote.rejection_reason && <div className="mt-1 italic">Reason: {quote.rejection_reason}</div>}
+        </div>
+      )}
+      {isAccepted && (
+        <div className="mt-3 text-xs text-[#84CC16] border-l-2 border-[#84CC16]/40 pl-3">
+          Accepted on {(quote.accepted_at || "").slice(0, 10)}. The admin team will reach out with next steps.
+        </div>
+      )}
+
+      <div className="mt-4 border border-white/10 rounded-sm bg-black/40 overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="text-left font-mono uppercase text-[10px] text-neutral-500 border-b border-white/10">
+              <th className="px-3 py-2">Line</th>
+              <th className="px-3 py-2 w-20 text-right">Qty</th>
+              <th className="px-3 py-2 w-32 text-right">Line total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {(quote.lines || []).map((l) => (
+              <tr key={l.line_id} className="border-b border-white/5">
+                <td className="px-3 py-2 text-white">
+                  {l.name}
+                  <span className="ml-1 text-[9px] font-mono uppercase text-neutral-500">{l.unit_type}</span>
+                </td>
+                <td className="px-3 py-2 text-right text-neutral-300">{l.quantity}</td>
+                <td className="px-3 py-2 text-right font-mono text-white">₹{Number(l.selling_price).toLocaleString("en-IN")}</td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr><td colSpan={2} className="px-3 py-1.5 text-right text-[10px] font-mono uppercase text-neutral-500">Subtotal</td>
+                <td className="px-3 py-1.5 text-right font-mono text-neutral-300">₹{Number(quote.subtotal).toLocaleString("en-IN")}</td></tr>
+            {quote.discount > 0 && (
+              <tr><td colSpan={2} className="px-3 py-1.5 text-right text-[10px] font-mono uppercase text-neutral-500">Discount</td>
+                  <td className="px-3 py-1.5 text-right font-mono text-neutral-300">− ₹{Number(quote.discount).toLocaleString("en-IN")}</td></tr>
+            )}
+            {quote.tax_amount > 0 && (
+              <tr><td colSpan={2} className="px-3 py-1.5 text-right text-[10px] font-mono uppercase text-neutral-500">Tax ({quote.tax_percent}%)</td>
+                  <td className="px-3 py-1.5 text-right font-mono text-neutral-300">₹{Number(quote.tax_amount).toLocaleString("en-IN")}</td></tr>
+            )}
+            <tr className="border-t-2 border-[#06B6D4]/40">
+              <td colSpan={2} className="px-3 py-2 text-right font-mono uppercase text-[10px] text-neutral-400">Total</td>
+              <td className="px-3 py-2 text-right text-[#06B6D4] font-bold" data-testid="rfq-quote-total">₹{Number(quote.total_selling).toLocaleString("en-IN")}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {quote.notes && (
+        <div className="mt-3 text-xs text-neutral-300 border-t border-white/5 pt-3">
+          <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Notes from admin</div>
+          <div className="whitespace-pre-wrap">{quote.notes}</div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─────────────── HR Chat (identical UX to admin, mirrored bubble alignment) ───────────────
+function HRChatPanel({ rfqId }) {
+  const [messages, setMessages] = useState([]);
+  const [text, setText] = useState("");
+
+  const load = () => api.get(`/rfqs/${rfqId}/messages`).then((r) => setMessages(r.data || []));
+  useEffect(() => { load(); }, [rfqId]); // eslint-disable-line
+
+  const send = async () => {
+    if (!text.trim()) return;
+    try {
+      await api.post(`/rfqs/${rfqId}/messages`, { body: text });
+      setText(""); load();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+  };
+
+  return (
+    <section className="mt-8 border border-[#EC4899]/30 bg-[#EC4899]/5 rounded-sm p-5">
+      <div className="font-mono text-[10px] uppercase tracking-widest text-[#EC4899] mb-3 flex items-center gap-2">
+        <MessageSquare className="w-3.5 h-3.5" /> / Chat with admin
+      </div>
+      <div className="border border-white/10 rounded-sm bg-black/40 max-h-72 overflow-y-auto p-3 space-y-2">
+        {messages.length === 0 && <div className="text-neutral-500 text-xs text-center py-8">No messages yet.</div>}
+        {messages.map((m) => (
+          <div key={m.id} data-testid={`rfq-msg-${m.id}`} className={`flex ${m.sender_role === "hr" ? "justify-end" : "justify-start"}`}>
+            <div className={`max-w-[75%] rounded-sm px-3 py-2 text-sm ${m.sender_role === "hr" ? "bg-[#EC4899]/15 text-[#fce7f3] border border-[#EC4899]/30" : "bg-white/5 text-neutral-200 border border-white/10"}`}>
+              <div className="text-[9px] font-mono uppercase text-neutral-500 mb-1">
+                {m.sender_role === "hr" ? "You" : "Admin"} · {(m.created_at || "").slice(11, 16)}
+              </div>
+              <div className="whitespace-pre-wrap">{m.body}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <Input data-testid="rfq-chat-input" value={text} onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && send()}
+          placeholder="Type reply…"
+          className="bg-black/40 border-white/10 text-white text-sm" />
+        <Button data-testid="rfq-chat-send" size="sm" onClick={send} className="bg-[#EC4899] hover:bg-[#db2777] text-white">
+          <Send className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function QuoteStatusBadge({ status }) {
+  const tone = {
+    sent:       "bg-[#06B6D4]/15 text-[#06B6D4] border-[#06B6D4]/40",
+    accepted:   "bg-[#84CC16]/15 text-[#84CC16] border-[#84CC16]/40",
+    rejected:   "bg-[#FF3B30]/15 text-[#FF3B30] border-[#FF3B30]/40",
+    superseded: "bg-white/5 text-neutral-500 border-white/10",
+  }[status] || "bg-white/5 text-neutral-400 border-white/10";
+  return <Badge className={`border ${tone} text-[9px] font-mono uppercase tracking-widest`}>{status}</Badge>;
 }
 
 function StatusBadge({ status }) {

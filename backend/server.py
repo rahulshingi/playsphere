@@ -4877,7 +4877,7 @@ async def list_blocks(listing_id: str, date: Optional[str] = None):
 
 @api.post("/vendor-listings/{listing_id}/blocks")
 async def create_block(listing_id: str, body: dict, user: dict = Depends(get_current_user)):
-    await _require_vendor_owner(listing_id, user)
+    listing = await _require_vendor_owner(listing_id, user)
     date = body.get("date") or ""
     start = body.get("start_time") or ""
     end = body.get("end_time") or ""
@@ -4888,10 +4888,12 @@ async def create_block(listing_id: str, body: dict, user: dict = Depends(get_cur
         raise HTTPException(400, "end_time must be after start_time")
     doc = {
         "id": str(uuid.uuid4()),
+        "vendor_id": listing.get("vendor_id"),
         "listing_id": listing_id,
         "sub_unit_id": body.get("sub_unit_id"),
         "date": date, "start_time": start, "end_time": end,
-        "reason": (body.get("reason") or "").strip(),
+        "reason": (body.get("reason") or "").strip() or "maintenance",
+        "notes": (body.get("notes") or "").strip(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.venue_blocks.insert_one(doc)

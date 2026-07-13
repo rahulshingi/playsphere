@@ -790,7 +790,7 @@ def register(api, db, deps):
     async def _check_no_slot_block(listing_id: str, date: str, start: str, end: str):
         """Reject if the requested window overlaps a vendor-declared slot block
         (maintenance / tournament / private / staff_practice)."""
-        blocks = await db.slot_blocks.find({"listing_id": listing_id, "date": date}, {"_id": 0}).to_list(200)
+        blocks = await db.venue_blocks.find({"listing_id": listing_id, "date": date}, {"_id": 0}).to_list(200)
         for b in blocks:
             if start < b.get("end_time", "24:00") and end > b.get("start_time", "00:00"):
                 raise HTTPException(400, f"Slot {start}–{end} is blocked for {b.get('reason','maintenance')} — clear the block first.")
@@ -1367,14 +1367,21 @@ def register(api, db, deps):
     def _staff_can(vendor: dict, perm: str) -> bool:
         return staff_can(vendor, perm)
 
-    # -------- Slot blocks --------
+    # -------- Slot blocks (unified into `venue_blocks` collection, Jul 2026) --------
+    # Historically we had two collections doing the same job:
+    #   • `venue_blocks` — created via /vendor-listings/{lid}/blocks (Listings tab)
+    #   • `slot_blocks`  — created via /vendor/slot-blocks (Offline-mode tab)
+    # The availability guard only checked `venue_blocks`, so blocks made from
+    # the Offline tab weren't respected by online buyers. Both endpoints now
+    # read/write the SAME `venue_blocks` collection, so any block created from
+    # either UI blocks both booking flows.
     @api.post("/vendor/slot-blocks", response_model=SlotBlock)
     async def create_slot_block(body: dict, user: dict = Depends(get_current_user)):
         vendor = await _ensure_vendor_owner(user)
         if not _staff_can(vendor, "bookings"):
             raise HTTPException(403, "Not allowed")
         blk = SlotBlock(vendor_id=vendor["id"], **{k: body[k] for k in ("listing_id","date","start_time","end_time","reason","notes") if k in body})
-        await db.slot_blocks.insert_one(blk.model_dump())
+        await db.venue_blocks.insert_one(blk.model_dump())
         return blk
 
     @api.get("/vendor/slot-blocks", response_model=List[SlotBlock])
@@ -1383,13 +1390,17 @@ def register(api, db, deps):
         flt = {"vendor_id": vendor["id"]}
         if listing_id:
             flt["listing_id"] = listing_id
-        docs = await db.slot_blocks.find(flt, {"_id": 0}).sort("date", -1).to_list(500)
+        docs = await db.venue_blocks.find(flt, {"_id": 0}).sort("date", -1).to_list(500)
+        # Legacy rows may miss defaults — coerce so pydantic parse succeeds.
+        for d in docs:
+            d.setdefault("vendor_id", vendor["id"])
+            d.setdefault("reason", "maintenance")
         return [SlotBlock(**d) for d in docs]
 
     @api.delete("/vendor/slot-blocks/{block_id}")
     async def delete_slot_block(block_id: str, user: dict = Depends(get_current_user)):
         vendor = await _ensure_vendor_owner(user)
-        await db.slot_blocks.delete_one({"id": block_id, "vendor_id": vendor["id"]})
+        await db.venue_blocks.delete_one({"id": block_id, "vendor_id": vendor["id"]})
         return {"ok": True}
 
     # -------- Expenses --------

@@ -219,6 +219,87 @@ def _register_core_auth(api, db, ctx: SimpleNamespace):
     async def auth_me(user: dict = Depends(ctx.get_current_user)):
         return UserPublic(**await ctx._user_with_company(user))
 
+    # ---------------------------------------------------------------------
+    # Emergent-managed Google OAuth (Jul 2026).
+    # Frontend sends the browser to https://auth.emergentagent.com/
+    #   ?redirect=<our /auth/callback URL>. After the user consents, Emergent
+    #   redirects back with #session_id=<opaque> in the URL fragment. The
+    #   frontend then POSTs that session_id here — we exchange it with
+    #   Emergent for the user's email/name and either sign them in (if the
+    #   email exists) or provision a fresh `player` account. In both cases we
+    #   issue OUR own JWT into the `access_token` cookie so the rest of the
+    #   app keeps using the same auth path as email/password logins.
+    # ---------------------------------------------------------------------
+    @api.post("/auth/google/session", response_model=UserPublic)
+    async def auth_google_session(body: dict, response: Response):
+        import httpx
+        session_id = (body or {}).get("session_id", "").strip()
+        if not session_id:
+            raise HTTPException(400, "session_id required")
+        # Exchange session_id → user profile with Emergent Auth
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                resp = await client.get(
+                    "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data",
+                    headers={"X-Session-ID": session_id},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+        except httpx.HTTPStatusError as e:
+            logger.warning("Google session exchange failed: %s", e.response.text[:200])
+            raise HTTPException(401, "Google sign-in failed — please try again.")
+        except Exception as e:  # noqa: BLE001
+            logger.error("Google session exchange error: %s", e)
+            raise HTTPException(502, "Auth service unreachable — please try again.")
+
+        email = (data.get("email") or "").strip().lower()
+        name = data.get("name") or email.split("@")[0]
+        if not email:
+            raise HTTPException(502, "Google returned no email")
+
+        user = await db.users.find_one({"email": email})
+        if user:
+            if user.get("disabled"):
+                raise HTTPException(403, "Account disabled — contact admin@kreedanation.com")
+        else:
+            # Provision a fresh player account tied to this Google identity.
+            user_id = str(uuid.uuid4())
+            user = {
+                "id": user_id,
+                "email": email,
+                "name": name,
+                "role": "player",
+                "company_id": None,
+                "picture_url": data.get("picture") or None,
+                "auth_provider": "google",
+                "password_hash": ctx.hash_password(secrets.token_urlsafe(32)),
+                "email_verified": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+            await db.users.insert_one(user)
+            # Also create a matching player profile so /players/me works.
+            try:
+                unique_slug = await ctx._unique_player_slug(name) if hasattr(ctx, "_unique_player_slug") else None
+            except Exception:
+                unique_slug = None
+            await db.player_profiles.insert_one({
+                "id": str(uuid.uuid4()),
+                "user_id": user_id,
+                "name": name,
+                "mobile": "",
+                "email": email,
+                "photo_url": data.get("picture") or None,
+                "slug": unique_slug,
+                "corporate_email": None,
+                "corporate_email_verified": False,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            })
+            logger.info("Google signup: new player %s", email)
+
+        token = ctx.create_access_token(user["id"], user["email"], user["role"], user.get("company_id"))
+        ctx.set_auth_cookie(response, token)
+        return UserPublic(**await ctx._user_with_company(user))
+
 
 def _register_signup_otp(api, db):
     """POST /{companies,vendors,players,organisers}/signup/request-otp."""

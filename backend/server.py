@@ -723,6 +723,15 @@ class PlayerProfile(BaseModel):
     # offline books they already frequent. Marketplace bookings to this vendor
     # skip the platform commission (see request_vendor_booking).
     offline_source_vendor_id: Optional[str] = None
+    # ---- Corporate email verification (Jul 2026) ----
+    # A player signs up with their PERSONAL email (login identity). Once they
+    # want to be discovered by their employer's HR, they add + verify a
+    # separate `corporate_email`. Once verified, if a company already exists
+    # with a matching domain we auto-link `company_id`; otherwise we still
+    # store the verified corporate email so a later HR signup can pick them up.
+    corporate_email: Optional[str] = None
+    corporate_email_verified: bool = False
+    corporate_email_verified_at: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -1824,6 +1833,114 @@ async def player_login(body: PlayerLoginBody, response: Response):
     return UserPublic(**await _user_with_company(user))
 
 
+# ---------------------------------------------------------------------------
+# Corporate email linking (Jul 2026) — allow a player with a personal-email
+# signup to attach + verify a work email so HR at that company can find them.
+# ---------------------------------------------------------------------------
+def _email_domain(e: str) -> str:
+    return (e or "").strip().lower().split("@", 1)[-1] if "@" in (e or "") else ""
+
+
+async def _auto_link_company_by_domain(db, corporate_email: str) -> Optional[str]:
+    """Try to find a company whose admin_email shares the corporate email's domain."""
+    domain = _email_domain(corporate_email)
+    if not domain or domain in {"gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com"}:
+        return None
+    # Company doc might store admin_email or match via one of its company_admin users.
+    company_admin = await db.users.find_one(
+        {"role": "company_admin", "email": {"$regex": f"@{domain}$", "$options": "i"}, "company_id": {"$ne": None}},
+        {"_id": 0, "company_id": 1},
+    )
+    return company_admin["company_id"] if company_admin else None
+
+
+@api.post("/players/me/corporate-email/request-otp")
+async def player_corporate_email_request_otp(body: dict, user: dict = Depends(get_current_user)):
+    """Send a 6-digit code to the player's work email for verification."""
+    if user.get("role") != "player" and not user.get("also_player"):
+        raise HTTPException(403, "Player only")
+    corp_email = (body or {}).get("corporate_email", "").strip().lower()
+    if not corp_email or "@" not in corp_email:
+        raise HTTPException(400, "Valid corporate email is required")
+    domain = _email_domain(corp_email)
+    FREE_DOMAINS = {"gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com", "protonmail.com"}
+    if domain in FREE_DOMAINS:
+        raise HTTPException(400, "Please enter your official work email (personal providers like Gmail can't be verified as a company email).")
+    import secrets as _secrets  # local import — small helper, no need to bloat module globals
+    from email_service import send_otp_email as _send_otp, is_email_configured as _is_email_configured
+    if not _is_email_configured():
+        raise HTTPException(503, "Email service is not configured — please contact admin@kreedanation.com.")
+    otp = f"{_secrets.randbelow(1000000):06d}"
+    now = datetime.now(timezone.utc)
+    await db.player_corp_otps.update_one(
+        {"user_id": user["id"], "corporate_email": corp_email},
+        {"$set": {
+            "user_id": user["id"], "corporate_email": corp_email, "otp": otp,
+            "expires_at": (now + timedelta(minutes=10)).isoformat(),
+            "attempts": 0, "created_at": now.isoformat(),
+        }},
+        upsert=True,
+    )
+    ok = _send_otp(to=corp_email, otp=otp, company_name="your company at Kreeda Nation")
+    if not ok:
+        await db.player_corp_otps.delete_one({"user_id": user["id"], "corporate_email": corp_email})
+        raise HTTPException(502, "Couldn't send the verification email. Please try again shortly.")
+    return {"ok": True, "expires_in": 600, "corporate_email": corp_email}
+
+
+@api.post("/players/me/corporate-email/verify")
+async def player_corporate_email_verify(body: dict, user: dict = Depends(get_current_user)):
+    """Verify the OTP and link the corporate email + (best-effort) company_id."""
+    if user.get("role") != "player" and not user.get("also_player"):
+        raise HTTPException(403, "Player only")
+    corp_email = (body or {}).get("corporate_email", "").strip().lower()
+    otp_input = (body or {}).get("otp", "").strip()
+    if not (corp_email and otp_input):
+        raise HTTPException(400, "corporate_email and otp are required")
+    rec = await db.player_corp_otps.find_one({"user_id": user["id"], "corporate_email": corp_email})
+    if not rec:
+        raise HTTPException(400, "No verification request pending — request a code first.")
+    # Check expiry
+    exp = rec.get("expires_at", "")
+    try:
+        if datetime.fromisoformat(exp) < datetime.now(timezone.utc):
+            raise HTTPException(400, "Verification code expired. Request a fresh one.")
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Verification record corrupt — request a fresh code.")
+    if int(rec.get("attempts") or 0) >= 5:
+        raise HTTPException(429, "Too many attempts — request a fresh code.")
+    if rec["otp"] != otp_input:
+        await db.player_corp_otps.update_one({"_id": rec["_id"]}, {"$inc": {"attempts": 1}})
+        raise HTTPException(400, "Incorrect code")
+    # ✔ verified — try to auto-link company by domain
+    company_id = await _auto_link_company_by_domain(db, corp_email)
+    upd = {
+        "corporate_email": corp_email,
+        "corporate_email_verified": True,
+        "corporate_email_verified_at": datetime.now(timezone.utc).isoformat(),
+    }
+    company_name = None
+    if company_id:
+        c = await db.companies.find_one({"id": company_id}, {"_id": 0, "name": 1})
+        company_name = c["name"] if c else None
+        upd["company_id"] = company_id
+        upd["company_name"] = company_name
+    await db.player_profiles.update_one({"user_id": user["id"]}, {"$set": upd})
+    # Also mirror on users doc so HR search's user-side joins work
+    if company_id:
+        await db.users.update_one({"id": user["id"]}, {"$set": {"company_id": company_id}})
+    await db.player_corp_otps.delete_one({"_id": rec["_id"]})
+    return {
+        "ok": True,
+        "corporate_email": corp_email,
+        "linked_company_id": company_id,
+        "linked_company_name": company_name,
+        "message": company_name
+            and f"Corporate email verified · linked to {company_name}"
+            or "Corporate email verified. When your HR joins Kreeda Nation, you'll be auto-linked to their roster.",
+    }
+
+
 @api.get("/players/me")
 async def get_my_player_profile(user: dict = Depends(get_current_user)):
     # Native `role=player` OR HR/organiser/admin who opted-in via /auth/also-player.
@@ -1873,15 +1990,25 @@ async def list_player_profiles(
     - city: case-insensitive city contains.
     """
     flt = {}
-    # Company HRs are scoped: they can only see player profiles linked to THEIR company.
-    # This overrides any `company_id` they may pass — prevents browsing other companies'
-    # rosters. Platform admins / organisers / players see the full directory (subject to
-    # the optional company_id query param).
+    hr_and_clauses = []
+    # Company HRs are scoped: they see (a) players whose profile.company_id
+    # matches theirs OR (b) players who verified a corporate email whose
+    # domain matches the HR's login-email domain. This lets a player who
+    # signed up with a personal email still be discovered once they verify
+    # their work email — see /players/me/corporate-email/verify.
     if user.get("role") == "company_admin":
         own_cid = user.get("company_id")
         if not own_cid:
-            return []  # HR without a company shouldn't see any players
-        flt["company_id"] = own_cid
+            return []
+        own_domain = _email_domain(user.get("email") or "")
+        clauses = [{"company_id": own_cid}]
+        if own_domain and own_domain not in {"gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com"}:
+            clauses.append({
+                "corporate_email_verified": True,
+                "corporate_email": {"$regex": f"@{own_domain}$", "$options": "i"},
+            })
+        # Stash under $and so downstream $or-based q / sport filters don't clobber it.
+        hr_and_clauses.append({"$or": clauses})
     elif company_id:
         flt["company_id"] = company_id
     if q:
@@ -1932,6 +2059,8 @@ async def list_player_profiles(
             flt["$and"] = and_clauses
 
     limit = max(1, min(int(limit), 2000))
+    if hr_and_clauses:
+        flt.setdefault("$and", []).extend(hr_and_clauses)
     docs = await db.player_profiles.find(flt, {"_id": 0}).sort([("created_at", -1), ("name", 1)]).to_list(limit)
     # Mask mobile for non-self viewers (keep last 4 digits)
     for d in docs:
@@ -4879,6 +5008,7 @@ auth_routes.register(api, db, SimpleNamespace(
     require_company_admin=require_company_admin,
     require_platform_admin=require_platform_admin,
     _user_with_company=_user_with_company,
+    _unique_player_slug=_unique_player_slug,
 ))
 
 # Events / Teams / Team-roster players (extracted into routes/events.py)

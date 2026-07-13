@@ -27,6 +27,7 @@ import AdminOverview from "@/pages/admin/AdminOverview";
 import VendorOverview from "@/pages/vendor/VendorOverview";
 import PlayerSignup from "@/pages/PlayerSignup";
 import PlayerLogin from "@/pages/PlayerLogin";
+import AuthCallback from "@/pages/AuthCallback";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
 import PlayerProfile from "@/pages/PlayerProfile";
@@ -81,6 +82,7 @@ function App() {
           <Route path="/admin" element={<Admin />} />
           <Route path="/platform-admin" element={<PlatformAdmin />} />
           <Route path="/login" element={<Login />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/register" element={<Register />} />
           <Route path="/register-team" element={<RegisterTeam />} />
           <Route path="/signup-company" element={<SignupCompany />} />

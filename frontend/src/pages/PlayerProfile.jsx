@@ -60,18 +60,22 @@ export default function PlayerProfile() {
   // Profile defaults to view-only. Player explicitly clicks Edit to make changes.
   const [editing, setEditing] = useState(false);
 
+  const reload = () => {
+    api.get("/players/me").then((r) => {
+      const migrated = withLegacyMigration(r.data);
+      setProfile(migrated);
+      setOriginal(snapshot(migrated));
+    }).catch(() => {});
+  };
+
   useEffect(() => {
     // Native player OR HR/organiser opted-in via `also_player`.
     if (ready && (!user || (user.role !== "player" && !user.also_player))) { nav("/players/login"); return; }
     if (ready) {
-      api.get("/players/me").then((r) => {
-        const migrated = withLegacyMigration(r.data);
-        setProfile(migrated);
-        setOriginal(snapshot(migrated));
-      });
+      reload();
       api.get("/companies/public").then((r) => setCompanies(r.data));
     }
-  }, [ready, user]);
+  }, [ready, user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const upd = (patch) => setProfile({ ...profile, ...patch });
   const updSport = (sport, sportProfile) => setProfile({
@@ -211,6 +215,7 @@ function ViewMode({ profile, companyName, interested }) {
           />
         </div>
         <ReadField label="Company" value={companyName} testid="view-company" />
+        <CorporateEmailCard profile={profile} onLinked={reload} />
         <ReadField label="City" value={profile.city || "—"} testid="view-city" />
         <ReadField label="Date of birth" value={profile.dob || "—"} testid="view-dob" />
         <ReadField label="Height" value={profile.height_cm ? `${profile.height_cm} cm` : "—"} testid="view-height" />
@@ -301,6 +306,111 @@ function ReadField({ label, value, testid }) {
     <div>
       <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">{label}</div>
       <div className="text-neutral-200" data-testid={testid}>{value}</div>
+    </div>
+  );
+}
+
+/**
+ * CorporateEmailCard — inline profile widget that lets a player attach and
+ * verify a work email. Once verified, HR at the matching-domain company can
+ * discover this player in the roster search (see /players/profiles).
+ */
+function CorporateEmailCard({ profile, onLinked }) {
+  const verified = !!profile?.corporate_email_verified;
+  const [expanded, setExpanded] = useState(false);
+  const [email, setEmail] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const request = async () => {
+    if (!email.includes("@")) return toast.error("Enter your work email");
+    setBusy(true);
+    try {
+      await api.post("/players/me/corporate-email/request-otp", { corporate_email: email.trim().toLowerCase() });
+      toast.success(`Code sent to ${email}`);
+      setOtpSent(true);
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); } finally { setBusy(false); }
+  };
+
+  const verify = async () => {
+    setBusy(true);
+    try {
+      const { data } = await api.post("/players/me/corporate-email/verify", {
+        corporate_email: email.trim().toLowerCase(), otp: otp.trim(),
+      });
+      toast.success(data.message);
+      setExpanded(false); setOtpSent(false); setEmail(""); setOtp("");
+      onLinked?.();
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed"); } finally { setBusy(false); }
+  };
+
+  if (verified) {
+    return (
+      <div data-testid="corp-email-card-verified" className="border border-[#84CC16]/30 bg-[#84CC16]/5 rounded-sm p-3">
+        <div className="text-[10px] font-mono uppercase tracking-widest text-[#84CC16]">Corporate email · verified ✓</div>
+        <div className="text-sm text-white mt-1 truncate" title={profile.corporate_email}>{profile.corporate_email}</div>
+        <div className="text-[10px] text-neutral-500 mt-0.5">Verified on {(profile.corporate_email_verified_at || "").slice(0, 10)}</div>
+      </div>
+    );
+  }
+
+  if (!expanded) {
+    return (
+      <div data-testid="corp-email-card-cta" className="border border-[#06B6D4]/30 bg-[#06B6D4]/5 rounded-sm p-3">
+        <div className="text-[10px] font-mono uppercase tracking-widest text-[#06B6D4]">Work email · not linked</div>
+        <p className="text-xs text-neutral-300 mt-1 leading-relaxed">
+          Link your work email so HR at your company can add you to tournaments.
+        </p>
+        <button
+          data-testid="corp-email-add"
+          onClick={() => setExpanded(true)}
+          className="mt-2 text-xs text-[#06B6D4] hover:underline font-semibold"
+        >
+          Add work email →
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid="corp-email-card-form" className="border border-[#06B6D4]/40 bg-[#06B6D4]/10 rounded-sm p-3 space-y-2">
+      <div className="text-[10px] font-mono uppercase tracking-widest text-[#06B6D4]">Link work email</div>
+      {!otpSent ? (
+        <>
+          <Input
+            data-testid="corp-email-input"
+            type="email"
+            placeholder="you@yourcompany.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="bg-[#141414] border-white/10 text-white text-sm"
+          />
+          <div className="flex gap-2">
+            <Button data-testid="corp-email-send" onClick={request} disabled={busy} className="flex-1 bg-[#06B6D4] hover:bg-[#0891B2] text-white h-9 rounded-sm text-xs">
+              {busy ? "Sending…" : "Send code"}
+            </Button>
+            <Button variant="outline" onClick={() => setExpanded(false)} className="border-white/10 text-neutral-400 h-9 rounded-sm text-xs">Cancel</Button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="text-[10px] text-neutral-400">Code sent to {email}</div>
+          <Input
+            data-testid="corp-email-otp"
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="6-digit code"
+            className="bg-[#141414] border-white/10 text-white text-center font-mono tracking-widest"
+          />
+          <div className="flex gap-2">
+            <Button data-testid="corp-email-verify" onClick={verify} disabled={busy || otp.length < 4} className="flex-1 bg-[#84CC16] hover:bg-[#65A30D] text-black h-9 rounded-sm text-xs">
+              {busy ? "Verifying…" : "Verify & link"}
+            </Button>
+            <Button variant="outline" onClick={() => { setOtpSent(false); setOtp(""); }} className="border-white/10 text-neutral-400 h-9 rounded-sm text-xs">Resend</Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

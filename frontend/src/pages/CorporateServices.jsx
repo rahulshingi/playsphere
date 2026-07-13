@@ -71,7 +71,8 @@ export default function CorporateServices() {
 
         <div className="mt-4 inline-flex items-center gap-2 border border-[#FACC15]/30 bg-[#FACC15]/5 rounded-sm px-3 py-2 text-xs text-neutral-300">
           <Sparkles className="w-3.5 h-3.5 text-[#FACC15]" />
-          <span>Preview mode — package customiser and RFQ submission arrive in the next update. Below is the catalogue admin has published so far.</span>
+          <span>Pick a package below, customise services and add-ons, tell us about your event — we&rsquo;ll return a tailored quotation within 24 hours.</span>
+          <Link to="/rfqs" className="ml-2 text-[#FACC15] hover:underline font-mono uppercase text-[10px]">My RFQs →</Link>
         </div>
 
         {loading && <div className="text-neutral-500 text-sm mt-10">Loading catalogue…</div>}
@@ -116,8 +117,8 @@ export default function CorporateServices() {
                       )}
                     </ul>
                   )}
-                  <Button data-testid={`cs-request-${p.id}`} disabled className="w-full mt-4 bg-white/5 text-neutral-500 rounded-sm cursor-not-allowed">
-                    Request quote (coming soon) <ArrowRight className="ml-1 w-3 h-3" />
+                  <Button data-testid={`cs-request-${p.id}`} onClick={() => nav(`/corporate-services/customize/${p.id}`)} className="w-full mt-4 bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
+                    Customise & request quote <ArrowRight className="ml-1 w-3 h-3" />
                   </Button>
                 </div>
               ))}

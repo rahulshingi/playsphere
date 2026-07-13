@@ -35,6 +35,7 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
     primary.push({ to: "/dashboard", label: "Dashboard", icon: Briefcase, accent: "#84CC16" });
     primary.push({ to: "/admin", label: "Manage", icon: Shield, accent: "#84CC16" });
     more.push({ to: CORPORATE_SERVICES_LINK.to, label: CORPORATE_SERVICES_LINK.label, icon: Store, accent: "#06B6D4" });
+    more.push({ to: "/rfqs", label: "My RFQs", accent: "#06B6D4" });
     more.push({ to: "/hire", label: "Hire vendors", icon: Store });
     more.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
     more.push({ to: "/players/profiles", label: "Players", icon: User });

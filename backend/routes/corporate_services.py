@@ -259,4 +259,114 @@ def register(api, db, deps):
             "packages":    await db.cs_packages.count_documents({}),
             "packages_active": await db.cs_packages.count_documents({"active": True}),
             "rfqs_total":  await db.cs_rfqs.count_documents({}),
+            "rfqs_pending":  await db.cs_rfqs.count_documents({"status": {"$in": ["submitted", "under_review"]}}),
         }
+
+    # ─────────────── RFQs (Phase 2 — HR/Organiser submit + track) ───────────────
+    def _hr_only(user: dict):
+        if user.get("role") not in ("company_admin", "organiser"):
+            raise HTTPException(403, "Corporate Services RFQ is for HR / Organiser accounts only")
+
+    ALLOWED_STATUSES = {"draft", "submitted", "under_review", "quoted", "negotiation", "approved", "rejected", "completed", "cancelled"}
+
+    @api.post("/rfqs")
+    async def create_rfq(body: dict, user: dict = Depends(get_current_user)):
+        _hr_only(user)
+        pkg_id = (body or {}).get("package_id")
+        if not pkg_id:
+            raise HTTPException(400, "package_id required")
+        pkg = await db.cs_packages.find_one({"id": pkg_id}, {"_id": 0})
+        if not pkg:
+            raise HTTPException(404, "Package not found")
+        # Snapshot the package + selections so subsequent catalogue edits don't
+        # mutate a submitted RFQ. Frontend passes the selected subset of service
+        # IDs and addon quantities.
+        sel_services = list(dict.fromkeys((body or {}).get("selected_service_ids") or pkg.get("included_service_ids") or []))
+        sel_addons = (body or {}).get("selected_addons") or []  # [{addon_id, quantity}]
+        # Validate references
+        svc_docs = await db.cs_services.find({"id": {"$in": sel_services}}, {"_id": 0}).to_list(len(sel_services) or 1)
+        add_ids = [a.get("addon_id") for a in sel_addons if a.get("addon_id")]
+        add_docs = await db.cs_addons.find({"id": {"$in": add_ids}}, {"_id": 0}).to_list(len(add_ids) or 1)
+        add_map = {a["id"]: a for a in add_docs}
+        addon_snapshots = []
+        for a in sel_addons:
+            if a.get("addon_id") not in add_map:
+                continue
+            meta = add_map[a["addon_id"]]
+            addon_snapshots.append({
+                "addon_id": a["addon_id"],
+                "name": meta["name"],
+                "unit_type": meta.get("unit_type"),
+                "quantity": max(1, int(a.get("quantity") or 1)),
+            })
+        # Event details — free-form dict, validate a few required keys.
+        event = (body or {}).get("event") or {}
+        if not (event.get("event_name") and event.get("preferred_date")):
+            raise HTTPException(400, "event.event_name and event.preferred_date are required")
+        now = datetime.now(timezone.utc).isoformat()
+        submit_now = (body or {}).get("submit", True)
+        rfq = {
+            "id": str(uuid.uuid4()),
+            "hr_user_id": user["id"],
+            "hr_email": user.get("email"),
+            "hr_name": user.get("name"),
+            "company_id": user.get("company_id"),
+            "company_name": user.get("company_name"),
+            "package_id": pkg_id,
+            "package_name": pkg["name"],
+            "category_id": pkg["category_id"],
+            "selected_service_ids": sel_services,
+            "included_services_snapshot": [{"id": s["id"], "name": s["name"], "unit_type": s.get("unit_type")} for s in svc_docs],
+            "selected_addons": addon_snapshots,
+            "event": event,
+            "expected_budget": (body or {}).get("expected_budget") or "",
+            "special_instructions": (body or {}).get("special_instructions") or "",
+            "status": "submitted" if submit_now else "draft",
+            "created_at": now,
+            "updated_at": now,
+            "submitted_at": now if submit_now else None,
+        }
+        await db.cs_rfqs.insert_one(rfq)
+        # Audit trail
+        await db.cs_status_history.insert_one({
+            "id": str(uuid.uuid4()), "rfq_id": rfq["id"], "actor_id": user["id"],
+            "from_status": None, "to_status": rfq["status"], "at": now,
+        })
+        rfq.pop("_id", None)
+        return rfq
+
+    @api.get("/rfqs/mine")
+    async def my_rfqs(status: Optional[str] = None, user: dict = Depends(get_current_user)):
+        _hr_only(user)
+        flt = {"hr_user_id": user["id"]}
+        if status and status != "all":
+            flt["status"] = status
+        docs = await db.cs_rfqs.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
+        return docs
+
+    @api.get("/rfqs/{rfq_id}")
+    async def get_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
+        doc = await db.cs_rfqs.find_one({"id": rfq_id}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "RFQ not found")
+        role = user.get("role")
+        if role in ("platform_admin", "admin"):
+            return doc
+        if doc["hr_user_id"] != user["id"]:
+            raise HTTPException(403, "Not your RFQ")
+        return doc
+
+    @api.post("/rfqs/{rfq_id}/cancel")
+    async def cancel_rfq(rfq_id: str, user: dict = Depends(get_current_user)):
+        doc = await db.cs_rfqs.find_one({"id": rfq_id}, {"_id": 0})
+        if not doc or doc["hr_user_id"] != user["id"]:
+            raise HTTPException(404, "RFQ not found")
+        if doc["status"] in ("approved", "completed", "cancelled"):
+            raise HTTPException(400, f"Cannot cancel an RFQ in status '{doc['status']}'")
+        now = datetime.now(timezone.utc).isoformat()
+        await db.cs_rfqs.update_one({"id": rfq_id}, {"$set": {"status": "cancelled", "updated_at": now}})
+        await db.cs_status_history.insert_one({
+            "id": str(uuid.uuid4()), "rfq_id": rfq_id, "actor_id": user["id"],
+            "from_status": doc["status"], "to_status": "cancelled", "at": now,
+        })
+        return {"ok": True}

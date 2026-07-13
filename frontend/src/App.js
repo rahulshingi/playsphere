@@ -19,6 +19,8 @@ import RegisterTeam from "@/pages/RegisterTeam";
 import SignupCompany from "@/pages/SignupCompany";
 import SignupOrganiser from "@/pages/SignupOrganiser";
 import CorporateServices from "@/pages/CorporateServices";
+import PackageCustomiser from "@/pages/PackageCustomiser";
+import { MyRFQsList, RFQDetail } from "@/pages/MyRFQs";
 import Dashboard from "@/pages/Dashboard";
 import Bookings from "@/pages/Bookings";
 import PlatformAdmin from "@/pages/PlatformAdmin";
@@ -72,6 +74,9 @@ function App() {
           <Route path="/services" element={<Navigate to="/corporate-services" replace />} />
           <Route path="/services/:id" element={<Navigate to="/corporate-services" replace />} />
           <Route path="/corporate-services" element={<CorporateServices />} />
+          <Route path="/corporate-services/customize/:packageId" element={<PackageCustomiser />} />
+          <Route path="/rfqs" element={<MyRFQsList />} />
+          <Route path="/rfqs/:rfqId" element={<RFQDetail />} />
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/hire" element={<VendorMarket />} />

@@ -22,6 +22,9 @@ import UnifiedBookingsTable from "@/components/vendor/UnifiedBookingsTable";
 import OfflineModeCard from "@/components/vendor/OfflineModeCard";
 import InvoiceSettingsPanel from "@/components/vendor/InvoiceSettingsPanel";
 import OfflineBusinessSuite from "@/components/vendor/OfflineBusinessSuite";
+import VendorCommissionInvoices from "@/components/vendor/VendorCommissionInvoices";
+import VendorOvertimeSettings from "@/components/vendor/VendorOvertimeSettings";
+import VendorOfflineBookingsList from "@/components/vendor/VendorOfflineBookingsList";
 import { useSports } from "@/hooks/useSports";
 
 // Fallback sport list used when /api/sports hasn't loaded yet. The live list
@@ -226,13 +229,21 @@ export default function VendorDashboard() {
               <UnifiedBookingsTable />
             </div>
 
+            <VendorCommissionInvoices />
+
             <VendorReviewsInbox />
           </TabsContent>
 
           <TabsContent value="offline" className="mt-6" data-testid="vendor-offline-tab-content">
             <OfflineModeCard vendor={vendor} onChange={load} />
             <InvoiceSettingsPanel vendor={vendor} onSaved={load} />
-            {vendor?.offline_mode && <div className="mt-6"><OfflineBusinessSuite vendor={vendor} listings={listings} /></div>}
+            <VendorOvertimeSettings vendor={vendor} onSaved={load} />
+            {vendor?.offline_mode && (
+              <>
+                <VendorOfflineBookingsList />
+                <div className="mt-6"><OfflineBusinessSuite vendor={vendor} listings={listings} /></div>
+              </>
+            )}
           </TabsContent>
         </Tabs>
       </div>

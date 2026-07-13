@@ -60,6 +60,9 @@ async def sweep_commission_invoices(db, vendor_id: Optional[str] = None) -> int:
     rows = []
     for b in to_create:
         v = vmap.get(b["vendor_id"], {})
+        base_commission = float(b.get("commission_amount") or 0)
+        overtime_commission = float(b.get("overtime_commission_amount") or 0)
+        total_commission = round(base_commission + overtime_commission, 2)
         rows.append({
             "id": str(uuid.uuid4()),
             "vendor_id": b["vendor_id"],
@@ -69,9 +72,13 @@ async def sweep_commission_invoices(db, vendor_id: Optional[str] = None) -> int:
             "listing_title": b.get("listing_title") or "",
             "requested_date": b.get("requested_date") or "",
             "booking_total": float(b.get("total") or b.get("price") or 0),
+            "overtime_amount": float(b.get("overtime_amount") or 0),
+            "overtime_minutes": int(b.get("overtime_minutes") or 0),
             "commission_percent": float(b.get("commission_percent") or 0),
             "commission_min_flat": float(b.get("commission_min_flat") or 0),
-            "commission_amount": float(b.get("commission_amount") or 0),
+            "base_commission_amount": base_commission,
+            "overtime_commission_amount": overtime_commission,
+            "commission_amount": total_commission,
             "currency": b.get("currency") or "INR",
             "status": "pending",
             "issued_at": now.isoformat(),

@@ -769,6 +769,12 @@ class Vendor(BaseModel):
     # time. commission_min_flat is in the same currency as the listing.
     commission_percent: float = 10.0
     commission_min_flat: float = 100.0
+    # ---- Overtime configuration (Jul 2026) ----
+    # Vendor-configurable rate multiplier applied to the listing's hourly price
+    # for time played beyond the booked slot. 1.0 = same rate, 1.5 = 1.5×, etc.
+    overtime_charge_multiplier: float = 1.0
+    # Rounding block for overtime billing (billed in blocks of N minutes, ceil).
+    overtime_block_minutes: int = 15
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -929,6 +935,13 @@ class VendorBooking(BaseModel):
     checked_in_by: Optional[str] = None   # user id of vendor who marked arrival
     no_show_at: Optional[str] = None       # explicit "no-show" mark (manual or auto)
     completed_at: Optional[str] = None     # completion timestamp (arrival OR endtime)
+    # ---- Overtime tracking (Jul 2026) ----
+    arrived_at: Optional[str] = None
+    actual_end_time: Optional[str] = None  # HH:MM captured at completion
+    overtime_minutes: int = 0
+    overtime_amount: float = 0             # billed to buyer for extra time
+    overtime_commission_amount: float = 0  # platform share of overtime (same pct)
+    overtime_note: Optional[str] = ""
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -2553,6 +2566,100 @@ async def mark_no_show_vendor_booking(booking_id: str, user: dict = Depends(get_
     await db.vendor_bookings.update_one(
         {"id": booking_id},
         {"$set": {"status": "expired", "no_show_at": now_iso}},
+    )
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    return VendorBooking(**doc)
+
+
+@api.post("/vendor-bookings/{booking_id}/reopen", response_model=VendorBooking)
+async def reopen_vendor_booking(booking_id: str, user: dict = Depends(get_current_user)):
+    """Revert a wrongly-expired platform booking back to confirmed so the vendor
+    can then check-in / complete it. Vendor or platform admin only."""
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Booking not found")
+    role = user.get("role")
+    if role == "vendor":
+        vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+        if not vendor or doc["vendor_id"] != vendor["id"]:
+            raise HTTPException(403, "Not your booking")
+    elif role not in ("platform_admin", "admin"):
+        raise HTTPException(403, "Only the vendor or platform admin can reopen a booking")
+    if doc.get("status") not in ("expired", "no_show", "cancelled"):
+        raise HTTPException(400, f"Only expired/cancelled bookings can be reopened (current: {doc.get('status')})")
+    await db.vendor_bookings.update_one(
+        {"id": booking_id},
+        {"$set": {"status": "confirmed"}, "$unset": {"no_show_at": "", "completed_at": ""}},
+    )
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    return VendorBooking(**doc)
+
+
+def _time_to_minutes(hhmm: str) -> int:
+    try:
+        h, m = (hhmm or "0:0").split(":")[:2]
+        return int(h) * 60 + int(m)
+    except (ValueError, AttributeError):
+        return 0
+
+
+def _ceil_to_block(minutes: int, block: int) -> int:
+    if minutes <= 0:
+        return 0
+    block = max(1, int(block or 15))
+    return ((int(minutes) + block - 1) // block) * block
+
+
+@api.post("/vendor-bookings/{booking_id}/complete", response_model=VendorBooking)
+async def complete_vendor_booking(booking_id: str, body: dict = None, user: dict = Depends(get_current_user)):
+    """Complete a platform booking with optional overtime capture.
+    Body: `{actual_end_time?: "HH:MM", overtime_note?: str}`.
+
+    Computes:
+      overtime_minutes  = actual_end - booked_end (ceil to vendor block).
+      overtime_amount   = billed_hours × listing_rate_per_hour × multiplier.
+      overtime_commission_amount = overtime_amount × commission_percent%.
+    """
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Booking not found")
+    role = user.get("role")
+    vendor_doc = None
+    if role == "vendor":
+        vendor_doc = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
+        if not vendor_doc or doc["vendor_id"] != vendor_doc["id"]:
+            raise HTTPException(403, "Not your booking")
+    elif role not in ("platform_admin", "admin"):
+        raise HTTPException(403, "Only the vendor or platform admin can complete a booking")
+    if doc.get("status") in ("cancelled", "rejected", "completed"):
+        raise HTTPException(400, f"Booking is {doc['status']}")
+    if vendor_doc is None:
+        vendor_doc = await db.vendors.find_one({"id": doc["vendor_id"]}, {"_id": 0}) or {}
+    body = body or {}
+    actual_end = (body.get("actual_end_time") or "").strip() or doc.get("end_time")
+    overtime_raw = max(0, _time_to_minutes(actual_end) - _time_to_minutes(doc.get("end_time")))
+    block = int(vendor_doc.get("overtime_block_minutes") or 15)
+    multiplier = float(vendor_doc.get("overtime_charge_multiplier") or 1.0)
+    overtime_minutes = _ceil_to_block(overtime_raw, block)
+    rate_per_hour = float(doc.get("price") or 0)
+    overtime_amount = round((overtime_minutes / 60.0) * rate_per_hour * multiplier, 2)
+    commission_pct = float(doc.get("commission_percent") or 0)
+    overtime_commission = round(overtime_amount * commission_pct / 100.0, 2) if not doc.get("offline_source") else 0
+    now_iso = datetime.now(timezone.utc).isoformat()
+    await db.vendor_bookings.update_one(
+        {"id": booking_id},
+        {"$set": {
+            "status": "completed",
+            "completed_at": now_iso,
+            "checked_in_at": doc.get("checked_in_at") or now_iso,
+            "checked_in_by": user["id"],
+            "arrived_at": doc.get("arrived_at") or doc.get("checked_in_at") or now_iso,
+            "actual_end_time": actual_end,
+            "overtime_minutes": overtime_minutes,
+            "overtime_amount": overtime_amount,
+            "overtime_commission_amount": overtime_commission,
+            "overtime_note": body.get("overtime_note", ""),
+        }},
     )
     doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
     return VendorBooking(**doc)

@@ -25,7 +25,7 @@ import ListingsTab from "@/components/admin/ListingsTab";
 import SettingsTab from "@/components/admin/SettingsTab";
 import AboutTab from "@/components/admin/AboutTab";
 import BusinessTab from "@/components/admin/BusinessTab";
-import { DashboardShell } from "@/components/dashboard/DashboardKit";
+import AdminCommissionsTab from "@/components/admin/AdminCommissionsTab";
 
 const BLANK_SERVICE = {
   name: "",
@@ -118,20 +118,20 @@ export default function PlatformAdmin() {
   };
 
   return (
-    <DashboardShell activePath="home" title="Platform Admin" headerRight={
-      isSuperAdmin ? (
-        <Button data-testid="platform-new-service" onClick={() => setEditing(BLANK_SERVICE)} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-full h-9 px-4">
-          <Plus className="w-4 h-4 mr-1" /> New service
-        </Button>
-      ) : null
-    }>
-      <div className="max-w-[1600px]">
-        <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#FF3B30]">/ Kreeda Nation HQ</div>
-        <div className="flex items-end justify-between mt-3">
+    <div className="bg-[#0a0a0a] min-h-screen text-white">
+      <Nav />
+      <div className="max-w-[1600px] mx-auto px-6 pt-10 pb-24">
+        <div className="flex items-end justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-white tracking-tight">Platform overview</h1>
+            <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#FF3B30]">/ Kreeda Nation HQ</div>
+            <h1 className="font-display text-4xl tracking-wide mt-2">PLATFORM ADMIN</h1>
             <p className="text-sm text-neutral-500 mt-1">Manage services, vendors, bookings, and everything in between.</p>
           </div>
+          {isSuperAdmin && (
+            <Button data-testid="platform-new-service" onClick={() => setEditing(BLANK_SERVICE)} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
+              <Plus className="w-4 h-4 mr-1" /> New service
+            </Button>
+          )}
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
@@ -148,6 +148,7 @@ export default function PlatformAdmin() {
             <TabsTrigger value="vendors" data-testid="pa-tab-vendors" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Vendors ({vendors.length})</TabsTrigger>
             <TabsTrigger value="listings" data-testid="pa-tab-listings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Listings ({listings.length})</TabsTrigger>
             <TabsTrigger value="business" data-testid="pa-tab-business" className={`data-[state=active]:bg-[#EC4899] data-[state=active]:text-white rounded-sm ${businessQueueCount > 0 ? "text-[#EC4899]" : ""}`}>Business{businessQueueCount > 0 ? ` (${businessQueueCount})` : ""}</TabsTrigger>
+            <TabsTrigger value="commissions" data-testid="pa-tab-commissions" className="data-[state=active]:bg-[#F59E0B] data-[state=active]:text-black rounded-sm">Commissions</TabsTrigger>
             <TabsTrigger value="settings" data-testid="pa-tab-settings" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Settings</TabsTrigger>
             <TabsTrigger value="about" data-testid="pa-tab-about" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">About page</TabsTrigger>
             <TabsTrigger value="reviews" data-testid="pa-tab-reviews" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">Reviews</TabsTrigger>
@@ -243,6 +244,10 @@ export default function PlatformAdmin() {
             <BusinessTab onQueueChange={load} />
           </TabsContent>
 
+          <TabsContent value="commissions" className="mt-6">
+            <AdminCommissionsTab />
+          </TabsContent>
+
           <TabsContent value="settings" className="mt-6">
             <SettingsTab settings={settings} setSettings={setSettings} reload={load} />
           </TabsContent>
@@ -268,6 +273,7 @@ export default function PlatformAdmin() {
       </div>
 
       {editing && <ServiceEditor service={editing} setService={setEditing} onSave={saveService} onClose={() => setEditing(null)} />}
-    </DashboardShell>
+      <Footer />
+    </div>
   );
 }

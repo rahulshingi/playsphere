@@ -6,9 +6,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { fmtPrice } from "@/lib/currency";
-import { Pause, Play, Trash2, Plus, X, BadgeCheck } from "lucide-react";
+import { Pause, Play, Trash2, Plus, X, BadgeCheck, Users, Inbox } from "lucide-react";
 import VendorPurchaseRequests from "./VendorPurchaseRequests";
+import UtilizationBars from "@/components/memberships/UtilizationBars";
 
 const PLAN_TYPES = [
   { v: "monthly",     l: "Monthly access" },
@@ -94,64 +96,176 @@ export default function VendorMembershipsPanel({ listings = [] }) {
     <div className="mt-12">
       <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
         <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500">
-          / Membership plans ({plans.length}) <span className="text-[#FACC15]">· payment coming soon</span>
+          / Memberships
         </div>
         <Button data-testid="memb-new" onClick={startNew} className="bg-[#EC4899] hover:bg-[#db2777] text-white font-semibold rounded-sm">
           <Plus className="w-4 h-4 mr-1" /> New plan
         </Button>
       </div>
 
-      {plans.length === 0 && !showForm && (
-        <div data-testid="memb-empty" className="text-neutral-500 text-sm text-center py-12 border border-dashed border-white/10 rounded-sm">
-          No membership plans yet. Click <b>New plan</b> to offer monthly / daily / gym / weekend / fixed-slot access.
-        </div>
-      )}
+      <Tabs defaultValue="plans">
+        <TabsList data-testid="memb-tabs" className="bg-black/40 border border-white/10 rounded-sm">
+          <TabsTrigger value="plans" data-testid="memb-tab-plans" className="data-[state=active]:bg-[#EC4899] data-[state=active]:text-white rounded-sm">
+            <BadgeCheck className="w-3.5 h-3.5 mr-1.5" /> Plans ({plans.length})
+          </TabsTrigger>
+          <TabsTrigger value="active" data-testid="memb-tab-active" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">
+            <Users className="w-3.5 h-3.5 mr-1.5" /> Active customers
+          </TabsTrigger>
+          <TabsTrigger value="requests" data-testid="memb-tab-requests" className="data-[state=active]:bg-[#FACC15] data-[state=active]:text-black rounded-sm">
+            <Inbox className="w-3.5 h-3.5 mr-1.5" /> Requests
+          </TabsTrigger>
+        </TabsList>
 
-      {plans.length > 0 && (
-        <div className="grid md:grid-cols-2 gap-3">
-          {plans.map((p) => (
-            <div key={p.id} data-testid={`memb-card-${p.id}`}
-              className={`border rounded-sm bg-[#141414] p-4 ${p.paused ? "border-amber-500/40 opacity-70" : "border-white/10"}`}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold">{p.title}</span>
-                    <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-sm bg-[#EC4899]/15 text-[#EC4899] border border-[#EC4899]/40">
-                      {(PLAN_TYPES.find((t) => t.v === p.plan_type)?.l || p.plan_type).split(" (")[0]}
-                    </span>
-                    {p.paused && <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-sm bg-amber-500/15 text-amber-300 border border-amber-500/40">Paused</span>}
-                    {!p.active && <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-sm bg-[#FF3B30]/15 text-[#FF3B30] border border-[#FF3B30]/40">Inactive</span>}
-                  </div>
-                  <div className="font-mono text-[10px] text-neutral-500 uppercase mt-1">
-                    {fmtPrice(p.price, p.currency)} · {p.duration_days}d
-                    {p.max_bookings ? ` · ${p.max_bookings} bookings` : " · unlimited bookings"}
-                    {p.plan_type === "fixed_slot" && p.slot_start_time && ` · ${p.slot_start_time}–${p.slot_end_time}`}
-                    {p.advance_booking_hours ? ` · ${p.advance_booking_hours}h advance` : ""}
-                  </div>
-                  {p.sports?.length > 0 && (
-                    <div className="text-[10px] font-mono text-neutral-400 mt-1">{p.sports.join(" · ")}</div>
-                  )}
-                </div>
-                <div className="flex gap-1 shrink-0">
-                  <Button size="sm" variant="ghost" data-testid={`memb-edit-${p.id}`} onClick={() => startEdit(p)} className="text-[#84CC16] text-xs">Edit</Button>
-                  <Button size="sm" variant="ghost" data-testid={`memb-pause-${p.id}`} onClick={() => togglePause(p)} className="text-[#FACC15]" title={p.paused ? "Resume" : "Pause"}>
-                    {p.paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-                  </Button>
-                  <Button size="sm" variant="ghost" data-testid={`memb-del-${p.id}`} onClick={() => remove(p)} className="text-[#FF3B30]">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              </div>
+        <TabsContent value="plans" className="mt-4" data-testid="memb-plans-tab-content">
+          {plans.length === 0 && !showForm && (
+            <div data-testid="memb-empty" className="text-neutral-500 text-sm text-center py-12 border border-dashed border-white/10 rounded-sm">
+              No membership plans yet. Click <b>New plan</b> to offer monthly / daily / gym / weekend / fixed-slot access.
             </div>
-          ))}
+          )}
+          {plans.length > 0 && (
+            <div className="grid md:grid-cols-2 gap-3">
+              {plans.map((p) => (
+                <div key={p.id} data-testid={`memb-card-${p.id}`}
+                  className={`border rounded-sm bg-[#141414] p-4 ${p.paused ? "border-amber-500/40 opacity-70" : "border-white/10"}`}>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold">{p.title}</span>
+                        <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-sm bg-[#EC4899]/15 text-[#EC4899] border border-[#EC4899]/40">
+                          {(PLAN_TYPES.find((t) => t.v === p.plan_type)?.l || p.plan_type).split(" (")[0]}
+                        </span>
+                        {p.paused && <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-sm bg-amber-500/15 text-amber-300 border border-amber-500/40">Paused</span>}
+                        {!p.active && <span className="text-[9px] font-mono uppercase px-1.5 py-0.5 rounded-sm bg-[#FF3B30]/15 text-[#FF3B30] border border-[#FF3B30]/40">Inactive</span>}
+                      </div>
+                      <div className="font-mono text-[10px] text-neutral-500 uppercase mt-1">
+                        {fmtPrice(p.price, p.currency)} · {p.duration_days}d
+                        {p.max_bookings ? ` · ${p.max_bookings} bookings` : " · unlimited bookings"}
+                        {p.plan_type === "fixed_slot" && p.slot_start_time && ` · ${p.slot_start_time}–${p.slot_end_time}`}
+                        {p.advance_booking_hours ? ` · ${p.advance_booking_hours}h advance` : ""}
+                      </div>
+                      {p.sports?.length > 0 && (
+                        <div className="text-[10px] font-mono text-neutral-400 mt-1">{p.sports.join(" · ")}</div>
+                      )}
+                    </div>
+                    <div className="flex gap-1 shrink-0">
+                      <Button size="sm" variant="ghost" data-testid={`memb-edit-${p.id}`} onClick={() => startEdit(p)} className="text-[#84CC16] text-xs">Edit</Button>
+                      <Button size="sm" variant="ghost" data-testid={`memb-pause-${p.id}`} onClick={() => togglePause(p)} className="text-[#FACC15]" title={p.paused ? "Resume" : "Pause"}>
+                        {p.paused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+                      </Button>
+                      <Button size="sm" variant="ghost" data-testid={`memb-del-${p.id}`} onClick={() => remove(p)} className="text-[#FF3B30]">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {showForm && editing && (
+            <PlanForm editing={editing} setEditing={setEditing} listings={listings} busy={busy} onSave={save} onCancel={cancel} />
+          )}
+        </TabsContent>
+
+        <TabsContent value="active" className="mt-4" data-testid="memb-active-tab-content">
+          <ActiveMembershipsList />
+        </TabsContent>
+
+        <TabsContent value="requests" className="mt-4" data-testid="memb-requests-tab-content">
+          <VendorPurchaseRequests plans={plans} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+/**
+ * ActiveMembershipsList — customer directory of anyone currently holding
+ * an active (or paid) membership. Row click opens a details drawer.
+ */
+function ActiveMembershipsList() {
+  const [purchases, setPurchases] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get("/memberships/mine/purchases")
+      .then((r) => setPurchases((r.data || []).filter((p) => p.status === "active")))
+      .catch(() => setPurchases([]))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div className="text-neutral-500 text-sm">Loading…</div>;
+  if (purchases.length === 0) {
+    return (
+      <div data-testid="memb-active-empty" className="text-neutral-500 text-sm text-center py-10 border border-dashed border-white/10 rounded-sm">
+        No active customers yet. Activated memberships from the <b>Requests</b> tab will appear here.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid md:grid-cols-3 gap-4">
+      <div className="md:col-span-2 border border-white/10 rounded-sm bg-[#0f0f0f] overflow-hidden">
+        <div className="grid grid-cols-12 gap-2 px-3 py-2 border-b border-white/10 text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+          <div className="col-span-4">Customer</div>
+          <div className="col-span-3">Plan</div>
+          <div className="col-span-2 text-right">Paid</div>
+          <div className="col-span-3">Expires</div>
         </div>
-      )}
+        {purchases.map((p) => (
+          <button
+            key={p.id}
+            data-testid={`memb-active-row-${p.id}`}
+            onClick={() => setSelected(p)}
+            className={`w-full text-left grid grid-cols-12 gap-2 px-3 py-3 border-b border-white/5 hover:bg-white/[0.03] transition-colors ${selected?.id === p.id ? "bg-[#84CC16]/5 border-l-2 border-l-[#84CC16]" : ""}`}
+          >
+            <div className="col-span-4 text-sm text-white truncate">{p.buyer_email || "Walk-in"}</div>
+            <div className="col-span-3 text-xs text-neutral-400 truncate">{p.plan_title || p.plan_id}</div>
+            <div className="col-span-2 text-right font-mono text-xs text-[#84CC16]">{fmtPrice(p.amount || 0, p.currency || "INR")}</div>
+            <div className="col-span-3 font-mono text-xs text-neutral-500">{p.expires_at ? p.expires_at.slice(0, 10) : "—"}</div>
+          </button>
+        ))}
+      </div>
+      <div className="border border-white/10 rounded-sm bg-[#141414] p-4" data-testid="memb-detail-panel">
+        {selected ? (
+          <>
+            <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">Membership details</div>
+            <div className="text-lg font-semibold text-white">{selected.buyer_email || "Walk-in customer"}</div>
+            <div className="text-xs text-neutral-400 mt-0.5">{selected.plan_title || selected.plan_id}</div>
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <DetailRow label="Amount paid" value={fmtPrice(selected.amount || 0, selected.currency || "INR")} tone="text-[#84CC16]" />
+              <DetailRow label="Status" value={selected.status} tone="text-[#84CC16]" />
+              <DetailRow label="Purchased on" value={(selected.created_at || "").slice(0, 10)} />
+              <DetailRow label="Started on" value={(selected.starts_at || "").slice(0, 10) || "—"} />
+              <DetailRow label="Expires on" value={(selected.expires_at || "").slice(0, 10) || "—"} tone="text-[#FACC15]" />
+              <DetailRow label="Payment method" value={selected.payment_method || "offline"} />
+            </div>
+            {selected.max_bookings && (
+              <div className="mt-4">
+                <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">Utilisation</div>
+                <UtilizationBars purchase={selected} />
+              </div>
+            )}
+            {selected.notes && (
+              <div className="mt-4">
+                <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">Notes</div>
+                <div className="text-xs text-neutral-300 whitespace-pre-wrap">{selected.notes}</div>
+              </div>
+            )}
+          </>
+        ) : (
+          <div className="text-neutral-500 text-sm text-center py-8">Select a customer to see plan details, expiry, utilisation and notes.</div>
+        )}
+      </div>
+    </div>
+  );
+}
 
-      {showForm && editing && (
-        <PlanForm editing={editing} setEditing={setEditing} listings={listings} busy={busy} onSave={save} onCancel={cancel} />
-      )}
-
-      <VendorPurchaseRequests plans={plans} />
+function DetailRow({ label, value, tone }) {
+  return (
+    <div>
+      <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">{label}</div>
+      <div className={`text-sm mt-0.5 ${tone || "text-white"}`}>{value}</div>
     </div>
   );
 }

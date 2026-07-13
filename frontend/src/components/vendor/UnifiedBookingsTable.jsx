@@ -1,13 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { CheckCircle2, XCircle, Filter, Calendar as CalendarIcon, Clock, Users } from "lucide-react";
+import { CheckCircle2, XCircle, Filter, Calendar as CalendarIcon, Clock, Users, RotateCcw, ChevronRight } from "lucide-react";
 import { fmtPrice } from "@/lib/currency";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 
 /**
  * Unified booking table for the vendor dashboard (Task 44 · Feb 2026).
@@ -93,6 +97,9 @@ export default function UnifiedBookingsTable() {
   const [busy, setBusy] = useState(null);
   // No-show confirmation dialog — row-scoped
   const [noShowTarget, setNoShowTarget] = useState(null);
+  // Complete-with-overtime dialog target
+  const [completeTarget, setCompleteTarget] = useState(null);
+  const [completeEndTime, setCompleteEndTime] = useState("");
 
   const load = () => {
     api.get("/vendor-bookings").then((r) => setOnline(r.data)).catch(() => {});
@@ -174,6 +181,52 @@ export default function UnifiedBookingsTable() {
     }
   };
 
+  const reopen = async (row) => {
+    setBusy(row.id);
+    try {
+      const url = row.source === "platform"
+        ? `/vendor-bookings/${row.id}/reopen`
+        : `/vendor/private-bookings/${row.id}/reopen`;
+      await api.post(url);
+      toast.success("Booking reopened — customer can now check in");
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const openComplete = (row) => {
+    setCompleteTarget(row);
+    setCompleteEndTime(row.raw?.end_time || "");
+  };
+
+  const submitComplete = async () => {
+    if (!completeTarget) return;
+    setBusy(completeTarget.id);
+    try {
+      const url = completeTarget.source === "platform"
+        ? `/vendor-bookings/${completeTarget.id}/complete`
+        : `/vendor/private-bookings/${completeTarget.id}/complete`;
+      const { data } = await api.post(url, { actual_end_time: completeEndTime });
+      const overMin = data.overtime_minutes || 0;
+      if (overMin > 0) {
+        const overAmt = data.overtime_amount || 0;
+        toast.success(`Booking completed · +${overMin} min overtime · ₹${overAmt} charged`);
+      } else {
+        toast.success("Booking completed");
+      }
+      load();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Failed");
+    } finally {
+      setBusy(null);
+      setCompleteTarget(null);
+      setCompleteEndTime("");
+    }
+  };
+
   return (
     <div data-testid="unified-bookings-table" className="border border-white/10 rounded-sm bg-[#0f0f0f]">
       {/* Header — filters + stats */}
@@ -234,6 +287,7 @@ export default function UnifiedBookingsTable() {
           <tbody>
             {rows.map((r) => {
               const canMarkArrived = ["pending", "confirmed", "active"].includes(r.bucket);
+              const canReopen = r.bucket === "expired" || r.bucket === "cancelled";
               return (
                 <tr key={`${r.source}-${r.id}`} data-testid={`ub-row-${r.id}`} className="border-t border-white/5 hover:bg-white/[0.02]">
                   <td className="px-4 py-3">
@@ -245,8 +299,16 @@ export default function UnifiedBookingsTable() {
                   <td className="px-3 py-3 font-mono text-neutral-400">
                     <div>{r.date}</div>
                     <div className="text-[10px] text-neutral-500 flex items-center gap-1"><Clock className="w-2.5 h-2.5" />{r.time}</div>
+                    {r.raw?.overtime_minutes > 0 && (
+                      <div className="text-[10px] text-[#FACC15] mt-0.5">+{r.raw.overtime_minutes}m OT</div>
+                    )}
                   </td>
-                  <td className="px-3 py-3 text-right font-mono">{fmtPrice(r.amount, r.currency)}</td>
+                  <td className="px-3 py-3 text-right font-mono">
+                    {fmtPrice(r.amount, r.currency)}
+                    {r.raw?.overtime_amount > 0 && (
+                      <div className="text-[10px] text-[#FACC15]">+{fmtPrice(r.raw.overtime_amount, r.currency)} OT</div>
+                    )}
+                  </td>
                   <td className="px-3 py-3">
                     <span className={`text-[10px] font-mono uppercase border rounded-sm px-2 py-0.5 ${statusChipClass(r.bucket)}`}>
                       {r.bucket}
@@ -257,12 +319,12 @@ export default function UnifiedBookingsTable() {
                       <div className="flex gap-1 justify-end">
                         <Button
                           size="sm"
-                          data-testid={`ub-arrived-${r.id}`}
+                          data-testid={`ub-complete-${r.id}`}
                           disabled={busy === r.id}
-                          onClick={() => markArrived(r)}
+                          onClick={() => openComplete(r)}
                           className="bg-[#84CC16] hover:bg-[#65A30D] text-black h-7 rounded-sm text-[10px] px-2"
                         >
-                          <CheckCircle2 className="w-3 h-3 mr-1" /> Arrived
+                          <CheckCircle2 className="w-3 h-3 mr-1" /> Complete
                         </Button>
                         <Button
                           size="sm"
@@ -275,6 +337,18 @@ export default function UnifiedBookingsTable() {
                           <XCircle className="w-3 h-3 mr-1" /> No-show
                         </Button>
                       </div>
+                    )}
+                    {canReopen && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        data-testid={`ub-reopen-${r.id}`}
+                        disabled={busy === r.id}
+                        onClick={() => reopen(r)}
+                        className="border-[#06B6D4]/40 bg-transparent text-[#06B6D4] hover:bg-[#06B6D4]/10 h-7 rounded-sm text-[10px] px-2"
+                      >
+                        <RotateCcw className="w-3 h-3 mr-1" /> Reopen
+                      </Button>
                     )}
                   </td>
                 </tr>
@@ -314,6 +388,44 @@ export default function UnifiedBookingsTable() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Complete-with-overtime dialog */}
+      <Dialog open={!!completeTarget} onOpenChange={(v) => !v && setCompleteTarget(null)}>
+        <DialogContent data-testid="ub-complete-dialog" className="bg-[#0c0c0c] border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Complete booking · {completeTarget?.customer}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="text-[10px] font-mono uppercase tracking-widest text-neutral-500">
+              Booked slot · {completeTarget?.time}
+            </div>
+            <div>
+              <label className="text-[10px] font-mono uppercase text-neutral-500">Actual end time</label>
+              <Input
+                type="time"
+                data-testid="ub-complete-endtime"
+                value={completeEndTime}
+                onChange={(e) => setCompleteEndTime(e.target.value)}
+                className="mt-1 bg-[#141414] border-white/10 text-white"
+              />
+              <p className="text-[10px] text-neutral-500 mt-1.5">
+                Leave as booked end time for no overtime. Anything later than the booked end will be billed as overtime at your configured rate (Offline business tab → Overtime settings).
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCompleteTarget(null)} className="border-white/10 text-neutral-300">Cancel</Button>
+            <Button
+              data-testid="ub-complete-confirm"
+              onClick={submitComplete}
+              disabled={busy === completeTarget?.id}
+              className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold"
+            >
+              <CheckCircle2 className="w-4 h-4 mr-1.5" /> Confirm complete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

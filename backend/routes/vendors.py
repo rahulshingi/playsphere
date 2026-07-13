@@ -161,6 +161,8 @@ def register(api, db, deps):
         "gstin", "invoice_business_name", "invoice_address",
         "invoice_phone", "invoice_email", "invoice_tax_percent",
         "invoice_logo_url", "invoice_footer_note",
+        # Overtime settings (Jul 2026)
+        "overtime_charge_multiplier", "overtime_block_minutes",
     }
 
     @api.patch("/vendors/me")

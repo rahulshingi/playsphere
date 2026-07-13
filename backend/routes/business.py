@@ -136,6 +136,13 @@ class PrivateBooking(BaseModel):
     checked_in_by: Optional[str] = None
     no_show_at: Optional[str] = None
     completed_at: Optional[str] = None
+    # ---- Overtime tracking (Jul 2026) ----
+    # Populated at check-out when actual play time exceeded booked slot.
+    arrived_at: Optional[str] = None  # explicit arrival timestamp (finer than checked_in_at)
+    actual_end_time: Optional[str] = None  # HH:MM as reported at completion
+    overtime_minutes: int = 0
+    overtime_amount: float = 0  # billed for overtime (added ON TOP of `amount`)
+    overtime_note: Optional[str] = ""
     # Recurrence (Phase 5 — basic weekly pattern)
     recurrence: Optional[str] = None  # None | "weekly"
     recurrence_until: Optional[str] = None  # YYYY-MM-DD
@@ -889,6 +896,72 @@ def register(api, db, deps):
         await db.private_bookings.update_one(
             {"id": booking_id, "vendor_id": vendor["id"]},
             {"$set": {"status": "expired", "no_show_at": now_iso}},
+        )
+        doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        return PrivateBooking(**doc)
+
+    @api.post("/vendor/private-bookings/{booking_id}/reopen", response_model=PrivateBooking)
+    async def reopen_private_booking(booking_id: str, user: dict = Depends(get_current_user)):
+        """Vendor reverts a wrongly-expired / no-show offline booking back to active."""
+        vendor = await _vendor_for_user(user)
+        doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Booking not found")
+        if doc.get("status") not in ("expired", "cancelled"):
+            raise HTTPException(400, f"Only expired/cancelled bookings can be reopened (current: {doc.get('status')})")
+        await db.private_bookings.update_one(
+            {"id": booking_id, "vendor_id": vendor["id"]},
+            {"$set": {"status": "active"},
+             "$unset": {"no_show_at": "", "completed_at": ""}},
+        )
+        doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        return PrivateBooking(**doc)
+
+    def _ceil_to_block(minutes: int, block: int) -> int:
+        if minutes <= 0:
+            return 0
+        block = max(1, int(block or 15))
+        return ((int(minutes) + block - 1) // block) * block
+
+    def _time_to_min(hhmm: str) -> int:
+        h, m = (hhmm or "0:0").split(":")[:2]
+        return int(h) * 60 + int(m)
+
+    @api.post("/vendor/private-bookings/{booking_id}/complete", response_model=PrivateBooking)
+    async def complete_private_booking(booking_id: str, body: dict = None, user: dict = Depends(get_current_user)):
+        """Complete an offline booking. Optional body: `{actual_end_time: "HH:MM"}`.
+        Computes overtime billing when actual duration exceeds the booked slot."""
+        vendor = await _vendor_for_user(user)
+        doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
+        if not doc:
+            raise HTTPException(404, "Booking not found")
+        if doc.get("status") in ("cancelled", "completed"):
+            raise HTTPException(400, f"Booking is {doc['status']}")
+        body = body or {}
+        actual_end = (body.get("actual_end_time") or "").strip() or doc.get("end_time")
+        overtime = max(0, _time_to_min(actual_end) - _time_to_min(doc.get("end_time")))
+        block = int(vendor.get("overtime_block_minutes") or 15)
+        multiplier = float(vendor.get("overtime_charge_multiplier") or 1.0)
+        billed_minutes = _ceil_to_block(overtime, block)
+        # Rate per hour: prefer explicit `rate_per_hour`, else derive from booked amount / hours
+        rate_per_hour = float(doc.get("rate_per_hour") or 0)
+        if rate_per_hour <= 0 and (doc.get("hours") or 0) > 0:
+            rate_per_hour = float(doc.get("amount") or 0) / float(doc["hours"])
+        overtime_amount = round((billed_minutes / 60.0) * rate_per_hour * multiplier, 2)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await db.private_bookings.update_one(
+            {"id": booking_id, "vendor_id": vendor["id"]},
+            {"$set": {
+                "status": "completed",
+                "completed_at": now_iso,
+                "checked_in_at": doc.get("checked_in_at") or now_iso,
+                "checked_in_by": user["id"],
+                "arrived_at": doc.get("arrived_at") or doc.get("checked_in_at") or now_iso,
+                "actual_end_time": actual_end,
+                "overtime_minutes": billed_minutes,
+                "overtime_amount": overtime_amount,
+                "overtime_note": body.get("overtime_note", ""),
+            }},
         )
         doc = await db.private_bookings.find_one({"id": booking_id, "vendor_id": vendor["id"]}, {"_id": 0})
         return PrivateBooking(**doc)

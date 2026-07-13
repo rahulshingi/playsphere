@@ -42,17 +42,19 @@ export default function Home() {
   const [heroImage] = useState(pickHeroImage);
 
   const loadLive = async () => {
-    const evRes = await api.get("/events");
-    setEvents(evRes.data.slice(0, 3));
-    const all = await Promise.all(
-      evRes.data.map((e) => api.get(`/events/${e.id}/fixtures`).then((res) => res.data.map((f) => ({ ...f, event: e }))))
-    );
-    setLiveFixtures(all.flat().filter((f) => f.status === "live").slice(0, 6));
+    try {
+      const evRes = await api.get("/events");
+      setEvents(evRes.data.slice(0, 3));
+      const all = await Promise.all(
+        evRes.data.map((e) => api.get(`/events/${e.id}/fixtures`).then((res) => res.data.map((f) => ({ ...f, event: e }))).catch(() => []))
+      );
+      setLiveFixtures(all.flat().filter((f) => f.status === "live").slice(0, 6));
+    } catch { /* anonymous visitors see zero live fixtures — safe fallback */ }
   };
 
   useEffect(() => {
-    api.get("/stats").then((r) => setStats(r.data));
-    api.get("/teams").then((r) => setTeamMap(Object.fromEntries(r.data.map((t) => [t.id, t]))));
+    api.get("/stats").then((r) => setStats(r.data)).catch(() => {});
+    api.get("/teams").then((r) => setTeamMap(Object.fromEntries(r.data.map((t) => [t.id, t])))).catch(() => {});
     loadLive();
   }, []);
 
@@ -76,7 +78,7 @@ export default function Home() {
       if (f.status === "live") loadLive();
       return prev;
     });
-    api.get("/stats").then((r) => setStats(r.data));
+    api.get("/stats").then((r) => setStats(r.data)).catch(() => {});
   });
 
   return (

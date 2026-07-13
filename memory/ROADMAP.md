@@ -1,9 +1,10 @@
 # Kreeda Nation — Roadmap
 
-Prioritized backlog. Updated Feb 28, 2026.
+Prioritized backlog. Updated Jul 13, 2026.
 
 ## P0 — Next up
 - **Razorpay integration** for memberships, event bookings, venue rentals. Awaiting user's Razorpay Key ID + Secret. Playbook via `integration_playbook_expert_v2`.
+- **Dashboard shell rollout — remaining roles**. Apply the new dark-theme `DashboardShell` (currently on `/platform-admin/overview` + `/vendor/overview`) to HR, Organiser, Player, Sponsor dashboards.
 
 ## P1 — Near term
 - **Financial & utilization CSV export** for vendor/admin — natural extension of `/api/admin/bookings-analytics`. Backend endpoint should stream `text/csv` with the same shape as the JSON payload; frontend adds a "Download CSV" button per analytics tab.
@@ -25,6 +26,7 @@ Prioritized backlog. Updated Feb 28, 2026.
 - **Auto refund on event cancel** — when an organiser cancels a paid event, notify registered teams + auto-refund Razorpay payments once Razorpay keys are wired.
 
 ## Completed (rolling summary — see PRD.md for detail)
+- ✅ Iter 48 (Jul 13, 2026): **Dashboard nav fix + register-role picker + demo vendor seed**. Sidebar in `DashboardKit` is now role-aware (vendor/admin nav sets rendered from user context, not hardcoded to admin URLs). `/register` replaced with a 5-role picker (HR / Organiser / Player / Sponsor / Vendor) that routes to the appropriate signup form. `?tab=offline` URL-sync added to `VendorDashboard`. Anonymous 401 error overlay on homepage silenced (guard on `/teams` + interceptor on `/auth/me`). Idempotent seed script `scripts/seed_demo_vendor.py` creates rmshingi@gmail.com with 3 listings + 7 platform + 3 offline bookings.
 - ✅ Iter 44 (Feb 27, 2026): Per-vendor commission (`max(pct, flat)`), admin bookings analytics, unified vendor bookings table, show-up tracking, 4-hour auto-expire (throttled sweep).
 - ✅ Iter 43 (Feb 27, 2026): 7-item UX batch fix (past-slot filter, sport images, event dates, cancel event, anonymous /hire calendar, mobile-number signup, rotating homepage hero).
 - ✅ Iter 43 (Feb 26, 2026): Dynamic Sports Config Phase 5 + Bracket View + share-bracket PNG.

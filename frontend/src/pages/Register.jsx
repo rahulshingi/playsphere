@@ -1,51 +1,111 @@
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import { useAuth } from "@/context/AuthContext";
+import { Link, useNavigate } from "react-router-dom";
 import Nav from "@/components/Nav";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
+import { Building2, Trophy, User, Handshake, Store } from "lucide-react";
+
+/**
+ * Register — role picker (Feb 28, 2026).
+ *
+ * The previous generic 3-field form silently created a "viewer" account that
+ * couldn't do anything. Now we ask WHO the user is first and route to the
+ * appropriate signup flow (each collects the role-specific fields — company
+ * name for HR/Organiser, sport preferences for Player, brand info for Sponsor).
+ */
+const ROLES = [
+  {
+    key: "company",
+    to: "/signup-company",
+    icon: Building2,
+    label: "Company HR",
+    tag: "For corporate teams",
+    desc: "Register your company to host tournaments, roster teams, and manage employee wellness events.",
+    color: "#84CC16",
+  },
+  {
+    key: "organiser",
+    to: "/signup-organiser",
+    icon: Trophy,
+    label: "Event Organiser",
+    tag: "Independent event owner",
+    desc: "Run corporate sports events, invite companies, and monetise your tournaments.",
+    color: "#06B6D4",
+  },
+  {
+    key: "player",
+    to: "/players/signup",
+    icon: User,
+    label: "Player",
+    tag: "Individual athlete",
+    desc: "Build a universal sports profile, discover events, and get scouted.",
+    color: "#EC4899",
+  },
+  {
+    key: "sponsor",
+    to: "/sponsor/signup",
+    icon: Handshake,
+    label: "Sponsor",
+    tag: "Brand / sponsor",
+    desc: "Discover events and companies to sponsor — sports, wellness, community.",
+    color: "#F59E0B",
+  },
+  {
+    key: "vendor",
+    to: "/vendor/signup",
+    icon: Store,
+    label: "Vendor / Service Provider",
+    tag: "Grounds, courts, coaches",
+    desc: "List your venue, coaching, referee, gym or studio services and get discovered.",
+    color: "#8B5CF6",
+  },
+];
 
 export default function Register() {
-  const { register } = useAuth();
   const nav = useNavigate();
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
-  const [busy, setBusy] = useState(false);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true);
-    const r = await register(form.email, form.password, form.name);
-    setBusy(false);
-    if (r.ok) { toast.success("Welcome to Kreeda Nation"); nav("/"); }
-    else toast.error(r.error);
-  };
-
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white">
       <Nav />
-      <div className="max-w-md mx-auto px-6 py-20">
+      <div className="max-w-5xl mx-auto px-6 py-16">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Create account</div>
-        <h1 className="font-display text-5xl tracking-wide mt-2">JOIN KREEDA NATION</h1>
-        <form onSubmit={submit} className="mt-10 space-y-4">
-          <div>
-            <Label className="text-xs font-mono uppercase text-neutral-500">Name</Label>
-            <Input data-testid="register-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required className="mt-2 bg-[#141414] border-white/10 text-white" />
-          </div>
-          <div>
-            <Label className="text-xs font-mono uppercase text-neutral-500">Email</Label>
-            <Input data-testid="register-email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required className="mt-2 bg-[#141414] border-white/10 text-white" />
-          </div>
-          <div>
-            <Label className="text-xs font-mono uppercase text-neutral-500">Password</Label>
-            <Input data-testid="register-password" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required className="mt-2 bg-[#141414] border-white/10 text-white" />
-          </div>
-          <Button data-testid="register-submit" disabled={busy} className="w-full bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm h-11">
-            {busy ? "Creating..." : "Create account"}
-          </Button>
-        </form>
-        <p className="text-xs text-neutral-500 mt-6 text-center">
+        <h1 className="font-display text-4xl md:text-5xl tracking-wide mt-2">JOIN KREEDA NATION</h1>
+        <p className="text-neutral-400 mt-3 text-sm max-w-2xl">
+          Pick the role that best describes you — we&rsquo;ll take you to the right signup form so you land with the correct dashboard and access.
+        </p>
+
+        <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3" data-testid="register-role-grid">
+          {ROLES.map((r) => {
+            const Icon = r.icon;
+            return (
+              <button
+                key={r.key}
+                data-testid={`register-role-${r.key}`}
+                onClick={() => nav(r.to)}
+                className="group text-left bg-[#141414] border border-white/10 rounded-xl p-6 hover:border-white/30 transition-colors flex flex-col gap-3"
+                style={{ boxShadow: `0 0 0 0 ${r.color}` }}
+              >
+                <div className="flex items-center justify-between">
+                  <div
+                    className="w-11 h-11 rounded-lg flex items-center justify-center"
+                    style={{ background: `${r.color}20`, color: r.color }}
+                  >
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-mono uppercase tracking-widest text-neutral-500 group-hover:text-white transition-colors">
+                    {r.tag}
+                  </span>
+                </div>
+                <div className="text-lg font-semibold text-white">{r.label}</div>
+                <div className="text-sm text-neutral-400 leading-relaxed">{r.desc}</div>
+                <div
+                  className="text-xs font-mono uppercase mt-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                  style={{ color: r.color }}
+                >
+                  Continue →
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        <p className="text-xs text-neutral-500 mt-10 text-center">
           Already a member? <Link to="/login" className="text-[#84CC16] hover:underline">Sign in</Link>
         </p>
       </div>

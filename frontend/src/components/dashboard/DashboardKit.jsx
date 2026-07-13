@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 import {
   Home, Calendar, Store, Users, Award, Settings, Search, Plus, Bell,
-  ChevronUp, ChevronDown, Flag,
+  ChevronUp, ChevronDown, Flag, Briefcase, ListChecks, Star, LogOut,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/context/AuthContext";
@@ -16,11 +16,19 @@ import { useAuth } from "@/context/AuthContext";
  * existing dark palette so no CSS-variable override is needed. The
  * `.dashboard-light` marker class is preserved for scoping affordance but
  * carries no light overrides in `index.css`.
+ *
+ * `navItems` (optional) lets a page override the sidebar per role. Falls
+ * back to admin nav if the authed user is a platform admin, vendor nav if
+ * a vendor, and admin nav otherwise. This fixed the iter-47 regression
+ * where vendors clicking sidebar icons landed on `/platform-admin?tab=…`
+ * pages they weren't authorised for (blank page).
  */
-export function DashboardShell({ children, activePath, title, headerRight, hideTopBar = false }) {
+export function DashboardShell({ children, activePath, title, headerRight, hideTopBar = false, navItems }) {
+  const { user } = useAuth();
+  const items = navItems || (user?.role === "vendor" ? VENDOR_NAV_ITEMS : ADMIN_NAV_ITEMS);
   return (
     <div className="dashboard-light flex h-screen overflow-hidden bg-[#0a0a0a]" data-testid="dashboard-shell">
-      <LeftIconNav activePath={activePath} />
+      <LeftIconNav activePath={activePath} items={items} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         {!hideTopBar && <TopBar title={title} headerRight={headerRight} />}
         <div className="flex-1 overflow-auto p-8 text-white" data-testid="dashboard-content">
@@ -31,8 +39,8 @@ export function DashboardShell({ children, activePath, title, headerRight, hideT
   );
 }
 
-const NAV_ITEMS = [
-  { key: "home", href: "/platform-admin", icon: Home, label: "Home" },
+const ADMIN_NAV_ITEMS = [
+  { key: "home", href: "/platform-admin/overview", icon: Home, label: "Home" },
   { key: "bookings", href: "/platform-admin?tab=bookings", icon: Calendar, label: "Bookings" },
   { key: "events", href: "/platform-admin?tab=events", icon: Award, label: "Events" },
   { key: "vendors", href: "/platform-admin?tab=vendors", icon: Store, label: "Vendors" },
@@ -40,7 +48,19 @@ const NAV_ITEMS = [
   { key: "settings", href: "/platform-admin?tab=settings", icon: Settings, label: "Settings" },
 ];
 
-function LeftIconNav({ activePath }) {
+const VENDOR_NAV_ITEMS = [
+  { key: "home", href: "/vendor/overview", icon: Home, label: "Home" },
+  { key: "bookings", href: "/vendor/dashboard?tab=marketplace#bookings", icon: Calendar, label: "Bookings" },
+  { key: "listings", href: "/vendor/dashboard?tab=marketplace#listings", icon: ListChecks, label: "Listings" },
+  { key: "offline", href: "/vendor/dashboard?tab=offline", icon: Briefcase, label: "Offline business" },
+  { key: "reviews", href: "/vendor/dashboard?tab=marketplace#reviews", icon: Star, label: "Reviews" },
+  { key: "market", href: "/hire", icon: Store, label: "Public marketplace" },
+];
+
+export { ADMIN_NAV_ITEMS, VENDOR_NAV_ITEMS };
+
+function LeftIconNav({ activePath, items }) {
+  const { user, logout } = useAuth();
   return (
     <nav
       data-testid="left-icon-nav"
@@ -49,7 +69,7 @@ function LeftIconNav({ activePath }) {
       <Link to="/" className="mb-4" data-testid="nav-brand-home">
         <div className="w-10 h-10 rounded-full bg-[#84CC16] flex items-center justify-center font-black text-black text-sm shadow-lg shadow-[#84CC16]/20">KN</div>
       </Link>
-      {NAV_ITEMS.map((it) => {
+      {items.map((it) => {
         const Icon = it.icon;
         const active = activePath === it.key;
         return (
@@ -66,6 +86,16 @@ function LeftIconNav({ activePath }) {
           </Link>
         );
       })}
+      {user && (
+        <button
+          data-testid="nav-logout"
+          onClick={() => logout().then(() => { window.location.href = "/"; })}
+          title="Log out"
+          className="mt-auto w-11 h-11 flex items-center justify-center rounded-lg text-neutral-500 hover:bg-white/5 hover:text-white"
+        >
+          <LogOut className="w-5 h-5" />
+        </button>
+      )}
     </nav>
   );
 }

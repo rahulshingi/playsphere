@@ -189,7 +189,7 @@ export default function VendorOverview() {
   ];
 
   const headerRight = (
-    <Button data-testid="vendor-add-offline" onClick={() => nav("/vendor?tab=offline")} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-full h-9 px-4 gap-1.5">
+    <Button data-testid="vendor-add-offline" onClick={() => nav("/vendor/dashboard?tab=offline")} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-full h-9 px-4 gap-1.5">
       <Plus className="w-4 h-4" /> Add offline booking
     </Button>
   );
@@ -212,15 +212,15 @@ export default function VendorOverview() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8" data-testid="vendor-kpi-grid">
         <KpiDonutCard testid="kpi-utilisation" title="Today" data={utilKpi} totalLabel="Slots" onClick={() => setRange("today")} />
-        <KpiDonutCard testid="kpi-mix" title="Booking mix" data={mixKpi} onClick={() => nav("/vendor?tab=marketplace")} />
+        <KpiDonutCard testid="kpi-mix" title="Booking mix" data={mixKpi} onClick={() => nav("/vendor/dashboard")} />
         <KpiDonutCard testid="kpi-status" title="By status" data={statusKpi} onClick={() => setView("board")} />
-        <KpiDonutCard testid="kpi-revenue" title="Revenue" data={revenueKpi} totalLabel="Total ₹" onClick={() => nav("/vendor?tab=marketplace")} />
+        <KpiDonutCard testid="kpi-revenue" title="Revenue" data={revenueKpi} totalLabel="Total ₹" onClick={() => nav("/vendor/dashboard")} />
       </div>
 
       <div className="flex items-center justify-between mb-3">
         <ViewToggle view={view} onChange={setView} />
         <div className="flex items-center gap-1">
-          <button data-testid="vendor-toolbar-listings" onClick={() => nav("/vendor?tab=listings")} className="text-xs text-neutral-400 px-3 py-1.5 hover:bg-white/5 rounded-md inline-flex items-center gap-1.5">
+          <button data-testid="vendor-toolbar-listings" onClick={() => nav("/vendor/dashboard")} className="text-xs text-neutral-400 px-3 py-1.5 hover:bg-white/5 rounded-md inline-flex items-center gap-1.5">
             <Store className="w-3.5 h-3.5" /> Listings
           </button>
           <button data-testid="vendor-toolbar-filter" className="text-xs text-neutral-400 px-3 py-1.5 hover:bg-white/5 rounded-md inline-flex items-center gap-1.5">
@@ -237,7 +237,7 @@ export default function VendorOverview() {
 
       <div className="mt-6 flex items-center justify-between text-xs text-neutral-500">
         <span>{rows.length} bookings in view</span>
-        <Link to="/vendor" data-testid="vendor-back-classic" className="text-[#06B6D4] hover:underline">
+        <Link to="/vendor/dashboard" data-testid="vendor-back-classic" className="text-[#06B6D4] hover:underline">
           → Classic vendor dashboard
         </Link>
       </div>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import Nav from "@/components/Nav";
@@ -104,6 +104,13 @@ const PRICE_UNIT_HINT = {
 export default function VendorDashboard() {
   const { user, ready } = useAuth();
   const nav = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") === "offline" ? "offline" : "marketplace";
+  const setActiveTab = (t) => {
+    const sp = new URLSearchParams(searchParams);
+    if (t === "marketplace") sp.delete("tab"); else sp.set("tab", t);
+    setSearchParams(sp, { replace: true });
+  };
   const [vendor, setVendor] = useState(null);
   const [listings, setListings] = useState([]);
   const [bookings, setBookings] = useState([]);
@@ -172,7 +179,7 @@ export default function VendorDashboard() {
           </div>
         </div>
 
-        <Tabs defaultValue="marketplace" className="mt-8">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
           <TabsList data-testid="vendor-tabs" className="bg-black/40 border border-white/10 rounded-sm">
             <TabsTrigger data-testid="vendor-tab-marketplace" value="marketplace" className="data-[state=active]:bg-[#84CC16] data-[state=active]:text-black rounded-sm">
               <Store className="w-4 h-4 mr-1.5" /> Marketplace

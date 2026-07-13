@@ -179,7 +179,7 @@ export default function PlayerProfile() {
           />
         ) : (
           <>
-            <ViewMode profile={profile} companyName={companyName} interested={interested} />
+            <ViewMode profile={profile} companyName={companyName} interested={interested} onReload={reload} />
             {profile.id && <PlayerTournamentsSection profileId={profile.id} isOwner playerName={profile.name || ""} />}
           </>
         )}
@@ -204,7 +204,7 @@ export default function PlayerProfile() {
 }
 
 /* ───── View-only dashboard ───── */
-function ViewMode({ profile, companyName, interested }) {
+function ViewMode({ profile, companyName, interested, onReload }) {
   return (
     <div className="grid md:grid-cols-3 gap-6 mt-10">
       <div className="border border-white/10 rounded-sm bg-[#141414] p-5 space-y-4">
@@ -215,7 +215,7 @@ function ViewMode({ profile, companyName, interested }) {
           />
         </div>
         <ReadField label="Company" value={companyName} testid="view-company" />
-        <CorporateEmailCard profile={profile} onLinked={reload} />
+        <CorporateEmailCard profile={profile} onLinked={onReload} />
         <ReadField label="City" value={profile.city || "—"} testid="view-city" />
         <ReadField label="Date of birth" value={profile.dob || "—"} testid="view-dob" />
         <ReadField label="Height" value={profile.height_cm ? `${profile.height_cm} cm` : "—"} testid="view-height" />

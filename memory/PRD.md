@@ -22,6 +22,22 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Jul 14, 2026 · iter 39) Book-a-Venue Nav CTA + SEO / Sitemap
+- **Nav CTA**: prominent "Book a venue" button (data-testid=nav-book-venue-btn on desktop, nav-mobile-book-venue in drawer) for guests AND authed users. Routes to `/hire` where guests can browse turfs/courts/coaches, filter, preview availability. Booking submit is gated at the modal step with a "Sign in to book" CTA.
+- **Per-route SEO**: dep-free `<SEO>` component (`/app/frontend/src/components/SEO.jsx`) sets title / description / canonical / og:* / twitter:* on mount, restores originals on unmount. Wired on Home, Events, About, Contact, Corporate Services (all branches — guest gate, wrong-role gate, HR view), Hire (VendorMarket), Sponsorship marketplace.
+- **Base meta** (`/app/frontend/public/index.html`): enriched with Open Graph, Twitter Card, canonical, robots directive, keywords, JSON-LD Organization schema.
+- **Sitemap + robots** (`/app/backend/routes/sitemap.py`):
+  - `GET /api/sitemap.xml` — dynamic, includes 17 static routes + public events + approved vendor listings + public player-profile slugs
+  - `GET /api/robots.txt` — dynamic with correct Disallow list for authenticated routes
+  - `POST /api/admin/sitemap/rebuild` — platform-admin only
+  - Startup hook materialises `/app/frontend/public/sitemap.xml` + `robots.txt` so search engines get them at `/sitemap.xml` and `/robots.txt` on the root domain
+- **Env**: `PUBLIC_BASE_URL` env var can override the default `https://kreedanation.com`.
+- **Testing**: 13/13 new pytest PASS + 27/27 iter38 regression = **40/40 tests**. Frontend smoke test: all SEO tags applied per page + Book-a-venue CTA works on both desktop + mobile.
+- **Known env quirks**: Cloudflare on preview overrides `/robots.txt` at the edge and mangles `Cache-Control` on `/sitemap.xml`. Origin returns everything correctly — user needs to disable Cloudflare's auto content-signals feature on `kreedanation.com` (Security → Bots → Content signals).
+
+
+
+
 ## Implemented (Jul 14, 2026) RFQ → Invoice → Razorpay Pay-link + Refreshed Role Manuals
 - **Auto-invoice on HR accept** — `POST /api/rfqs/{id}/quotation/accept` now materialises a `cs_invoices` row + tries to spin a Razorpay Payment Link. Idempotent per quote_id.
 - **Endpoints** (`/app/backend/routes/cs_invoices.py`, 7 new):

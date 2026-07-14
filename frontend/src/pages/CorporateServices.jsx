@@ -39,10 +39,22 @@ export default function CorporateServices() {
     })();
   }, [ready, isCompanyAdmin]);
 
+  // Shared SEO meta — must render across all branches (guest, wrong-role, HR)
+  // so search-engine crawlers get consistent title/description regardless of
+  // the auth gate they land on.
+  const seo = (
+    <SEO
+      title="Corporate Services — Custom Employee Engagement Events | Kreeda Nation"
+      description="Curated tournament, yoga, wellness and offsite packages for HR teams. Customise, submit an RFQ, and get a tailored quote within 24 hours."
+      canonical="/corporate-services"
+    />
+  );
+
   // Not signed in → nudge to login
   if (ready && !user) {
     return (
       <div className="bg-[#0a0a0a] min-h-screen text-white">
+        {seo}
         <Nav />
         <Gate title="Sign in to view Corporate Services" body="Corporate Services are available to HR and Organiser accounts only. Sign in to browse curated event packages and request a quote." ctaLabel="Sign in" onClick={() => nav("/login")} />
         <Footer />
@@ -53,6 +65,7 @@ export default function CorporateServices() {
   if (ready && user && !isCompanyAdmin) {
     return (
       <div className="bg-[#0a0a0a] min-h-screen text-white">
+        {seo}
         <Nav />
         <Gate title="Not available for your account" body="Corporate Services are curated event packages for Company HR and Event Organisers. Your account doesn't have access." ctaLabel="Back to home" onClick={() => nav("/")} />
         <Footer />
@@ -62,11 +75,7 @@ export default function CorporateServices() {
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white">
-      <SEO
-        title="Corporate Services — Custom Employee Engagement Events | Kreeda Nation"
-        description="Curated tournament, yoga, wellness and offsite packages for HR teams. Customise, submit an RFQ, and get a tailored quote within 24 hours."
-        canonical="/corporate-services"
-      />
+      {seo}
       <Nav />
       <div className="max-w-6xl mx-auto px-6 pt-14 pb-24">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#06B6D4]">/ Corporate Services</div>

@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 39 — Book-a-Venue nav CTA + SEO/sitemap enhancements verified end-to-end. Backend: 13/13 new tests PASS (sitemap.xml XML+urlset+17 static routes, cache-control at origin, robots.txt content, admin-only rebuild endpoint with 403 for HR, static file refresh). Regression: 27/27 iter38 CS-invoice tests still PASS. Frontend: Guest 'Book a venue' desktop button + mobile drawer button both navigate to /hire and close drawer. Guest /hire shows vm-guest-banner + vendor-type toggles + booking modal with vm-book-login-cta pointing to /login?next=%2Fhire (no vm-book-submit). Authed HR sees no guest-banner and 'Book a venue' remains in top nav. SEO: home, /events, /about, /contact, /sponsorships, /hire all update <title>, meta description, canonical, og:title, twitter:title correctly on route change AND restore on back-nav to /. index.html has full base meta (og:type, og:site_name, twitter:card, canonical, JSON-LD Organization schema). Static /sitemap.xml at root is served application/xml.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/sitemap.xml (preview URL)", "issue": "Cloudflare edge overrides Cache-Control from 'public, max-age=3600' to 'no-store, no-cache, must-revalidate'. Verified via curl direct to localhost:8001 that origin serves the correct header. Env-specific (preview CF quirk) — will not affect prod once kreedanation.com DNS/CF is configured. Same class of quirk as /robots.txt override noted in the review request."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "/corporate-services SEO for guests", "issue": "CorporateServices.jsx renders <SEO> only inside the authenticated HR/Organiser branch (line 65). Guest visitors (search-engine crawlers, unauth traffic) hit the login-Gate branch (line 43-51) which returns JSX WITHOUT <SEO>, so the page keeps the default index.html meta (title='Kreeda Nation — Where Teams Compete, Connect & Grow', canonical='https://kreedanation.com/'). Recommend hoisting <SEO title=... canonical='/corporate-services' /> above the gate return statements so crawlers see the right meta.", "affected_selectors": ["/corporate-services"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_seo_sitemap_iter39.py",
+    "/app/test_reports/pytest/iter39_seo.xml"
+  ],
+  "action_items": [
+    "MINOR: Hoist <SEO> component above the auth-gate early-returns in /app/frontend/src/pages/CorporateServices.jsx so guests / crawlers also get the correct meta (currently they see the index.html default).",
+    "INFO: Cloudflare preview edge overrides Cache-Control on /api/sitemap.xml — env quirk only, no code change required (backend origin returns 'public, max-age=3600' correctly)."
+  ],
+  "critical_code_review_comments": [
+    "sitemap.py::build_sitemap_xml — clean XML build, escapes correctly, filters events/vendor_listings by approval_status + hidden/active, limits page-profile fetch to 5000 (safe). Uses _iso_date fallback that handles missing dates gracefully.",
+    "sitemap.py::write_static_snapshots + startup hook — snapshot file mtime updated on rebuild verified. Uses STATIC_DIR = /app/frontend/public which is inside the frontend build, so Cloudflare/ingress will serve /sitemap.xml directly from React public folder — the /sitemap.xml root URL currently returns application/xml (200). Good.",
+    "sitemap.py::rebuild endpoint — Depends(require_platform_admin) properly gates access, HR gets 403 verified. Response payload includes ok/sitemap_urls/base/written_at, per spec.",
+    "SEO.jsx — clean cleanup pattern that snapshots original head values on mount and restores on unmount. Verified back-nav from any sub-page restores home title/canonical exactly. No react-helmet dep needed. One nit: if two SEO components mount in overlap (parent+child), the child's cleanup could overwrite parent's set values — but current usage renders SEO once per top-level page so this is fine.",
+    "Nav.jsx — nav-book-venue-btn is a Button with onClick navigate('/hire') and hidden md:inline-flex — visible on desktop for both authed and guest. Mobile drawer has nav-mobile-book-venue with closeMobile()+navigate — verified drawer closes after click. Universal placement matches spec.",
+    "VendorMarket.jsx line 508 — canBook = user && (isPlayer||isCompanyAdmin||isOrganiser) toggles between vm-book-submit and vm-book-login-cta cleanly. Guest state shows helpful signup hint (vm-book-anon-hint) with 3 links. Great UX.",
+    "index.html — base meta populated with og:type/site_name/twitter:card + JSON-LD Organization schema. Canonical fallback is https://kreedanation.com/ which SEO.jsx overrides on mount with origin-relative path — works correctly in preview env (verified canonical becomes https://live-scoring-hub-5.preview.emergentagent.com/... via window.location.origin).",
+    "GAP: /corporate-services SEO only fires for authed HR — crawlers see default meta. Small issue but recommended fix noted in action_items."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_seo_sitemap_iter39.py (new)"
+  ],
+  "success_rate": {"backend": "13/13 (100%) new + 27/27 (100%) iter38 regression = 40/40", "frontend": "PASS — nav CTA (desktop+mobile), guest banner, guest login CTA, authed user nav, per-page SEO on 6 pages + home restoration, static /sitemap.xml root serving all verified"},
+  "test_credentials": "Platform Admin: admin@kreedanation.com / admin123 · HR/Organiser: testorg@example.com / orgpass123",
+  "seed_data_creation": "No new seed data. Rebuild endpoint idempotent — writes to /app/frontend/public/sitemap.xml + robots.txt.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter39 SEO/Sitemap module fully wired. Test file /app/backend/tests/test_seo_sitemap_iter39.py (13 tests, all pass). Key endpoints: GET /api/sitemap.xml (public, application/xml, ~792 URLs), GET /api/robots.txt (public, text/plain), POST /api/admin/sitemap/rebuild (platform_admin only). Startup hook writes static /app/frontend/public/sitemap.xml + robots.txt so root /sitemap.xml gets served by frontend. Frontend SEO component at /app/frontend/src/components/SEO.jsx is dep-free (no react-helmet) and cleans up on unmount. Nav testids: nav-book-venue-btn (desktop), nav-mobile-book-venue (drawer). VendorMarket testids: vm-guest-banner, vm-book-login-cta (guest), vm-book-submit (authed HR/player/organiser). Known env quirks: (1) Cloudflare preview overrides Cache-Control header on /api/sitemap.xml — origin (localhost:8001) still returns correct 'public, max-age=3600'. (2) Cloudflare intercepts /robots.txt at edge on preview (per review-request note) — /api/robots.txt verified via test. Only real code gap: /corporate-services SEO tags only render for authed HR (SEO inside authed branch); guests hit gate and see default index.html meta. Reported as minor integration issue.",
+  "rca of the issue": "N/A — feature works. Only a minor integration miss in CorporateServices.jsx where <SEO> is inside the authed branch — see action_items."
+}

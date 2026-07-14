@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import Nav from "@/components/Nav";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -140,6 +141,11 @@ export default function VendorMarket() {
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white">
+      <SEO
+        title="Book a Venue — Turfs, Courts & Coaches | Kreeda Nation"
+        description="Book turfs, badminton courts, box cricket and coaches across India. Browse live availability, see verified vendor listings, book in a few clicks."
+        canonical="/hire"
+      />
       <Nav />
       <div className="max-w-7xl mx-auto px-6 pt-12 pb-24">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Hire</div>

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import Nav from "@/components/Nav";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,11 @@ export default function SponsorshipMarketplace() {
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white">
+      <SEO
+        title="Sponsorship Marketplace — Back Sports Events at Scale | Kreeda Nation"
+        description="Discover tournaments seeking Title, Gold, Silver and Bronze sponsors. Filter by sport, city, tier and reach — place bids in one click."
+        canonical="/sponsorships"
+      />
       <Nav />
       <div className="max-w-7xl mx-auto px-6 pt-12 pb-24">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#FACC15] flex items-center gap-2">

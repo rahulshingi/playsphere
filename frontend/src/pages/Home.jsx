@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
 import SponsorBanner from "@/components/SponsorBanner";
+import SEO from "@/components/SEO";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Users, CalendarDays, Activity, Trophy, Sparkles } from "lucide-react";
 import { renderScore, sportColor, SPORT_IMAGES } from "@/lib/sports";
@@ -88,6 +89,11 @@ export default function Home() {
 
   return (
     <div className="App bg-[#0a0a0a] min-h-screen text-white">
+      <SEO
+        title="Kreeda Nation — Book Venues, Run Corporate Sports Events"
+        description="India's employee-engagement sports platform. Book turfs, courts and coaches, run corporate tournaments, and manage teams from one dashboard."
+        canonical="/"
+      />
       <Nav />
 
       {/* HERO */}

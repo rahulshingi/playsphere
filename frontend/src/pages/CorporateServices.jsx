@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import Nav from "@/components/Nav";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -61,6 +62,11 @@ export default function CorporateServices() {
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white">
+      <SEO
+        title="Corporate Services — Custom Employee Engagement Events | Kreeda Nation"
+        description="Curated tournament, yoga, wellness and offsite packages for HR teams. Customise, submit an RFQ, and get a tailored quote within 24 hours."
+        canonical="/corporate-services"
+      />
       <Nav />
       <div className="max-w-6xl mx-auto px-6 pt-14 pb-24">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#06B6D4]">/ Corporate Services</div>

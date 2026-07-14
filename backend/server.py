@@ -5175,6 +5175,15 @@ cs_invoice_routes.register(api, db, SimpleNamespace(
 ))
 
 
+# Sitemap + robots.txt — SEO surface (materialises static files into
+# frontend/public so search-engines can crawl at root domain).
+from routes import sitemap as sitemap_routes  # noqa: E402
+
+sitemap_routes.register(api, app, db, SimpleNamespace(
+    require_platform_admin=require_platform_admin,
+))
+
+
 # Register router + static mount AFTER all @api.x definitions above
 app.include_router(api)
 api_router = api  # alias kept for any callers

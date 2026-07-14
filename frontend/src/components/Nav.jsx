@@ -157,6 +157,15 @@ export default function Nav() {
 
         {/* Right side actions */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Universal "Book a venue" CTA — guests can browse; login is required only at booking submit. */}
+          <Button
+            data-testid="nav-book-venue-btn"
+            size="sm"
+            onClick={() => navigate("/hire")}
+            className="hidden md:inline-flex bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm gap-1"
+          >
+            <Store className="w-3.5 h-3.5" /> Book a venue
+          </Button>
           {isAuthed ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -382,6 +391,15 @@ export default function Nav() {
                 )}
 
                 <div className="border-t border-white/10 my-4" />
+
+                {/* Universal "Book a venue" CTA — always visible so guests can browse the marketplace. */}
+                <Button
+                  data-testid="nav-mobile-book-venue"
+                  onClick={() => { closeMobile(); navigate("/hire"); }}
+                  className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm justify-start gap-2 mb-2"
+                >
+                  <Store className="w-4 h-4" /> Book a venue
+                </Button>
 
                 {isAuthed ? (
                   <Button

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import Nav from "@/components/Nav";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import { Linkedin, Twitter, Globe } from "lucide-react";
 
@@ -14,6 +15,11 @@ export default function About() {
 
   return (
     <div className="bg-[#0a0a0a] min-h-screen text-white">
+      <SEO
+        title="About Kreeda Nation — Employee Engagement, Sports & Wellness"
+        description="Kreeda Nation is India's employee-engagement sports platform. Learn about our mission, team, and why HR leaders trust us to run corporate tournaments."
+        canonical="/about"
+      />
       <Nav />
       <div className="max-w-6xl mx-auto px-6 pt-16 pb-24">
         <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ About Kreeda Nation</div>

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import api from "@/lib/api";
 import Nav from "@/components/Nav";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import { sportColor, sportImage } from "@/lib/sports";
 import { useAuth } from "@/context/AuthContext";
@@ -38,6 +39,11 @@ export default function Events() {
 
   return (
     <div className="bg-[#0a0a0a] text-white min-h-screen">
+      <SEO
+        title="Sports Events & Tournaments — Kreeda Nation"
+        description="Discover multi-sport corporate tournaments and open events across India. Register your team, follow live scores, and back your favourites."
+        canonical="/events"
+      />
       <Nav />
       <div className="max-w-7xl mx-auto px-6 pt-16 pb-24">
         <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ Tournaments</div>

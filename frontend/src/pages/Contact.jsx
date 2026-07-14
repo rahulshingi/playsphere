@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import Nav from "@/components/Nav";
+import SEO from "@/components/SEO";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,6 +37,11 @@ export default function Contact() {
   const s = settings || {};
   return (
     <div className="bg-[#0a0a0a] text-white min-h-screen">
+      <SEO
+        title="Contact Kreeda Nation — Talk to Our Corporate Sports Team"
+        description="Get in touch for corporate tournaments, venue partnerships, sponsorships or press queries. We respond within one business day."
+        canonical="/contact"
+      />
       <Nav />
       <div className="max-w-6xl mx-auto px-6 pt-16 pb-24">
         <div className="font-mono text-[10px] tracking-[0.3em] text-[#84CC16] uppercase">/ Contact</div>

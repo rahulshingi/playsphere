@@ -1,0 +1,16 @@
+# Kreeda Nation — search-engine crawler config
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /platform-admin
+Disallow: /vendor/dashboard
+Disallow: /scorer/dashboard
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /bookings
+Disallow: /rfqs
+Disallow: /auth/
+Disallow: /players/me
+Disallow: /my-memberships
+
+Sitemap: https://kreedanation.com/sitemap.xml

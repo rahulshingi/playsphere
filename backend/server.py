@@ -5166,6 +5166,15 @@ cs_routes.register(api, db, SimpleNamespace(
 ))
 
 
+# Corporate Services Invoices + Razorpay pay-link (Phase 3 follow-up)
+from routes import cs_invoices as cs_invoice_routes  # noqa: E402
+
+cs_invoice_routes.register(api, db, SimpleNamespace(
+    get_current_user=get_current_user,
+    require_platform_admin=require_platform_admin,
+))
+
+
 # Register router + static mount AFTER all @api.x definitions above
 app.include_router(api)
 api_router = api  # alias kept for any callers

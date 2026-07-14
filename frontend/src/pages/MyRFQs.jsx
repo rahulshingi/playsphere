@@ -246,6 +246,8 @@ export function RFQDetail() {
 
         {quote && <QuotationView quote={quote} canAct={canActOnQuote} onAccept={acceptQuote} onReject={rejectQuote} busy={busy} />}
 
+        {(rfq.status === "approved" || rfq.status === "completed") && <HRInvoicePanel rfqId={rfq.id} />}
+
         {chatOpen && <HRChatPanel rfqId={rfq.id} />}
 
         {canCancel && quote && (
@@ -395,6 +397,75 @@ function HRChatPanel({ rfqId }) {
         <Button data-testid="rfq-chat-send" size="sm" onClick={send} className="bg-[#EC4899] hover:bg-[#db2777] text-white">
           <Send className="w-3.5 h-3.5" />
         </Button>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────── HR Invoice Panel ───────────────
+function HRInvoicePanel({ rfqId }) {
+  const [inv, setInv] = useState(null);
+  const backend = process.env.REACT_APP_BACKEND_URL;
+
+  const load = () => api.get(`/rfqs/${rfqId}/invoice`).then((r) => setInv(r.data)).catch(() => setInv(null));
+  useEffect(() => { load(); }, [rfqId]); // eslint-disable-line
+
+  if (!inv) {
+    return (
+      <section data-testid="rfq-invoice-pending" className="mt-8 border border-white/10 bg-[#141414] rounded-sm p-5">
+        <div className="text-[10px] font-mono uppercase text-neutral-500">/ Invoice</div>
+        <div className="text-sm text-neutral-400 mt-1">Your invoice is being prepared. It will appear here shortly.</div>
+      </section>
+    );
+  }
+
+  const ensurePayLink = async () => {
+    try {
+      const r = await api.post(`/rfqs/${rfqId}/invoice/paylink`);
+      setInv(r.data);
+      if (r.data.pay_link_url && r.data.pay_link_id !== "mock") {
+        window.open(r.data.pay_link_url, "_blank", "noopener");
+      } else if (r.data.pay_link_id === "mock") {
+        toast.info("Payment link will be enabled once Razorpay is configured — please contact us in the meantime.");
+      }
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+  };
+
+  return (
+    <section data-testid="rfq-invoice" className="mt-8 border border-[#84CC16]/30 bg-[#84CC16]/5 rounded-sm p-5">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-[#84CC16]">/ Invoice</div>
+          <div className="mt-1 text-white font-semibold flex items-center gap-2 flex-wrap">
+            {inv.invoice_number} · ₹{Number(inv.amount).toLocaleString("en-IN")}
+            <Badge className={`border text-[9px] font-mono uppercase tracking-widest ${inv.status === "paid" ? "bg-[#84CC16]/15 text-[#84CC16] border-[#84CC16]/40" : "bg-[#FACC15]/15 text-[#FACC15] border-[#FACC15]/40"}`}>{inv.status}</Badge>
+          </div>
+          <div className="text-[10px] font-mono text-neutral-500 mt-1">
+            issued {(inv.issued_at || "").slice(0, 10)} · due {(inv.due_at || "").slice(0, 10)}
+            {inv.paid_at && ` · paid ${inv.paid_at.slice(0, 10)}`}
+          </div>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <a href={`${backend}/api/rfqs/${rfqId}/invoice/pdf`} target="_blank" rel="noreferrer"
+            data-testid="rfq-invoice-download"
+            className="inline-flex items-center gap-1 px-4 py-2 rounded-sm border border-white/20 text-sm text-white hover:bg-white/10">
+            <Receipt className="w-4 h-4" /> Download PDF
+          </a>
+          {inv.status !== "paid" && (
+            <>
+              {inv.pay_link_url && inv.pay_link_id !== "mock" ? (
+                <a href={inv.pay_link_url} target="_blank" rel="noreferrer" data-testid="rfq-invoice-pay"
+                  className="inline-flex items-center gap-1 px-4 py-2 rounded-sm bg-[#06B6D4] text-black text-sm font-semibold hover:bg-[#0891B2]">
+                  Pay now ↗
+                </a>
+              ) : (
+                <Button data-testid="rfq-invoice-pay" onClick={ensurePayLink} className="bg-[#06B6D4] hover:bg-[#0891B2] text-black">
+                  Pay now
+                </Button>
+              )}
+            </>
+          )}
+        </div>
       </div>
     </section>
   );

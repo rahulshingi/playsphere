@@ -911,7 +911,14 @@ def register(api, db, deps):
             "from_status": rfq["status"], "to_status": "approved", "at": now,
             "note": f"HR accepted quotation v{q['version']}",
         })
-        return {"ok": True}
+        # Auto-create invoice (with Razorpay pay-link if keys are configured).
+        invoice = None
+        try:
+            from routes import cs_invoices
+            invoice = await cs_invoices.create_invoice_for_quote(db, rfq_id, q["id"])
+        except Exception as exc:  # noqa: BLE001
+            print(f"[cs_invoices] auto-create failed: {exc}")
+        return {"ok": True, "invoice": invoice}
 
     @api.post("/rfqs/{rfq_id}/quotation/reject")
     async def hr_reject_quotation(rfq_id: str, body: dict, user: dict = Depends(get_current_user)):

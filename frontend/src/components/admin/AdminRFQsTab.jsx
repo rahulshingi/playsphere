@@ -158,9 +158,125 @@ function RFQDetail({ rfqId, onBack }) {
 
       <QuotationBuilder rfq={rfq} onChange={load} />
 
+      {rfq.status === "approved" || rfq.status === "completed" ? (
+        <InvoicePanel rfq={rfq} onChange={load} />
+      ) : null}
+
       {chatOpen && <NegotiationChat rfqId={rfq.id} />}
     </div>
   );
+}
+
+// ─────────────── Invoice Panel (admin) ───────────────
+function InvoicePanel({ rfq, onChange }) {
+  const [inv, setInv] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const backend = process.env.REACT_APP_BACKEND_URL;
+
+  const load = () => api.get(`/rfqs/${rfq.id}/invoice`).then((r) => setInv(r.data)).catch(() => setInv(null));
+  useEffect(() => { load(); }, [rfq.id]); // eslint-disable-line
+
+  const generate = async () => {
+    setBusy(true);
+    try {
+      const r = await api.post(`/admin/rfqs/${rfq.id}/invoice`);
+      setInv(r.data);
+      toast.success(`Invoice ${r.data.invoice_number} generated`);
+      onChange?.();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+    finally { setBusy(false); }
+  };
+
+  const markPaid = async () => {
+    const note = window.prompt("Payment reference / note (bank txn ID, cheque #, etc.):", "");
+    if (note === null) return;
+    setBusy(true);
+    try {
+      const r = await api.post(`/admin/rfqs/${rfq.id}/invoice/mark-paid`, { note });
+      setInv(r.data); toast.success("Invoice marked paid"); onChange?.();
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+    finally { setBusy(false); }
+  };
+
+  const ensurePayLink = async () => {
+    setBusy(true);
+    try {
+      const r = await api.post(`/rfqs/${rfq.id}/invoice/paylink`);
+      setInv(r.data);
+      if (r.data.pay_link_id === "mock") toast.warning("Razorpay keys missing — mock pay-link returned. Add RAZORPAY_KEY_ID + SECRET to backend/.env.");
+      else toast.success("Pay-link ready");
+    } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <section className="border border-[#84CC16]/30 bg-[#84CC16]/5 rounded-sm p-4" data-testid="arfq-invoice">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-widest text-[#84CC16]">/ Invoice</div>
+          {inv ? (
+            <div className="mt-1 text-white text-sm font-semibold flex items-center gap-2 flex-wrap">
+              <FileText className="w-4 h-4 text-[#84CC16]" />
+              {inv.invoice_number} · ₹{Number(inv.amount).toLocaleString("en-IN")}
+              <InvoiceStatusBadge status={inv.status} />
+            </div>
+          ) : (
+            <div className="mt-1 text-neutral-400 text-xs">Invoice will be generated automatically once HR accepts. You can also generate manually below.</div>
+          )}
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          {!inv && (
+            <Button data-testid="arfq-inv-generate" size="sm" disabled={busy} onClick={generate}
+              className="bg-[#84CC16] hover:bg-[#65A30D] text-black"><FileText className="w-3.5 h-3.5 mr-1" /> Generate invoice</Button>
+          )}
+          {inv && (
+            <>
+              <a href={`${backend}/api/rfqs/${rfq.id}/invoice/pdf`} target="_blank" rel="noreferrer"
+                data-testid="arfq-inv-download"
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-sm border border-white/20 text-xs text-white hover:bg-white/10">
+                <FileText className="w-3.5 h-3.5" /> Download PDF
+              </a>
+              {!inv.pay_link_url && inv.status !== "paid" && (
+                <Button size="sm" disabled={busy} onClick={ensurePayLink} className="bg-[#06B6D4] hover:bg-[#0891B2] text-black">
+                  Create pay-link
+                </Button>
+              )}
+              {inv.pay_link_url && (
+                <a href={inv.pay_link_url} target="_blank" rel="noreferrer"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-sm bg-[#06B6D4] text-black text-xs font-semibold hover:bg-[#0891B2]">
+                  Pay-link ↗
+                </a>
+              )}
+              {inv.status !== "paid" && (
+                <Button data-testid="arfq-inv-mark-paid" size="sm" disabled={busy} onClick={markPaid}
+                  variant="outline" className="border-[#84CC16]/40 bg-transparent text-[#84CC16] hover:bg-[#84CC16]/10">
+                  Mark paid
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+      {inv && (
+        <div className="mt-3 text-[10px] font-mono text-neutral-500 flex gap-4 flex-wrap">
+          <span>issued {(inv.issued_at || "").slice(0, 10)}</span>
+          <span>due {(inv.due_at || "").slice(0, 10)}</span>
+          {inv.paid_at && <span className="text-[#84CC16]">paid {inv.paid_at.slice(0, 10)}</span>}
+          {inv.razorpay_payment_id && <span>razorpay {inv.razorpay_payment_id}</span>}
+          {inv.pay_link_id === "mock" && <span className="text-[#FACC15]">⚠ mock pay-link · add Razorpay keys</span>}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function InvoiceStatusBadge({ status }) {
+  const tone = {
+    unpaid:   "bg-[#FACC15]/15 text-[#FACC15] border-[#FACC15]/40",
+    paid:     "bg-[#84CC16]/15 text-[#84CC16] border-[#84CC16]/40",
+    cancelled:"bg-white/5 text-neutral-500 border-white/10",
+  }[status] || "bg-white/5 text-neutral-400 border-white/10";
+  return <Badge className={`border ${tone} text-[9px] font-mono uppercase tracking-widest`}>{status}</Badge>;
 }
 
 // ─────────────── Event snapshot ───────────────

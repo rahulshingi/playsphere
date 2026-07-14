@@ -22,6 +22,20 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Jul 14, 2026 · iter 40) P2 Refactor (module 1) + P3 Type Hints
+- **Module extraction #1**: `/api/players/me/corporate-email/{request-otp,verify}` moved out of `server.py` into `/app/backend/routes/players_corp_email.py`. `server.py`: 5215 → 5143 lines (−72).
+- **Type hints**: mypy strict-ish coverage on 4 modules (`sitemap`, `corporate_services`, `cs_invoices`, `players_corp_email`) — `Any` used for FastAPI router + Motor DB (both are runtime-dynamic), precise types on all model helpers, return types on every helper function.
+- **Tooling**:
+  - `/app/backend/mypy.ini` — per-module strict config (legacy `server.py` + `business.py` untouched)
+  - `/app/backend/scripts/lint_types.sh` — one-command mypy runner (add `--all` for full-repo)
+  - `mypy==2.1.0` + `motor-types==1.0.0b4` added to `requirements.txt`
+- **Bonus fix**: mypy caught `email_service.send_otp_email` leaking Any into a bool return; added `bool(ok)` cast (no behavior change).
+- **Testing**: `testing_agent_v3_fork` → **93/93 pass** (23 new corp-email + 33 CS Phase 3 + 27 CS invoices + 13 SEO/sitemap). Zero regression.
+- **Deferred**: Remaining P2 modules (players.py, sponsors.py, admin_ops.py, scorers.py, uploads.py, auth_settings.py) — each will be extracted in follow-up iterations, module-by-module. business.py split also pending.
+
+
+
+
 ## Implemented (Jul 14, 2026 · iter 39) Book-a-Venue Nav CTA + SEO / Sitemap
 - **Nav CTA**: prominent "Book a venue" button (data-testid=nav-book-venue-btn on desktop, nav-mobile-book-venue in drawer) for guests AND authed users. Routes to `/hire` where guests can browse turfs/courts/coaches, filter, preview availability. Booking submit is gated at the modal step with a "Sign in to book" CTA.
 - **Per-route SEO**: dep-free `<SEO>` component (`/app/frontend/src/components/SEO.jsx`) sets title / description / canonical / og:* / twitter:* on mount, restores originals on unmount. Wired on Home, Events, About, Contact, Corporate Services (all branches — guest gate, wrong-role gate, HR view), Hire (VendorMarket), Sponsorship marketplace.

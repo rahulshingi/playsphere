@@ -19,7 +19,7 @@ from __future__ import annotations
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import Depends, HTTPException
 from fastapi.responses import Response
@@ -33,24 +33,25 @@ def _public_base_url() -> str:
     return os.environ.get("PUBLIC_BASE_URL", PUBLIC_BASE_URL_DEFAULT).rstrip("/")
 
 
-def _xml_escape(s: str) -> str:
+def _xml_escape(s: str | None) -> str:
     return (str(s or "")
             .replace("&", "&amp;").replace("<", "&lt;")
             .replace(">", "&gt;").replace('"', "&quot;").replace("'", "&apos;"))
 
 
-def _iso_date(dt) -> str:
+def _iso_date(dt: Any) -> str:
     if not dt:
         return datetime.now(timezone.utc).date().isoformat()
     if isinstance(dt, str):
         return dt[:10]
     try:
-        return dt.date().isoformat()
+        result: str = dt.date().isoformat()
+        return result
     except Exception:
         return datetime.now(timezone.utc).date().isoformat()
 
 
-STATIC_ROUTES = [
+STATIC_ROUTES: list[tuple[str, str, str]] = [
     # path,                    priority, changefreq
     ("/",                       "1.0",   "daily"),
     ("/events",                 "0.9",   "daily"),
@@ -91,7 +92,7 @@ Sitemap: {base}/sitemap.xml
 """
 
 
-async def build_sitemap_xml(db, base_url: str) -> str:
+async def build_sitemap_xml(db: Any, base_url: str) -> str:
     urls: list[str] = []
     today = datetime.now(timezone.utc).date().isoformat()
 
@@ -182,7 +183,7 @@ async def build_sitemap_xml(db, base_url: str) -> str:
     )
 
 
-async def write_static_snapshots(db) -> dict:
+async def write_static_snapshots(db: Any) -> dict[str, Any]:
     """Write /app/frontend/public/sitemap.xml + robots.txt. Returns counts."""
     base = _public_base_url()
     STATIC_DIR.mkdir(parents=True, exist_ok=True)
@@ -192,11 +193,11 @@ async def write_static_snapshots(db) -> dict:
     return {"sitemap_urls": xml.count("<loc>"), "base": base}
 
 
-def register(api, app, db, deps):
+def register(api: Any, app: Any, db: Any, deps: Any) -> None:
     require_platform_admin = deps.require_platform_admin
 
     @api.get("/sitemap.xml", include_in_schema=False)
-    async def sitemap_api(base: Optional[str] = None):
+    async def sitemap_api(base: Optional[str] = None) -> Response:
         base_url = (base or _public_base_url()).rstrip("/")
         body = await build_sitemap_xml(db, base_url)
         return Response(
@@ -206,7 +207,7 @@ def register(api, app, db, deps):
         )
 
     @api.get("/robots.txt", include_in_schema=False)
-    async def robots_api():
+    async def robots_api() -> Response:
         body = ROBOTS_TEMPLATE.format(base=_public_base_url())
         return Response(
             content=body,
@@ -215,7 +216,7 @@ def register(api, app, db, deps):
         )
 
     @api.post("/admin/sitemap/rebuild")
-    async def rebuild(_: dict = Depends(require_platform_admin)):
+    async def rebuild(_: dict = Depends(require_platform_admin)) -> dict[str, Any]:
         try:
             info = await write_static_snapshots(db)
             return {"ok": True, **info, "written_at": datetime.now(timezone.utc).isoformat()}
@@ -224,7 +225,7 @@ def register(api, app, db, deps):
 
     # Register a startup hook via FastAPI app.on_event
     @app.on_event("startup")
-    async def _seed_sitemap_on_startup():
+    async def _seed_sitemap_on_startup() -> None:
         try:
             info = await write_static_snapshots(db)
             print(f"[sitemap] snapshot written ({info['sitemap_urls']} urls, base={info['base']})")

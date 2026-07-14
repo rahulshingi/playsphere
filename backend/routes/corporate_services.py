@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Optional, List
+from typing import Any, Optional, List
 
 from fastapi import Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -88,7 +88,7 @@ class CSPackage(BaseModel):
 
 # ─────────────────────────── Registration ───────────────────────────
 
-def register(api, db, deps):
+def register(api: Any, db: Any, deps: Any) -> None:
     get_current_user = deps.get_current_user
     require_platform_admin = deps.require_platform_admin
 
@@ -387,7 +387,7 @@ def register(api, db, deps):
     def _now() -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def _admin_only(user: dict):
+    def _admin_only(user: dict) -> None:
         if user.get("role") not in ("platform_admin", "admin"):
             raise HTTPException(403, "Admin only")
 

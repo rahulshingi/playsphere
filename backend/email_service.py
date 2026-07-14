@@ -68,7 +68,7 @@ def send_email(
                      to, subject, resp.status_code, getattr(resp, "body", b"")[:300])
     else:
         logger.info("Email sent: to=%s subject=%s status=%s", to, subject, resp.status_code)
-    return ok
+    return bool(ok)
 
 
 def _html_to_text(html: str) -> str:

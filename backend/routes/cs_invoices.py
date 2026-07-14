@@ -25,7 +25,7 @@ import uuid
 import hmac
 import hashlib
 from datetime import datetime, timezone, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.responses import Response
@@ -214,7 +214,7 @@ def _build_invoice_pdf(invoice: dict, rfq: dict, quote: dict, site: dict) -> byt
 
 # ─────────────────────────── Razorpay pay-link ───────────────────────────
 
-def _razorpay_client():
+def _razorpay_client() -> Any | None:
     key = os.environ.get("RAZORPAY_KEY_ID")
     secret = os.environ.get("RAZORPAY_KEY_SECRET")
     if not (key and secret):
@@ -226,12 +226,12 @@ def _razorpay_client():
         return None
 
 
-def _create_paylink(client, invoice: dict, rfq: dict) -> Optional[dict]:
+def _create_paylink(client: Any | None, invoice: dict, rfq: dict) -> dict | None:
     """Create a Razorpay Payment Link. Returns the API response or None on error."""
     if client is None:
         return None
     amount_paise = int(round(float(invoice["amount"]) * 100))
-    payload = {
+    payload: dict = {
         "amount": amount_paise,
         "currency": "INR",
         "accept_partial": False,
@@ -250,13 +250,14 @@ def _create_paylink(client, invoice: dict, rfq: dict) -> Optional[dict]:
         "reference_id": invoice["invoice_number"][:40],
     }
     try:
-        return client.payment_link.create(payload)
+        result: dict = client.payment_link.create(payload)
+        return result
     except Exception as exc:  # noqa: BLE001
         print(f"[razorpay] payment link create failed: {exc}")
         return None
 
 
-async def _next_invoice_number(db) -> str:
+async def _next_invoice_number(db: Any) -> str:
     """Simple counter — INV-KN-YYYYMM-{seq zero-padded}."""
     yyyymm = datetime.now(timezone.utc).strftime("%Y%m")
     counter = await db.cs_invoice_counters.find_one_and_update(
@@ -268,9 +269,9 @@ async def _next_invoice_number(db) -> str:
     return f"INV-KN-{yyyymm}-{seq:04d}"
 
 
-async def create_invoice_for_quote(db, rfq_id: str, quote_id: str) -> dict:
+async def create_invoice_for_quote(db: Any, rfq_id: str, quote_id: str) -> dict:
     """Idempotent — returns existing invoice if quote already invoiced."""
-    existing = await db.cs_invoices.find_one({"quote_id": quote_id}, {"_id": 0})
+    existing: Optional[dict] = await db.cs_invoices.find_one({"quote_id": quote_id}, {"_id": 0})
     if existing:
         return existing
     rfq = await db.cs_rfqs.find_one({"id": rfq_id}, {"_id": 0})
@@ -317,15 +318,15 @@ async def create_invoice_for_quote(db, rfq_id: str, quote_id: str) -> dict:
 
 # ─────────────────────────── Route registration ───────────────────────────
 
-def register(api, db, deps):
+def register(api: Any, db: Any, deps: Any) -> None:
     get_current_user = deps.get_current_user
     require_platform_admin = deps.require_platform_admin
 
     def _sanitise_invoice(inv: dict) -> dict:
         return {k: v for k, v in inv.items() if k != "_id"}
 
-    async def _load_rfq_and_check(rfq_id: str, user: dict):
-        rfq = await db.cs_rfqs.find_one({"id": rfq_id}, {"_id": 0})
+    async def _load_rfq_and_check(rfq_id: str, user: dict) -> tuple[dict, bool]:
+        rfq = await db.cs_rfqs.find_one({"id": rfq_id}, {"_id": 0})  # type: ignore[attr-defined]
         if not rfq:
             raise HTTPException(404, "RFQ not found")
         is_admin = user.get("role") in ("platform_admin", "admin")

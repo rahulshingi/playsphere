@@ -1837,108 +1837,11 @@ async def player_login(body: PlayerLoginBody, response: Response):
 # Corporate email linking (Jul 2026) — allow a player with a personal-email
 # signup to attach + verify a work email so HR at that company can find them.
 # ---------------------------------------------------------------------------
+# NOTE: Endpoints + `_auto_link_company_by_domain` extracted to
+# routes/players_corp_email.py (registered below). We keep `_email_domain`
+# here because `list_player_profiles` still uses it directly.
 def _email_domain(e: str) -> str:
     return (e or "").strip().lower().split("@", 1)[-1] if "@" in (e or "") else ""
-
-
-async def _auto_link_company_by_domain(db, corporate_email: str) -> Optional[str]:
-    """Try to find a company whose admin_email shares the corporate email's domain."""
-    domain = _email_domain(corporate_email)
-    if not domain or domain in {"gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com"}:
-        return None
-    # Company doc might store admin_email or match via one of its company_admin users.
-    company_admin = await db.users.find_one(
-        {"role": "company_admin", "email": {"$regex": f"@{domain}$", "$options": "i"}, "company_id": {"$ne": None}},
-        {"_id": 0, "company_id": 1},
-    )
-    return company_admin["company_id"] if company_admin else None
-
-
-@api.post("/players/me/corporate-email/request-otp")
-async def player_corporate_email_request_otp(body: dict, user: dict = Depends(get_current_user)):
-    """Send a 6-digit code to the player's work email for verification."""
-    if user.get("role") != "player" and not user.get("also_player"):
-        raise HTTPException(403, "Player only")
-    corp_email = (body or {}).get("corporate_email", "").strip().lower()
-    if not corp_email or "@" not in corp_email:
-        raise HTTPException(400, "Valid corporate email is required")
-    domain = _email_domain(corp_email)
-    FREE_DOMAINS = {"gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com", "protonmail.com"}
-    if domain in FREE_DOMAINS:
-        raise HTTPException(400, "Please enter your official work email (personal providers like Gmail can't be verified as a company email).")
-    import secrets as _secrets  # local import — small helper, no need to bloat module globals
-    from email_service import send_otp_email as _send_otp, is_email_configured as _is_email_configured
-    if not _is_email_configured():
-        raise HTTPException(503, "Email service is not configured — please contact admin@kreedanation.com.")
-    otp = f"{_secrets.randbelow(1000000):06d}"
-    now = datetime.now(timezone.utc)
-    await db.player_corp_otps.update_one(
-        {"user_id": user["id"], "corporate_email": corp_email},
-        {"$set": {
-            "user_id": user["id"], "corporate_email": corp_email, "otp": otp,
-            "expires_at": (now + timedelta(minutes=10)).isoformat(),
-            "attempts": 0, "created_at": now.isoformat(),
-        }},
-        upsert=True,
-    )
-    ok = _send_otp(to=corp_email, otp=otp, company_name="your company at Kreeda Nation")
-    if not ok:
-        await db.player_corp_otps.delete_one({"user_id": user["id"], "corporate_email": corp_email})
-        raise HTTPException(502, "Couldn't send the verification email. Please try again shortly.")
-    return {"ok": True, "expires_in": 600, "corporate_email": corp_email}
-
-
-@api.post("/players/me/corporate-email/verify")
-async def player_corporate_email_verify(body: dict, user: dict = Depends(get_current_user)):
-    """Verify the OTP and link the corporate email + (best-effort) company_id."""
-    if user.get("role") != "player" and not user.get("also_player"):
-        raise HTTPException(403, "Player only")
-    corp_email = (body or {}).get("corporate_email", "").strip().lower()
-    otp_input = (body or {}).get("otp", "").strip()
-    if not (corp_email and otp_input):
-        raise HTTPException(400, "corporate_email and otp are required")
-    rec = await db.player_corp_otps.find_one({"user_id": user["id"], "corporate_email": corp_email})
-    if not rec:
-        raise HTTPException(400, "No verification request pending — request a code first.")
-    # Check expiry
-    exp = rec.get("expires_at", "")
-    try:
-        if datetime.fromisoformat(exp) < datetime.now(timezone.utc):
-            raise HTTPException(400, "Verification code expired. Request a fresh one.")
-    except (TypeError, ValueError):
-        raise HTTPException(400, "Verification record corrupt — request a fresh code.")
-    if int(rec.get("attempts") or 0) >= 5:
-        raise HTTPException(429, "Too many attempts — request a fresh code.")
-    if rec["otp"] != otp_input:
-        await db.player_corp_otps.update_one({"_id": rec["_id"]}, {"$inc": {"attempts": 1}})
-        raise HTTPException(400, "Incorrect code")
-    # ✔ verified — try to auto-link company by domain
-    company_id = await _auto_link_company_by_domain(db, corp_email)
-    upd = {
-        "corporate_email": corp_email,
-        "corporate_email_verified": True,
-        "corporate_email_verified_at": datetime.now(timezone.utc).isoformat(),
-    }
-    company_name = None
-    if company_id:
-        c = await db.companies.find_one({"id": company_id}, {"_id": 0, "name": 1})
-        company_name = c["name"] if c else None
-        upd["company_id"] = company_id
-        upd["company_name"] = company_name
-    await db.player_profiles.update_one({"user_id": user["id"]}, {"$set": upd})
-    # Also mirror on users doc so HR search's user-side joins work
-    if company_id:
-        await db.users.update_one({"id": user["id"]}, {"$set": {"company_id": company_id}})
-    await db.player_corp_otps.delete_one({"_id": rec["_id"]})
-    return {
-        "ok": True,
-        "corporate_email": corp_email,
-        "linked_company_id": company_id,
-        "linked_company_name": company_name,
-        "message": company_name
-            and f"Corporate email verified · linked to {company_name}"
-            or "Corporate email verified. When your HR joins Kreeda Nation, you'll be auto-linked to their roster.",
-    }
 
 
 @api.get("/players/me")
@@ -5181,6 +5084,14 @@ from routes import sitemap as sitemap_routes  # noqa: E402
 
 sitemap_routes.register(api, app, db, SimpleNamespace(
     require_platform_admin=require_platform_admin,
+))
+
+
+# Player corporate-email verification — extracted from server.py (P2 refactor)
+from routes import players_corp_email as _players_corp_email_routes  # noqa: E402
+
+_players_corp_email_routes.register(api, db, SimpleNamespace(
+    get_current_user=get_current_user,
 ))
 
 

@@ -22,6 +22,25 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Jul 14, 2026) RFQ → Invoice → Razorpay Pay-link + Refreshed Role Manuals
+- **Auto-invoice on HR accept** — `POST /api/rfqs/{id}/quotation/accept` now materialises a `cs_invoices` row + tries to spin a Razorpay Payment Link. Idempotent per quote_id.
+- **Endpoints** (`/app/backend/routes/cs_invoices.py`, 7 new):
+  - `GET /api/rfqs/{id}/invoice` — HR + admin readable
+  - `POST /api/admin/rfqs/{id}/invoice` — admin fiat generate (auto-flips quote→accepted if it was still 'sent')
+  - `GET /api/rfqs/{id}/invoice/pdf` — branded PDF via ReportLab
+  - `POST /api/rfqs/{id}/invoice/paylink` — ensure Razorpay link (mock URL when keys absent)
+  - `POST /api/admin/rfqs/{id}/invoice/mark-paid` — offline paid flow, transitions RFQ→completed
+  - `POST /api/razorpay/webhook` — HMAC-SHA256 verified when `RAZORPAY_WEBHOOK_SECRET` set
+  - `GET /api/admin/cs-invoices` — admin aging list
+- **PDF invoice** — Kreeda Nation branded (logo + accent stripe), Bill-To / Event details, itemised lines, subtotal → discount → tax → total, embedded pay-link (when present), notes + terms. Sequence counter `INV-KN-YYYYMM-####` via `find_one_and_update` (safe under concurrency).
+- **Frontend** — `InvoicePanel` (admin, in `AdminRFQsTab.jsx`) and `HRInvoicePanel` (HR, in `MyRFQs.jsx`). Download PDF opens in new tab, Pay now opens Razorpay short-URL, Mark-paid prompts for note.
+- **Razorpay** — SDK installed (`razorpay==2.0.1`). Backend degrades gracefully with a `mock` pay-link when `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` are absent. Add them to `/app/backend/.env` to switch to production mode; webhook secret goes in `RAZORPAY_WEBHOOK_SECRET`.
+- **Regenerated 7 role manuals** at `/app/frontend/public/manuals/*.pdf` — ReportLab-based, dark cover page with brand mark + accent stripe, section dividers in role-accent colors, embedded reference screenshots for admin dashboard, admin RFQ detail, HR RFQ detail. Roles: platform-admin, company, organiser, vendor, player, sponsor, scorer. Scripts: `/app/backend/scripts/generate_manuals.py` + `capture_manual_screenshots.py`. Rerun any time via `python scripts/generate_manuals.py`.
+- **Testing**: 27 new + 30 regression = **57/57 pytest PASS**, zero critical / design issues.
+
+
+
+
 ## Implemented (Jul 13, 2026) Corporate Services Phase 3 + Internal Service Vendor Management
 - **Backend** (`/app/backend/routes/corporate_services.py`, ~600 new lines) — 20 new endpoints:
   - Service Vendors: `GET/POST/PATCH/DELETE /api/admin/service-vendors[/{id}]` with delete-guard when referenced by cost sheets.

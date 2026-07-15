@@ -63,7 +63,14 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
   if (isPlatformAdmin) {
     primary.push({ to: "/platform-admin", label: "HQ", icon: Crown, accent: "#FF3B30" });
   }
-  return { primary, more };
+  // Dual-role users (e.g. HR with `also_player=true`) can match multiple
+  // branches above — dedupe by target URL so the same link never renders
+  // twice in the header or dropdown.
+  const dedupe = (list) => {
+    const seen = new Set();
+    return list.filter((l) => (seen.has(l.to) ? false : (seen.add(l.to), true)));
+  };
+  return { primary: dedupe(primary), more: dedupe(more) };
 }
 
 function DesktopLink({ link }) {

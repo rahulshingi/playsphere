@@ -4,7 +4,7 @@ import api from "@/lib/api";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search, ExternalLink, ShieldOff, ShieldCheck } from "lucide-react";
+import { Search, ExternalLink, ShieldOff, ShieldCheck, KeyRound } from "lucide-react";
 
 /**
  * Platform Admin → Users tab.
@@ -73,6 +73,27 @@ export default function UsersTab() {
     }
   };
 
+  // Reset any user's password. Prompt lets admin either type a temp OR leave
+  // blank (auto-generate). Backend emails the user regardless.
+  const resetPassword = async (u) => {
+    const custom = window.prompt(
+      `Reset password for ${u.email}?\n\nEnter a temporary password (leave blank to auto-generate). The user will be emailed the temp password + a one-hour reset link.`,
+      "",
+    );
+    if (custom === null) return;   // cancelled
+    try {
+      const payload = custom.trim() ? { new_password: custom.trim() } : {};
+      const { data } = await api.post(`/admin/users/${u.id}/reset-password`, payload);
+      const tail = data.email_sent ? "Email delivered." : "Email NOT delivered (check SendGrid logs).";
+      window.alert(
+        `Password reset for ${data.email}\n\nTemp password: ${data.temp_password}\n\n${tail}\n\nThe user must change it on next login (must_reset flag set).`,
+      );
+      toast.success("Password reset · " + (data.email_sent ? "email sent" : "email failed, temp shown above"));
+    } catch (err) {
+      toast.error(err.response?.data?.detail || "Reset failed");
+    }
+  };
+
   return (
     <div className="space-y-5">
       <div className="border border-white/10 rounded-sm bg-[#141414]/60 p-3 text-xs text-neutral-400" data-testid="users-tab-note">
@@ -126,7 +147,9 @@ export default function UsersTab() {
 
       <div className="space-y-2">
         {filtered.map((u) => (
-          <UserRow key={u.id} user={u} onToggleDisabled={() => toggleDisabled(u)} />
+          <UserRow key={u.id} user={u}
+            onToggleDisabled={() => toggleDisabled(u)}
+            onResetPassword={() => resetPassword(u)} />
         ))}
       </div>
     </div>
@@ -156,7 +179,7 @@ function deepLinkFor(u) {
   return null;
 }
 
-function UserRow({ user, onToggleDisabled }) {
+function UserRow({ user, onToggleDisabled, onResetPassword }) {
   const link = deepLinkFor(user);
   const roleColors = {
     player: "#84CC16", vendor: "#EC4899", organiser: "#06B6D4",
@@ -202,6 +225,12 @@ function UserRow({ user, onToggleDisabled }) {
             </Button>
           </Link>
         )}
+        <Button size="sm" variant="ghost" data-testid={`user-reset-password-${user.id}`}
+          onClick={onResetPassword}
+          className="text-[#F59E0B]"
+          title="Reset password (email temp + link)">
+          <KeyRound className="w-4 h-4" />
+        </Button>
         <Button size="sm" variant="ghost" data-testid={`user-toggle-disabled-${user.id}`}
           onClick={onToggleDisabled}
           className={user.disabled ? "text-[#84CC16]" : "text-[#FF3B30]"}

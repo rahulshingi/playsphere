@@ -156,3 +156,38 @@ def send_welcome_email(to: str, name: str, temp_password: Optional[str], login_u
     </div>
     """
     return send_email(to=to, subject=subject, html=html)
+
+
+def send_admin_password_reset_email(to: str, temp_password: str, reset_url: str, name: str = "") -> bool:
+    """Sent when a platform-admin resets a user's password from the Users tab.
+
+    Shows the temp password + a one-hour reset link so the user can jump straight
+    to picking a permanent password. Reuses the existing dark-branded template.
+    """
+    subject = "Your Kreeda Nation password was reset by an admin"
+    greeting = f"Hi{(' ' + name) if name else ''},"
+    html = f"""
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#e5e5e5;padding:32px 20px;">
+      <div style="max-width:560px;margin:auto;background:#141414;border:1px solid #ffffff14;border-radius:6px;padding:32px;">
+        <div style="font-size:11px;letter-spacing:.3em;color:#F59E0B;text-transform:uppercase;font-family:ui-monospace,monospace;">/ Admin-triggered password reset</div>
+        <h1 style="font-size:26px;letter-spacing:.05em;margin:12px 0 24px;color:#fff;">YOUR PASSWORD WAS RESET</h1>
+        <p>{greeting}</p>
+        <p>A Kreeda Nation platform admin has reset the password for your account. Your <b>temporary password</b> is below — use it to sign in, or click the button to pick a new one right away.</p>
+        <div style="background:#0a0a0a;border:1px solid #ffffff14;border-radius:4px;padding:16px;margin:20px 0;font-family:ui-monospace,monospace;">
+          <div style="font-size:10px;color:#737373;text-transform:uppercase;letter-spacing:.2em;margin-bottom:8px;">Temporary sign-in</div>
+          <div style="font-size:14px;color:#e5e5e5;">Email: {to}</div>
+          <div style="font-size:14px;color:#F59E0B;margin-top:6px;">Password: <b>{temp_password}</b></div>
+        </div>
+        <p style="text-align:center;margin:28px 0;">
+          <a href="{reset_url}" style="display:inline-block;background:#84CC16;color:#000;font-weight:700;padding:14px 32px;border-radius:4px;text-decoration:none;letter-spacing:.05em;">SET A NEW PASSWORD</a>
+        </p>
+        <p style="font-size:12px;color:#a3a3a3;">Or paste this link in your browser (valid for 1 hour):</p>
+        <p style="font-size:12px;color:#84CC16;word-break:break-all;font-family:ui-monospace,monospace;">{reset_url}</p>
+        <p style="font-size:13px;color:#a3a3a3;margin-top:24px;">If you didn't expect this reset, please contact <a style="color:#84CC16;" href="mailto:contact@kreedanation.com">contact@kreedanation.com</a> right away.</p>
+        <hr style="border:none;border-top:1px solid #ffffff14;margin:28px 0;"/>
+        <p style="font-size:11px;color:#737373;font-family:ui-monospace,monospace;text-transform:uppercase;letter-spacing:.2em;">Kreeda Nation · Where teams compete, connect &amp; grow</p>
+      </div>
+    </div>
+    """
+    return send_email(to=to, subject=subject, html=html)
+

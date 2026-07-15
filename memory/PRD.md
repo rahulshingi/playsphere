@@ -22,6 +22,21 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Jul 15, 2026 · iter 43) Admin Password Reset (per-user)
+- **NEW endpoint** `POST /api/admin/users/{user_id}/reset-password` (platform-admin only):
+  - Body `{new_password?}` — supply your own, or omit for an auto-generated 10-char temp
+  - Updates `users.password_hash`, sets `must_reset=true`, records `password_reset_by_admin_id`
+  - Mints a `password_resets` token (1h TTL, reuses existing flow)
+  - Sends the user a branded email with the temp password + one-click reset link
+  - Writes an entry to `admin_audit_log` (action=password_reset)
+- **NEW email template** `send_admin_password_reset_email()` — dark-branded, shows temp password + a big CTA button that lands on `/reset-password?token=…`
+- **Frontend** — new key-icon button on each row in `PlatformAdmin → Users` tab (data-testid `user-reset-password-{id}`). Admin clicks → prompt (blank = auto-generate) → confirm → toast + alert with the temp password. Works across all user roles.
+- **Audit-safe**: audit log persists even if the reset email fails. Returned payload includes `email_sent` so the admin knows whether to share the temp password out-of-band.
+- **Verified**: e2e curl round-trip on preview — reset succeeded, new password logged in successfully, DB restored to `vendor123` post-test.
+
+
+
+
 ## Implemented (Jul 15, 2026 · iter 42) Pagination + "Latest on Top" Sorting
 - **NEW `/app/frontend/src/components/Paginator.jsx`** — reusable client-side pagination widget + `usePagination` hook. Numbered pages (Prev · 1 · 2 · 3 · Next) with ellipsis, page-size dropdown (10 / 20 / 50), URL sync via `?page=N&size=N` for shareable/refresh-safe positions, auto-reset to page 1 when the underlying list shrinks (filter applied).
 - **SORT presets** exported from Paginator: `eventsByLifecycle` (ongoing → upcoming → completed → cancelled), `byCreatedDesc` (newest first), `bookingsByDate` (upcoming asc, past desc).

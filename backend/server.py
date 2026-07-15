@@ -5109,6 +5109,7 @@ from routes import admin_seeds as _admin_seeds_routes  # noqa: E402
 
 _admin_seeds_routes.register(api, db, SimpleNamespace(
     require_platform_admin=require_platform_admin,
+    hash_password=hash_password,
 ))
 
 

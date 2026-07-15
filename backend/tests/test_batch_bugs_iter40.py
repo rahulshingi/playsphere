@@ -51,7 +51,8 @@ class TestEventAutoComplete:
 class TestPhotoCap:
     def test_photo_limit_seven(self, player_session):
         ev = player_session.post(f"{API}/events", json={"name": f"iter40_ph_{secrets.token_hex(4)}",
-                                                        "sport": "cricket", "format": "knockout"}, timeout=10).json()
+                                                        "sport": "cricket", "format": "knockout",
+                                                        "start_date": "2099-01-01", "end_date": "2099-01-02"}, timeout=10).json()
         try:
             for i in range(7):
                 r = player_session.post(f"{API}/events/{ev['id']}/photos", json={"url": f"/api/uploads/x{i}"}, timeout=10)

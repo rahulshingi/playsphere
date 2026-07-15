@@ -38,6 +38,8 @@ export default function EventsTab({ events, companies = [], reload, canManage })
   const createEvent = async (e) => {
     e.preventDefault();
     if (!newEvent.name) return toast.error("Event name required");
+    if (!newEvent.start_date || !newEvent.end_date) return toast.error("Start date and end date are required.");
+    if (newEvent.end_date < newEvent.start_date) return toast.error("End date cannot be earlier than start date.");
     try {
       // Only include player_format when the sport supports both singles + doubles.
       const payload = { ...newEvent };
@@ -116,12 +118,12 @@ export default function EventsTab({ events, companies = [], reload, canManage })
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Start date</div>
-            <Input data-testid="pa-event-start" type="date" value={newEvent.start_date} min={todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+            <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Start date <span className="text-[#FF3B30]">*</span></div>
+            <Input data-testid="pa-event-start" type="date" required value={newEvent.start_date} min={todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
           </div>
           <div>
-            <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ End date</div>
-            <Input data-testid="pa-event-end" type="date" value={newEvent.end_date} min={newEvent.start_date || todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+            <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ End date <span className="text-[#FF3B30]">*</span></div>
+            <Input data-testid="pa-event-end" type="date" required value={newEvent.end_date} min={newEvent.start_date || todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
           </div>
         </div>
         <ImageUpload value={newEvent.banner_url} onChange={(v) => setNewEvent({ ...newEvent, banner_url: v })} testid="pa-event-banner" placeholder="Banner image — paste URL or upload" />

@@ -85,6 +85,7 @@ class TestQuickAddWelcomeEmail:
         ev = player_session.post(f"{API}/events", json={
             "name": f"iter41_qa_{secrets.token_hex(4)}",
             "sport": "cricket", "format": "knockout",
+            "start_date": "2099-01-01", "end_date": "2099-01-02",
         }, timeout=10).json()
         try:
             # Create a team on the event

@@ -1099,6 +1099,12 @@
     <priority>0.5</priority>
   </url>
   <url>
+    <loc>https://kreedanation.com/p/other-player-18</loc>
+    <lastmod>2026-07-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://kreedanation.com/p/other-player-2</loc>
     <lastmod>2026-07-05</lastmod>
     <changefreq>monthly</changefreq>
@@ -4683,6 +4689,18 @@
   <url>
     <loc>https://kreedanation.com/p/qa-fresh-4</loc>
     <lastmod>2026-07-09</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://kreedanation.com/p/qa-fresh-5</loc>
+    <lastmod>2026-07-15</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://kreedanation.com/p/qa-fresh-6</loc>
+    <lastmod>2026-07-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.5</priority>
   </url>

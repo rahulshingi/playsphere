@@ -94,6 +94,8 @@ def _mk_evt(sport, name_suffix, **extras):
         "sport": sport,
         "format": "round_robin",
         "event_type": "playsphere_organized",
+        "start_date": "2099-01-01",
+        "end_date": "2099-01-02",
     }
     payload.update(extras)
     return payload

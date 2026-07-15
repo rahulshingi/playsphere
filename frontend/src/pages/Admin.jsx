@@ -69,6 +69,16 @@ export default function Admin() {
 
   const createEvent = async (e) => {
     e.preventDefault();
+    // Client-side date guard (server also enforces) — friendly UX before the
+    // roundtrip. Matches backend validation in routes/events.py::create_event.
+    if (!newEvent.start_date || !newEvent.end_date) {
+      toast.error("Start date and end date are required.");
+      return;
+    }
+    if (newEvent.end_date < newEvent.start_date) {
+      toast.error("End date cannot be earlier than start date.");
+      return;
+    }
     try {
       const payload = { ...newEvent };
       if (currentPF !== "both") delete payload.player_format;
@@ -131,12 +141,12 @@ export default function Admin() {
               <Input data-testid="player-event-venue" placeholder="Venue (ground, court, backyard…)" value={newEvent.venue} onChange={(e) => setNewEvent({ ...newEvent, venue: e.target.value })} className="bg-black/40 border-white/10 text-white" />
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Start date</div>
-                  <Input data-testid="player-event-start" type="date" value={newEvent.start_date} min={todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                  <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Start date <span className="text-[#FF3B30]">*</span></div>
+                  <Input data-testid="player-event-start" type="date" required value={newEvent.start_date} min={todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 </div>
                 <div>
-                  <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ End date</div>
-                  <Input data-testid="player-event-end" type="date" value={newEvent.end_date} min={newEvent.start_date || todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                  <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ End date <span className="text-[#FF3B30]">*</span></div>
+                  <Input data-testid="player-event-end" type="date" required value={newEvent.end_date} min={newEvent.start_date || todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                 </div>
               </div>
               <div>
@@ -320,12 +330,12 @@ export default function Admin() {
                 <div className="text-[10px] font-mono text-neutral-500 -mt-1">Can&apos;t find your venue? Click <span className="text-[#84CC16]">Suggest new venue</span> — Kreeda Nation admin will reach out to onboard it.</div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Start date</div>
-                    <Input data-testid="admin-event-start" type="date" value={newEvent.start_date} min={todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                    <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ Start date <span className="text-[#FF3B30]">*</span></div>
+                    <Input data-testid="admin-event-start" type="date" required value={newEvent.start_date} min={todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, start_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                   </div>
                   <div>
-                    <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ End date</div>
-                    <Input data-testid="admin-event-end" type="date" value={newEvent.end_date} min={newEvent.start_date || todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
+                    <div className="text-[10px] font-mono uppercase text-neutral-500 mb-1">/ End date <span className="text-[#FF3B30]">*</span></div>
+                    <Input data-testid="admin-event-end" type="date" required value={newEvent.end_date} min={newEvent.start_date || todayLocalISO()} onChange={(e) => setNewEvent({ ...newEvent, end_date: e.target.value })} className="bg-black/40 border-white/10 text-white" />
                   </div>
                 </div>
                 <div>

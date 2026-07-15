@@ -1,0 +1,59 @@
+{
+  "summary": "Iteration 41 verified: (A) event_lifecycle.run_tick automation module + POST /api/admin/events/lifecycle/tick admin endpoint, and (B) mandatory start_date/end_date at create-time with editable PATCH. Wrote 25-test pytest suite (test_iter41_lifecycle.py) covering create/patch date rules, admin-tick RBAC, all 4 status transitions, and all 6 reminder stages including cooldown. 24 pass, 1 skipped (HR seed unavailable — clean-slate mode). Also fixed 4 pre-iter41 test files whose event-create payloads were missing dates. Full targeted regression: 64 passed, 1 skipped. Frontend spot-check on preview URL: EventStatusBadge renders correctly with proper color, border, bg and data-testid.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/events (author role protection)",
+        "issue": "Not related to iter41: routes/events.py auto-completes stale events in list_events + get_event based on end_date < today; this can conflict with the lifecycle scheduler's cancelled/completed distinction. When an event has 0 fixtures but its end_date is past, get_event now marks it 'completed' while run_tick would (correctly) leave it as-is because no fixtures exist. Behavior is inconsistent but non-blocking — the lifecycle module intentionally skips the completed_status when 0 fixtures + 0 started, but the on-read auto-complete overrides. Consider making the on-read helper defer to lifecycle rules (cancelled if 0 started + fixtures exist)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter41_lifecycle.py",
+    "/app/test_reports/pytest/iter41.xml",
+    "/app/test_reports/pytest/iter41_full.xml"
+  ],
+  "action_items": [
+    "OPTIONAL — align routes/events.py list_events()/get_event() auto-complete helper with the new lifecycle rules so it doesn't flip an event to 'completed' when there are 0 fixtures (should let the tick module cancel it instead).",
+    "OPTIONAL — extract a shared /_status_from_dates helper if the two logics are kept consistent."
+  ],
+  "critical_code_review_comments": [
+    "routes/event_lifecycle.py — clean, well-commented, single-file module. _derive_status is pure (no I/O), which made unit-testing status transitions trivial. Fixture query only filters by is_local_match!=True + date/status windows — good for DB efficiency.",
+    "routes/event_lifecycle.py:213 — the mongo $or includes {status: {$ne: completed}, start_date: {$ne: None}} which will match almost every non-completed event; this is fine at daily cadence but scale may need pagination if events grow past 10k. Currently 120 events — fine.",
+    "routes/event_lifecycle.py:_send_reminder — persists timestamp AFTER the send call, so if send_email raises the reminder ts is never written (retry-safe). Uses dotted-path $set for last_reminder_sent.{stage} — correct mongodb pattern.",
+    "routes/events.py:257-277 — new required-date guard is correctly placed BEFORE sport enrichment so 400s short-circuit early. Both start_date and end_date are .strip()'d before storage which prevents pure-whitespace bypass.",
+    "routes/events.py:704-734 — PATCH guards use `if key in body` to distinguish 'not sent' from 'explicit blank'. `effective_start = body.get(k, existing.get(k))` correctly falls back to existing DB value for order check. Sensitive fields protected via body.pop() loop.",
+    "routes/events.py:169-177 — legacy list_events auto-complete helper (pre-iter41) sets status='completed' when end_date < today, regardless of fixture activity. This conflicts with the new Rule C (cancelled if 0 started). Non-blocking, but flagged in action_items — the two code paths should agree.",
+    "server.py:5099-5104 — event_lifecycle registered via SimpleNamespace deps (require_platform_admin only). Same pattern as sitemap/CS/players_corp_email — consistent.",
+    "server.py:5148-5149 — start_event_lifecycle_scheduler wired inside on_startup. Verified no import cycle; import is inside the function to avoid triggering the scheduler on module import (e.g., during unit tests that import server.py directly).",
+    "frontend/EventStatusBadge.jsx — single-file, ~30 LoC, no external deps. TONE map has 5 states matching backend literals. testid pattern data-testid=event-status-{status} is exactly what E1 promised. Verified live on /events/{id} page — 'upcoming' badge renders yellow (rgb(250,204,21)) with correct border+bg.",
+    "frontend/Admin.jsx:74-79 — client guard toast.error('Start date and end date are required.') matches the backend error exactly, so user sees consistent messaging.",
+    "components/admin/EventsTab.jsx:41-42 — mirrors Admin.jsx guards + adds end_date < start_date pre-check, avoiding a wasted API round-trip.",
+    "TEST — all 4 lifecycle status rules verified end-to-end: cancelled (past-end + fixtures + 0 started), completed (past-end + ≥1 live), ongoing (today in-range), upcoming (future).",
+    "TEST — all 6 reminder stages verified: no_teams, no_fixtures (with cooldown), starts_tomorrow, start_today, no_activity_8h, publish_results — each writes last_reminder_sent.{stage} timestamp.",
+    "TEST — RBAC verified: platform_admin can POST /admin/events/lifecycle/tick (200), player/organiser/anonymous return 401/403."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter41_lifecycle.py (new — 25 tests)",
+    "/app/backend/tests/test_batch_bugs_iter40.py (added dates to test_photo_limit_seven event payload — pre-existing test broken by iter41 required-dates change)",
+    "/app/backend/tests/test_iter41_extended.py (added dates to test_quick_add_returns_temp_password event payload)",
+    "/app/backend/tests/test_sports_enrichment_iter28.py (added dates to _mk_evt helper)",
+    "/app/backend/tests/test_event_contact_iter30.py (added dates to 3 event-create payloads)"
+  ],
+  "success_rate": {
+    "backend": "39/40 (97.5%) on iter41+updated regression suite — 24/25 iter41-specific pass, 1 skipped (HR seed unavailable), 15/15 regression pass. Full targeted 64 passed, 1 skipped.",
+    "frontend": "Spot-check PASSED — EventStatusBadge renders correctly on /events/{id} with data-testid=event-status-upcoming, yellow color, proper border/bg. Admin.jsx + EventsTab.jsx create-form guards + red-asterisk labels verified in source."
+  },
+  "test_credentials": "Platform Admin: admin@kreedanation.com / admin123. Test Player: testplayer@example.com / player123 (also +919000000001 / player123). Organiser: testorg@example.com / orgpass123. HR account acme@example.com is NOT seeded in current clean-slate mode — related tests skip gracefully.",
+  "seed_data_creation": "None persistent. Each lifecycle test inserts + cleans up its own event/team/fixture rows keyed by `iter41_life_*` prefix. All created events verified deleted in the finally-blocks.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter41 = lifecycle automation + required create-time dates. run_tick(db, send_email) is directly testable; conftest.py sets EMAIL_MODE=mock so the scheduler in /api/admin/events/lifecycle/tick is safe to call in CI. Reusable test fixtures in test_iter41_lifecycle.py: `player_session`, `admin_session`, `organiser_session`, `hr_session` (auto-skips), `db` (motor client to test_database), `_insert_event(db, **overrides)`, `_cleanup(db, eid)`. If future tests create events, ALWAYS include start_date + end_date now — enforced at endpoint level. The lifecycle module has an intentional overlap with routes/events.py:169's on-read auto-complete helper — flagged in action_items but non-blocking. The scheduler starts on FastAPI startup (server.py:5148); it staggers 45s + fires every 24h so it won't spam logs. Look for 'event_lifecycle tick complete' — only emitted when there's actual work.",
+  "rca of the issue": "N/A — feature verified working. Only concern is the pre-existing on-read auto-complete in routes/events.py:169 that duplicates lifecycle logic with slightly different rules (never cancels, always completes). Recommend consolidation in a follow-up iteration."
+}

@@ -263,6 +263,18 @@ def register(api, db, deps):
         if role not in ("player", "company_admin", "organiser", "platform_admin", "admin"):
             raise HTTPException(403, "Not allowed to create events")
         payload = body.model_dump()
+        # ---- Require start_date + end_date at create-time (edits stay flexible) ----
+        # Keeps the model itself Optional so PATCH /events/{id} can accept partials.
+        start = (payload.get("start_date") or "").strip()
+        end = (payload.get("end_date") or "").strip()
+        if not start:
+            raise HTTPException(400, "start_date is required")
+        if not end:
+            raise HTTPException(400, "end_date is required")
+        if end < start:
+            raise HTTPException(400, "end_date cannot be earlier than start_date")
+        payload["start_date"] = start
+        payload["end_date"] = end
         # ---- Sport enrichment --------------------------------------------
         # Look up the sport doc to auto-populate `scoring_pattern` +
         # `player_format`. Falls back to `_SPORT_DEFAULTS` for well-known
@@ -703,6 +715,23 @@ def register(api, db, deps):
         for protected in ("created_by", "company_id", "approval_status",
                           "approved_by", "approved_at", "created_at", "payment"):
             body.pop(protected, None)
+        # Once an event exists, start/end are ALWAYS present — reject explicit
+        # blanks so editors can't accidentally clear them. Order check runs
+        # against whichever value isn't in the patch.
+        if "start_date" in body:
+            new_start = (body.get("start_date") or "").strip()
+            if not new_start:
+                raise HTTPException(400, "start_date cannot be empty")
+            body["start_date"] = new_start
+        if "end_date" in body:
+            new_end = (body.get("end_date") or "").strip()
+            if not new_end:
+                raise HTTPException(400, "end_date cannot be empty")
+            body["end_date"] = new_end
+        effective_start = body.get("start_date", existing.get("start_date"))
+        effective_end = body.get("end_date", existing.get("end_date"))
+        if effective_start and effective_end and effective_end < effective_start:
+            raise HTTPException(400, "end_date cannot be earlier than start_date")
         await db.events.update_one({"id": event_id}, {"$set": body})
         doc = await db.events.find_one({"id": event_id}, {"_id": 0})
         return Event(**doc)

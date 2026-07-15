@@ -53,6 +53,8 @@ def test_create_event_with_contact_fields_persists(admin_client):
         "contact_name": "Alice Organiser",
         "contact_email": "alice@example.com",
         "contact_phone": "+919000000099",
+        "start_date": "2099-01-01",
+        "end_date": "2099-01-02",
     }
     r = admin_client.post(f"{BASE_URL}/api/events", json=payload)
     assert r.status_code == 200, r.text
@@ -80,6 +82,8 @@ def test_create_event_without_contact_fields_defaults_empty(admin_client):
         "sport": "football",
         "format": "round_robin",
         "event_type": "playsphere_organized",
+        "start_date": "2099-01-01",
+        "end_date": "2099-01-02",
     }
     r = admin_client.post(f"{BASE_URL}/api/events", json=payload)
     assert r.status_code == 200, r.text
@@ -99,6 +103,8 @@ def test_patch_event_contact_fields_persists(admin_client):
         "sport": "football",
         "format": "round_robin",
         "event_type": "playsphere_organized",
+        "start_date": "2099-01-01",
+        "end_date": "2099-01-02",
     })
     assert r.status_code == 200, r.text
     eid = r.json()["id"]

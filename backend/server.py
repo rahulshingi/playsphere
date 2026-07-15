@@ -5095,6 +5095,14 @@ _players_corp_email_routes.register(api, db, SimpleNamespace(
 ))
 
 
+# Event Lifecycle Automation — status transitions + reminder emails
+from routes import event_lifecycle as _event_lifecycle_routes  # noqa: E402
+
+_event_lifecycle_routes.register(api, db, send_email, SimpleNamespace(
+    require_platform_admin=require_platform_admin,
+))
+
+
 # Register router + static mount AFTER all @api.x definitions above
 app.include_router(api)
 api_router = api  # alias kept for any callers
@@ -5136,6 +5144,9 @@ async def on_startup():
     # Background: send membership renewal reminders 7d before expiry
     from routes.memberships_scheduler import start_membership_scheduler
     start_membership_scheduler(db, send_email)
+    # Background: Event Lifecycle Automation — status transitions + reminders (daily)
+    from routes.event_lifecycle import start_event_lifecycle_scheduler
+    start_event_lifecycle_scheduler(db, send_email)
 
 
 @app.on_event("shutdown")

@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import api from "@/lib/api";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
+import { EventStatusBadge } from "@/components/EventStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -164,7 +165,7 @@ export default function EventDetail() {
           <div className="flex items-center gap-2 mt-4 flex-wrap">
             <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm border" style={{ borderColor: sportColor(event.sport), color: sportColor(event.sport) }}>{event.sport}</span>
             <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-sm bg-white/5 text-neutral-300">{event.format.replace("_", " ")}</span>
-            <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded-sm bg-white/5 text-neutral-300">{event.status}</span>
+            <EventStatusBadge status={event.status} />
             {event.is_local_match && (
               <span data-testid="event-local-badge" className="font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm border border-[#84CC16]/40 bg-[#84CC16]/10 text-[#84CC16]">LOCAL MATCH</span>
             )}

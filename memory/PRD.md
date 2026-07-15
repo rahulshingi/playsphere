@@ -22,6 +22,23 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Jul 15, 2026 · iter 41) Event Lifecycle Automation + Required Dates
+- **NEW `/app/backend/routes/event_lifecycle.py`** — lightweight daily scheduler + admin trigger:
+  - Auto status: **upcoming** (today < start) / **ongoing** (start ≤ today ≤ end) / **cancelled** (past end + fixtures exist + 0 started, `reason='No matches were played.'`) / **completed** (past end + ≥1 started)
+  - 6 reminder emails: no_teams / no_fixtures (daily cooldown), starts_tomorrow, start_today, no_activity_8h (per-8h), publish_results (one-shot)
+  - Reuses existing `send_email` helper. No new dependencies. Skips `is_local_match` events. Query window: `end_date ≤ today OR start_date ≤ today+2 OR status != completed`.
+  - `POST /api/admin/events/lifecycle/tick` — platform_admin manual trigger for CI + ops
+  - Scheduler wired in `server.py::on_startup` with a 45s stagger (same pattern as memberships_scheduler)
+  - Two new event fields materialised on-demand: `last_reminder_sent.{stage}: iso_ts`, `auto_status_updated_at`, `auto_status_reason` (only when cancelled)
+- **Required dates at create**: `POST /api/events` now rejects missing/blank `start_date` or `end_date` (400) + enforces `end_date >= start_date`. `PATCH /api/events/{id}` still allows partial updates but rejects explicit blanks and validates order against effective (patched or existing) values. Model classes keep `Optional[str]` for backward compat.
+- **Frontend**: red-asterisk labels + `required` attribute + client-side toast guard on all 3 create surfaces (Admin.jsx player + admin forms, EventsTab.jsx platform-admin form). Edit form on EventDetail.jsx still accepts date changes.
+- **NEW `/app/frontend/src/components/EventStatusBadge.jsx`** — 30-line coloured pill (yellow=upcoming / lime=ongoing / cyan=completed / red=cancelled). Drop-in replacement for the old plain badge on EventDetail.
+- **Cleanup**: removed pre-existing on-read auto-complete helpers in `routes/events.py::list_events` and `::get_event` (was duplicating logic + always flipped to completed even with 0 fixtures — wrong). Lifecycle scheduler is now the sole owner of status transitions.
+- **Testing**: `testing_agent_v3_fork` → **64/65 pass** (1 skipped due to HR seed not in clean-slate mode). 25-test `test_iter41_lifecycle.py` covers create/patch date rules + RBAC + all 4 status transitions + all 6 reminder stages including cooldown. Also fixed 4 pre-existing test files whose event payloads were missing dates.
+
+
+
+
 ## Implemented (Jul 14, 2026 · iter 40) P2 Refactor (module 1) + P3 Type Hints
 - **Module extraction #1**: `/api/players/me/corporate-email/{request-otp,verify}` moved out of `server.py` into `/app/backend/routes/players_corp_email.py`. `server.py`: 5215 → 5143 lines (−72).
 - **Type hints**: mypy strict-ish coverage on 4 modules (`sitemap`, `corporate_services`, `cs_invoices`, `players_corp_email`) — `Any` used for FastAPI router + Motor DB (both are runtime-dynamic), precise types on all model helpers, return types on every helper function.

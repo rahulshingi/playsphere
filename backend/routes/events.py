@@ -162,19 +162,10 @@ def register(api, db, deps):
             q = {"$and": [q, hide_hidden]} if q else hide_hidden
 
         docs = await db.events.find(q, {"_id": 0}).sort("created_at", -1).to_list(500)
-        # Auto-mark events whose end_date passed as `completed`. The status
-        # field is only stored by admins during setup; without this cascade,
-        # a Sunday-morning match still says "upcoming" a week later. We flip
-        # in-memory here + persist so subsequent reads are stable.
-        today = datetime.now(timezone.utc).date().isoformat()
-        stale_ids = [d["id"] for d in docs
-                     if d.get("status") in ("upcoming", "ongoing")
-                     and (d.get("end_date") or d.get("start_date") or "9999-99-99") < today]
-        if stale_ids:
-            await db.events.update_many({"id": {"$in": stale_ids}}, {"$set": {"status": "completed"}})
-            for d in docs:
-                if d["id"] in stale_ids:
-                    d["status"] = "completed"
+        # NOTE: on-read auto-complete removed (iter41). Status transitions are
+        # now driven by routes.event_lifecycle.run_tick which runs daily and
+        # correctly handles the cancelled vs completed distinction. Reading a
+        # stale event never mutates it — the next tick will sort it out.
         return [Event(**d) for d in docs]
 
     @api.get("/my/teams", response_model=List[Team])
@@ -246,12 +237,8 @@ def register(api, db, deps):
         doc = await db.events.find_one({"id": event_id}, {"_id": 0})
         if not doc:
             raise HTTPException(404, "Event not found")
-        # Auto-complete stale events whose end_date has passed.
-        today = datetime.now(timezone.utc).date().isoformat()
-        if (doc.get("status") in ("upcoming", "ongoing")
-                and (doc.get("end_date") or doc.get("start_date") or "9999-99-99") < today):
-            await db.events.update_one({"id": event_id}, {"$set": {"status": "completed"}})
-            doc["status"] = "completed"
+        # Status transitions are handled by routes.event_lifecycle.run_tick
+        # (see list_events comment). Reads are pure.
         return Event(**doc)
 
     @api.post("/events", response_model=Event)

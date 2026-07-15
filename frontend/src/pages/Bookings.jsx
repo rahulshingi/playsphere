@@ -9,6 +9,7 @@ import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
 import VendorBookings from "@/components/VendorBookings";
+import Paginator, { usePagination, SORT } from "@/components/Paginator";
 
 const statusOptions = ["pending", "approved", "fulfilled", "cancelled"];
 
@@ -25,6 +26,11 @@ export default function Bookings() {
     if (!hasServiceBookings) { setItems([]); return; }
     api.get("/bookings").then((r) => setItems(r.data));
   };
+
+  // Sort: upcoming bookings first (asc by date), past ones after (desc). Latest-created is
+  // effectively the same as latest-scheduled for our data shape (bookings are created for
+  // future dates), so we use `bookingsByDate` for the correct UX.
+  const bp = usePagination(items, { defaultPageSize: 20, sortFn: SORT.bookingsByDate });
 
   useEffect(() => {
     if (ready && !(isCompanyAdmin || isPlatformAdmin || isVendor || isPlayer)) { nav("/login"); return; }
@@ -72,7 +78,7 @@ export default function Bookings() {
               </tr>
             </thead>
             <tbody>
-              {items.map((b) => (
+              {bp.view.map((b) => (
                 <tr key={b.id} className="border-t border-white/5 align-top">
                   {isPlatformAdmin && <td className="px-4 py-3 font-medium">{b.company_name}</td>}
                   <td className="px-4 py-3">{b.service_name}<div className="text-[10px] text-neutral-500 mt-0.5">{new Date(b.created_at).toLocaleString()}</div></td>
@@ -99,6 +105,7 @@ export default function Bookings() {
               )}
             </tbody>
           </table>
+          <Paginator {...bp.controls} label="bookings" />
         </div>
         )}
 

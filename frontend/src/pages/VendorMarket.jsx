@@ -4,6 +4,7 @@ import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import Nav from "@/components/Nav";
 import SEO from "@/components/SEO";
+import Paginator, { usePagination, SORT } from "@/components/Paginator";
 import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,6 +90,9 @@ export default function VendorMarket() {
       .then((r) => setListings(r.data))
       .catch(() => {});
   }, [sport, city, vendorType]);
+
+  // Paginate + sort listings: newest verified vendor listings on top of page 1.
+  const vp = usePagination(listings, { defaultPageSize: 12, sortFn: SORT.byCreatedDesc });
 
   const step = useMemo(() => {
     if (!sport) return 1;
@@ -240,7 +244,7 @@ export default function VendorMarket() {
             <SectionTitle n="3" title={`Available ${VENDOR_TYPE_LABEL[vendorType].toLowerCase()} in ${city}`} />
             <div className="mt-3 grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               {listings.length === 0 && <div className="col-span-full text-center text-neutral-500 py-10">No verified listings here yet.</div>}
-              {listings.map((l) => (
+              {vp.view.map((l) => (
                 <button
                   key={l.id}
                   data-testid={`vm-listing-${l.id}`}
@@ -289,6 +293,7 @@ export default function VendorMarket() {
                 </button>
               ))}
             </div>
+            <Paginator {...vp.controls} label="listings" />
           </>
         )}
       </div>

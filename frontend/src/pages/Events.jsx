@@ -7,6 +7,7 @@ import Footer from "@/components/Footer";
 import { sportColor, sportImage } from "@/lib/sports";
 import { useAuth } from "@/context/AuthContext";
 import { Megaphone, Zap } from "lucide-react";
+import Paginator, { usePagination, SORT } from "@/components/Paginator";
 
 export default function Events() {
   const { ready, isCompanyAdmin, canSponsor } = useAuth();
@@ -36,6 +37,12 @@ export default function Events() {
   // group gets its own section on the page.
   const localMatches = useMemo(() => filtered.filter((e) => e.is_local_match), [filtered]);
   const corporate = useMemo(() => filtered.filter((e) => !e.is_local_match), [filtered]);
+
+  // Two independent paginators — one for corporate, one for local matches.
+  // Both sort by lifecycle (ongoing > upcoming > completed > cancelled) with
+  // soonest-start on top of page 1 within upcoming.
+  const cp = usePagination(corporate, { defaultPageSize: 12, sortFn: SORT.eventsByLifecycle });
+  const lp = usePagination(localMatches, { defaultPageSize: 12, sortFn: SORT.eventsByLifecycle });
 
   return (
     <div className="bg-[#0a0a0a] text-white min-h-screen">
@@ -94,8 +101,9 @@ export default function Events() {
               </div>
             )}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {corporate.map((e) => <EventCard key={e.id} e={e} />)}
+              {cp.view.map((e) => <EventCard key={e.id} e={e} />)}
             </div>
+            <Paginator {...cp.controls} label="tournaments" />
           </section>
         )}
 
@@ -109,8 +117,9 @@ export default function Events() {
               </div>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-              {localMatches.map((e) => <EventCard key={e.id} e={e} />)}
+              {lp.view.map((e) => <EventCard key={e.id} e={e} />)}
             </div>
+            <Paginator {...lp.controls} label="matches" />
           </section>
         )}
 

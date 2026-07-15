@@ -12,6 +12,7 @@ import { SPORT_SCHEMAS } from "@/lib/sportProfileSchema";
 import PlayerFilters from "@/components/player/PlayerFilters";
 import SportStatsDashboard from "@/components/player/SportStatsDashboard";
 import PlayerTournamentsSection from "@/components/player/PlayerTournamentsSection";
+import Paginator, { usePagination, SORT } from "@/components/Paginator";
 
 const EMPTY_FILTERS = { q: "", sport: "", role: "", hand: "", city: "" };
 
@@ -27,6 +28,9 @@ export function PlayerSearch() {
     const qs = params.toString();
     api.get(qs ? `/players/profiles?${qs}` : "/players/profiles").then((r) => setItems(r.data));
   };
+
+  // Paginated view — newest players (created_at desc) on page 1.
+  const pp = usePagination(items, { defaultPageSize: 20, sortFn: SORT.byCreatedDesc });
 
   useEffect(() => {
     if (ready && !user) { nav("/players/login"); return; }
@@ -54,11 +58,12 @@ export function PlayerSearch() {
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-4">
-          {items.map((p) => (
+          {pp.view.map((p) => (
             <PlayerCard key={p.id} p={p} sportFilter={filters.sport} />
           ))}
           {items.length === 0 && <div className="col-span-full text-center text-neutral-500 py-20">No players match.</div>}
         </div>
+        <Paginator {...pp.controls} label="players" />
       </div>
       <Footer />
     </div>

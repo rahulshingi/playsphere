@@ -22,6 +22,22 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Jul 15, 2026 · iter 42) Pagination + "Latest on Top" Sorting
+- **NEW `/app/frontend/src/components/Paginator.jsx`** — reusable client-side pagination widget + `usePagination` hook. Numbered pages (Prev · 1 · 2 · 3 · Next) with ellipsis, page-size dropdown (10 / 20 / 50), URL sync via `?page=N&size=N` for shareable/refresh-safe positions, auto-reset to page 1 when the underlying list shrinks (filter applied).
+- **SORT presets** exported from Paginator: `eventsByLifecycle` (ongoing → upcoming → completed → cancelled), `byCreatedDesc` (newest first), `bookingsByDate` (upcoming asc, past desc).
+- **Wired into 6 target list surfaces**:
+  1. `/events` — corporate + local matches sections each paginated at 12/page, ordered by lifecycle bucket then start_date ascending
+  2. `/hire` (VendorMarket) — vendor listings paginated at 12/page, newest first
+  3. `/players/profiles` (PlayerDirectory) — 20/page, newest first
+  4. `/bookings` — 20/page, upcoming first (asc), past last (desc)
+  5. `/rfqs` (MyRFQs) — 20/page, newest submission first
+  6. `/platform-admin` Companies + Organisers tabs — 20/page each, newest signup first
+- **Data-testids**: `paginator`, `paginator-size`, `paginator-prev`, `paginator-next`, `paginator-page-{N}` for QA + testing.
+- **Backward compatible**: existing endpoints unchanged (client-side pagination on already-loaded arrays); server-side ?page= support can be added later without frontend changes.
+
+
+
+
 ## Implemented (Jul 15, 2026 · iter 41) Event Lifecycle Automation + Required Dates
 - **NEW `/app/backend/routes/event_lifecycle.py`** — lightweight daily scheduler + admin trigger:
   - Auto status: **upcoming** (today < start) / **ongoing** (start ≤ today ≤ end) / **cancelled** (past end + fixtures exist + 0 started, `reason='No matches were played.'`) / **completed** (past end + ≥1 started)

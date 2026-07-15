@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import Nav from "@/components/Nav";
 import Footer from "@/components/Footer";
+import Paginator, { usePagination, SORT } from "@/components/Paginator";
 import api from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
@@ -30,6 +31,9 @@ export function MyRFQsList() {
       .catch(() => setRfqs([]))
       .finally(() => setLoading(false));
   }, [ready, isCompanyAdmin, filter]);
+
+  // Newest submitted RFQs on page 1 — matches user's "latest on top" preference.
+  const rp = usePagination(rfqs, { defaultPageSize: 20, sortFn: SORT.byCreatedDesc });
 
   if (ready && !user) {
     return (
@@ -94,7 +98,7 @@ export function MyRFQsList() {
         )}
 
         <div className="mt-6 space-y-3">
-          {rfqs.map((r) => (
+          {rp.view.map((r) => (
             <Link to={`/rfqs/${r.id}`} key={r.id} data-testid={`rfq-row-${r.id}`} className="block border border-white/10 rounded-sm bg-[#141414] p-4 hover:border-white/25 transition-colors">
               <div className="flex justify-between items-start gap-4 flex-wrap">
                 <div>
@@ -117,6 +121,7 @@ export function MyRFQsList() {
             </Link>
           ))}
         </div>
+        <Paginator {...rp.controls} label="RFQs" />
       </div>
       <Footer />
     </div>

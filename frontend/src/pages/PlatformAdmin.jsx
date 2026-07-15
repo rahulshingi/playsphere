@@ -27,6 +27,7 @@ import AboutTab from "@/components/admin/AboutTab";
 import BusinessTab from "@/components/admin/BusinessTab";
 import AdminCommissionsTab from "@/components/admin/AdminCommissionsTab";
 import AdminCorporateServicesTab from "@/components/admin/AdminCorporateServicesTab";
+import Paginator, { usePagination, SORT } from "@/components/Paginator";
 
 const BLANK_SERVICE = {
   name: "",
@@ -97,6 +98,9 @@ export default function PlatformAdmin() {
 
   const corporateCompanies = useMemo(() => companies.filter((c) => c.org_type !== "organiser"), [companies]);
   const organiserCompanies = useMemo(() => companies.filter((c) => c.org_type === "organiser"), [companies]);
+  // Newest signups on page 1 — matches user's "latest on top" preference across the platform.
+  const compP = usePagination(corporateCompanies, { defaultPageSize: 20, sortFn: SORT.byCreatedDesc });
+  const orgP = usePagination(organiserCompanies, { defaultPageSize: 20, sortFn: SORT.byCreatedDesc });
 
   const saveService = async () => {
     const payload = { ...editing };
@@ -201,7 +205,7 @@ export default function PlatformAdmin() {
           </TabsContent>
 
           <TabsContent value="companies" className="mt-6 space-y-2">
-            {corporateCompanies.map((c) => (
+            {compP.view.map((c) => (
               <Link key={c.id} to={`/platform-admin/companies/${c.id}`} data-testid={`pa-company-${c.id}`}
                 className="block border border-white/10 rounded-sm p-4 bg-[#141414] hover:border-[#84CC16] transition-colors">
                 <div className="font-semibold">{c.name}</div>
@@ -211,11 +215,12 @@ export default function PlatformAdmin() {
             {corporateCompanies.length === 0 && (
               <div className="text-neutral-500 text-sm text-center py-12 border border-dashed border-white/10 rounded-sm">No companies registered yet.</div>
             )}
+            <Paginator {...compP.controls} label="companies" />
           </TabsContent>
 
           <TabsContent value="organisers" className="mt-6 space-y-2">
             <p className="text-xs font-mono uppercase tracking-widest text-[#06B6D4] mb-2">/ Independent tournament organisers</p>
-            {organiserCompanies.map((c) => (
+            {orgP.view.map((c) => (
               <Link key={c.id} to={`/platform-admin/companies/${c.id}`} data-testid={`pa-organiser-${c.id}`}
                 className="block border border-white/10 rounded-sm p-4 bg-[#141414] hover:border-[#06B6D4] transition-colors">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -228,6 +233,7 @@ export default function PlatformAdmin() {
             {organiserCompanies.length === 0 && (
               <div className="text-neutral-500 text-sm text-center py-12 border border-dashed border-white/10 rounded-sm">No organisers registered yet.</div>
             )}
+            <Paginator {...orgP.controls} label="organisers" />
           </TabsContent>
 
           <TabsContent value="bookings" className="mt-6">

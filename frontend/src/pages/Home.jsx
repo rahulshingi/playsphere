@@ -49,7 +49,18 @@ export default function Home() {
       const all = await Promise.all(
         evRes.data.map((e) => api.get(`/events/${e.id}/fixtures`).then((res) => res.data.map((f) => ({ ...f, event: e }))).catch(() => []))
       );
-      setLiveFixtures(all.flat().filter((f) => f.status === "live").slice(0, 6));
+      // Defensive filter — a fixture can only show as LIVE if:
+      //   • its own status is "live"
+      //   • it has no winner_id / completed_at (i.e. not silently finalised)
+      //   • parent event is NOT completed/cancelled (self-heal against stuck rows)
+      const trulyLive = all.flat().filter((f) =>
+        f.status === "live"
+        && !f.winner_id
+        && !f.completed_at
+        && f.event?.status !== "completed"
+        && f.event?.status !== "cancelled"
+      );
+      setLiveFixtures(trulyLive.slice(0, 6));
     } catch (err) {
       // Anonymous visitors will 401 on some list endpoints — treat as
       // "zero live fixtures" for the marketing hero. Log in dev so any

@@ -26,6 +26,7 @@ from passlib.context import CryptContext  # noqa: E402
 pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 VENDOR_EMAIL = "rmshingi@gmail.com"
+VENDOR_EMAIL_ALIAS = "demovendor@demo.com"   # secondary login shared with the same vendor profile
 VENDOR_PASSWORD = "vendor123"
 VENDOR_NAME = "Demovendorname"
 BUSINESS_NAME = "Demo vendor"
@@ -240,11 +241,64 @@ async def main() -> None:
         })
     print(f"[offline bookings] {len(private_seed)} rows seeded")
 
+    # 6) Alias login `demovendor@demo.com` — user asked for this email on production.
+    #    We create/reset a second user account that owns its OWN vendor row so the two
+    #    accounts stay isolated (no shared-vendor coupling in the DB).
+    alias_user = await db.users.find_one({"email": VENDOR_EMAIL_ALIAS})
+    if alias_user:
+        alias_user_id = alias_user["id"]
+        await db.users.update_one({"id": alias_user_id}, {"$set": {
+            "password_hash": pwd.hash(VENDOR_PASSWORD),
+            "name": VENDOR_NAME,
+            "role": "vendor",
+            "email_verified": True,
+            "disabled": False,
+        }})
+        print(f"[alias] updated {VENDOR_EMAIL_ALIAS} (id={alias_user_id})")
+    else:
+        alias_user_id = str(uuid.uuid4())
+        await db.users.insert_one({
+            "id": alias_user_id,
+            "email": VENDOR_EMAIL_ALIAS,
+            "name": VENDOR_NAME,
+            "role": "vendor",
+            "mobile": "+919000000098",
+            "password_hash": pwd.hash(VENDOR_PASSWORD),
+            "email_verified": True,
+            "created_at": now_iso,
+        })
+        print(f"[alias] created {VENDOR_EMAIL_ALIAS} (id={alias_user_id})")
+
+    alias_vendor = await db.vendors.find_one({"user_id": alias_user_id})
+    if not alias_vendor:
+        await db.vendors.insert_one({
+            "id": str(uuid.uuid4()),
+            "user_id": alias_user_id,
+            "business_name": BUSINESS_NAME,
+            "vendor_type": "court",
+            "vendor_types": ["court", "ground", "coach"],
+            "contact_name": VENDOR_NAME,
+            "mobile": "+919000000098",
+            "email": VENDOR_EMAIL_ALIAS,
+            "city": "Bengaluru",
+            "approved": True,
+            "offline_mode": True,
+            "commission_percent": 10.0,
+            "commission_min_flat": 100.0,
+            "invoice_business_name": BUSINESS_NAME,
+            "invoice_address": "12 MG Road, Bengaluru 560001",
+            "invoice_phone": "+919000000098",
+            "invoice_email": VENDOR_EMAIL_ALIAS,
+            "invoice_tax_percent": 18.0,
+            "created_at": now_iso,
+        })
+        print(f"[alias vendor] created for {VENDOR_EMAIL_ALIAS}")
+
     print("\n=== DEMO VENDOR READY ===")
-    print(f"  URL   : /login")
-    print(f"  Email : {VENDOR_EMAIL}")
-    print(f"  Pass  : {VENDOR_PASSWORD}")
-    print(f"  Land  : /vendor/overview")
+    print(f"  URL       : /login")
+    print(f"  Primary   : {VENDOR_EMAIL} / {VENDOR_PASSWORD}")
+    print(f"  Alias     : {VENDOR_EMAIL_ALIAS} / {VENDOR_PASSWORD}")
+    print(f"  Landing   : /vendor/overview")
 
 
 if __name__ == "__main__":

@@ -5103,6 +5103,15 @@ _event_lifecycle_routes.register(api, db, send_email, SimpleNamespace(
 ))
 
 
+# Admin-triggerable seeds — used to re-seed the demo vendor on production
+# without needing shell access.
+from routes import admin_seeds as _admin_seeds_routes  # noqa: E402
+
+_admin_seeds_routes.register(api, db, SimpleNamespace(
+    require_platform_admin=require_platform_admin,
+))
+
+
 # Register router + static mount AFTER all @api.x definitions above
 app.include_router(api)
 api_router = api  # alias kept for any callers

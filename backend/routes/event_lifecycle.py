@@ -239,6 +239,19 @@ async def run_tick(db: Any, send_email: Callable[..., Awaitable[bool] | bool]) -
                 logger.info("event %s: status %s → %s%s",
                             ev["id"], ev.get("status"), new_status,
                             f" ({reason})" if reason else "")
+                # Self-heal: sweep any stale live fixtures on this event so
+                # the /home 'Happening Now' section doesn't show ghosts.
+                # A fixture stuck at status="live" while its parent event is
+                # completed/cancelled is a scorer-forgot-to-close artefact.
+                if new_status in ("completed", "cancelled"):
+                    heal_status = "completed" if new_status == "completed" else "cancelled"
+                    heal = await db.fixtures.update_many(
+                        {"event_id": ev["id"], "status": "live"},
+                        {"$set": {"status": heal_status, "auto_healed_at": _now_iso()}},
+                    )
+                    if heal.modified_count:
+                        logger.info("event %s: healed %d stale-live fixtures → %s",
+                                    ev["id"], heal.modified_count, heal_status)
                 ev["status"] = new_status  # so reminder logic sees fresh state
 
             # Reminder logic runs after status is fresh so 'publish_results'

@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { Facebook, Instagram, Linkedin, Twitter, Youtube } from "lucide-react";
+import AppStoreBadges from "@/components/AppStoreBadges";
 
 const ICON = { facebook_url: Facebook, instagram_url: Instagram, linkedin_url: Linkedin, twitter_url: Twitter, youtube_url: Youtube };
 
@@ -44,6 +45,7 @@ export default function Footer() {
               );
             })}
           </div>
+          <AppStoreBadges iosUrl={settings.ios_app_url} androidUrl={settings.android_app_url} />
         </div>
         <div>
           <div className="text-xs font-mono uppercase text-neutral-500 mb-3">Platform</div>

@@ -994,6 +994,12 @@ class SiteSettings(BaseModel):
     # activated subscription's `amount`). New vendors always pay the current
     # monthly/yearly price. Default True to keep long-term vendors happy.
     offline_subscription_locks_existing_price: bool = True
+    # ---- Mobile app store links ----
+    # When a URL is set, the footer badge becomes a live external link.
+    # When empty (default), the footer shows a disabled "Stay tuned — launching soon" badge
+    # so users know the mobile apps are on the roadmap.
+    ios_app_url: Optional[str] = ""
+    android_app_url: Optional[str] = ""
 
 
 @api.post("/auth/also-player")

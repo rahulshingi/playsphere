@@ -22,6 +22,18 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 42) Mobile App Store Footer Badges + Admin Config
+- **SiteSettings**: added `ios_app_url` and `android_app_url` (Optional[str], default `""`) to `server.py::SiteSettings`, auto-exposed via `GET/PATCH /api/settings`.
+- **New component** `/app/frontend/src/components/AppStoreBadges.jsx` — monochrome themed badges with lucide `Apple` and `Play` icons.
+  - When URL is empty → renders as `<div>` with `data-active="false"`, "STAY TUNED" label, and a Radix tooltip reading "Stay tuned — launching soon".
+  - When URL is set → wraps in `<a target="_blank" rel="noopener noreferrer">`, shows "DOWNLOAD ON THE App Store" / "GET IT ON Google Play".
+- **Footer** now renders `<AppStoreBadges />` under the socials block, wired to `settings.ios_app_url` / `settings.android_app_url`.
+- **Admin Settings** — new "MOBILE APPS" card in `SettingsTab.jsx` with two inputs (`setting-ios_app_url`, `setting-android_app_url`) + `app-links-save` button. Fill either URL any time the store listing goes live — no redeploy required.
+- **Tests**: pytest suite `/app/backend/tests/test_app_store_settings.py` (5/5 pass) — default empty, unauth PATCH rejected, admin PATCH persists, partial PATCH preserves other field, cleanup restores blank state.
+- **E2E verified** on preview: badges render `data-active="false"` by default; after admin sets a URL, the anchor wraps the badge with correct href + `target="_blank"`; production default (blank) restored post-test.
+
+
+
 ## Implemented (Jul 15, 2026 · iter 43) Admin Password Reset (per-user)
 - **NEW endpoint** `POST /api/admin/users/{user_id}/reset-password` (platform-admin only):
   - Body `{new_password?}` — supply your own, or omit for an auto-generated 10-char temp

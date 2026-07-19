@@ -100,6 +100,39 @@ export default function SettingsTab({ settings, setSettings, reload }) {
         </Button>
       </div>
 
+      <div className="border border-white/10 rounded-sm bg-[#141414] p-6 max-w-2xl space-y-3 mt-6">
+        <div className="font-display tracking-wider text-2xl">MOBILE APPS</div>
+        <p className="text-xs text-neutral-500 font-mono">
+          Public store URLs shown as footer badges. Leave blank and the badge shows a
+          disabled &ldquo;Stay tuned &mdash; launching soon&rdquo; state. Fill either one
+          the moment its build goes live &mdash; no redeploy required.
+        </p>
+        <div>
+          <Label className="text-xs font-mono uppercase text-neutral-500">iOS &mdash; App Store URL</Label>
+          <Input
+            data-testid="setting-ios_app_url"
+            value={settings.ios_app_url || ""}
+            onChange={(e) => setSettings({ ...settings, ios_app_url: e.target.value })}
+            placeholder="https://apps.apple.com/app/id..."
+            className="mt-2 bg-black/40 border-white/10 text-white"
+          />
+        </div>
+        <div>
+          <Label className="text-xs font-mono uppercase text-neutral-500">Android &mdash; Google Play URL</Label>
+          <Input
+            data-testid="setting-android_app_url"
+            value={settings.android_app_url || ""}
+            onChange={(e) => setSettings({ ...settings, android_app_url: e.target.value })}
+            placeholder="https://play.google.com/store/apps/details?id=..."
+            className="mt-2 bg-black/40 border-white/10 text-white"
+          />
+        </div>
+        <Button data-testid="app-links-save" onClick={save}
+          className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
+          Save app links
+        </Button>
+      </div>
+
       <ContactInbox />
     </>
   );

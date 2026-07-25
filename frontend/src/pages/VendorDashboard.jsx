@@ -25,6 +25,7 @@ import OfflineBusinessSuite from "@/components/vendor/OfflineBusinessSuite";
 import VendorCommissionInvoices from "@/components/vendor/VendorCommissionInvoices";
 import VendorOvertimeSettings from "@/components/vendor/VendorOvertimeSettings";
 import VendorOfflineBookingsList from "@/components/vendor/VendorOfflineBookingsList";
+import VendorScanPlayer from "@/components/vendor/VendorScanPlayer";
 import { useSports } from "@/hooks/useSports";
 
 // Fallback sport list used when /api/sports hasn't loaded yet. The live list
@@ -178,6 +179,7 @@ export default function VendorDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <VendorScanPlayer onCheckIn={load} />
             <Button data-testid="vendor-new-listing" onClick={() => setEditing({ ...blank, city: vendor.city })} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
               <Plus className="w-4 h-4 mr-1" /> New listing
             </Button>

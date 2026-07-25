@@ -7,7 +7,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, Shield, Briefcase, Crown, User, Store, Menu, X, BookOpen, ChevronDown } from "lucide-react";
+import { LogOut, Shield, Briefcase, Crown, User, Store, Menu, X, BookOpen, ChevronDown, ScanLine } from "lucide-react";
 import { getRoleGuide } from "@/lib/guides";
 
 const LOGO_URL = "/kreeda-mark.png";
@@ -43,6 +43,7 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
   }
   if (isPlayer) {
     primary.push({ to: "/players/me", label: "My profile", icon: User, accent: "#84CC16" });
+    primary.push({ to: "/players/check-in", label: "Check-in", icon: ScanLine, accent: "#06B6D4" });
     primary.push({ to: "/admin", label: "Host match", icon: Shield, accent: "#84CC16" });
     more.push({ to: "/hire", label: "Hire vendors", icon: Store });
     more.push({ to: "/bookings", label: "My bookings" });

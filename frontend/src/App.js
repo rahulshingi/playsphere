@@ -41,6 +41,7 @@ import SponsorshipMarketplace from "@/pages/SponsorshipMarketplace";
 import About from "@/pages/About";
 import ScorerDashboard from "@/pages/ScorerDashboard";
 import MyMemberships from "@/pages/MyMemberships";
+import PlayerCheckIn from "@/pages/PlayerCheckIn";
 import WelcomeModal from "@/components/WelcomeModal";
 import { installGlobalImageHealer } from "@/lib/imageUrl";
 import Contact from "@/pages/Contact";
@@ -101,6 +102,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/players/me" element={<PlayerProfile />} />
+          <Route path="/players/check-in" element={<PlayerCheckIn />} />
           <Route path="/players/profiles" element={<PlayerSearch />} />
           <Route path="/players/profiles/:id" element={<PlayerProfileView />} />
           <Route path="/p/:slug" element={<PlayerProfileView />} />

@@ -1,0 +1,29 @@
+{
+  "summary": "Iter42 — QR-based bidirectional check-in tested end-to-end. Backend: 9/9 pytest cases passed covering GET /api/checkin/venue/{listing_id}/my-bookings (player), GET /api/checkin/player/{player_id}/bookings (vendor + 403 for player + 404 for missing player), POST /api/checkin/vendor-booking/{id} (self-checkin + idempotency 409 with structured detail incl. code=already_checked_in / checked_in_at / checked_in_by_role) and POST /api/checkin/private-booking/{id} (non-vendor forbidden, 404 for missing). Frontend: /players/check-in page renders all testids (checkin-title, checkin-tabs, checkin-tab-qr/scan, player-qr-code SVG, player-open-scanner) and Nav link nav-link-check-in shows for logged-in players; vendor dashboard renders vendor-scan-player next to New listing and clicking opens vendor-qr-scanner camera modal.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_checkin_iter42.py",
+    "/app/test_reports/pytest/iter42_checkin.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "checkins.py player_scan_venue allows role in (player, company_admin, organiser, platform_admin, admin) — spec says 'only players' but code intentionally supports company_admin/organiser via player_profile linkage; verify this is intentional (otherwise tighten to role=='player' or also_player=true).",
+    "In player_scan_venue we query vendor_bookings by created_by == user['id']. For dual-role users (company_admin with also_player=true) whose bookings were made under player_profile.user_id, this still works because created_by uses the auth user id. Documented behaviour — not a bug.",
+    "vendor_scan_player customer phone match uses regex $-anchor on last-10-digits — potentially expensive on large collections; add index on vendor_customers.phone if not present.",
+    "Both check-in endpoints wrap the 409 detail as a dict; FastAPI serialises it under 'detail'. Frontend correctly reads e.response.data.detail.checked_in_at — good.",
+    "private_booking status list _OPEN_OFFLINE_STATUSES = {'active'} — confirm this matches the actual status values used elsewhere for private_bookings (spot-checked, looks fine)."
+  ],
+  "updated_files": ["/app/backend/tests/test_checkin_iter42.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "Player: testplayer@example.com / player123 (via /api/auth/login). Vendor: rmshingi@gmail.com / vendor123. Note: /players/login form uses MOBILE input; /login form uses email-or-mobile. Frontend Sign in button lacks type='submit' — not a bug, form still works, but Playwright cannot select via button[type=submit]. Automation should use get_by_role('button', name='Sign in') scoped to form, or POST /api/auth/login directly (what we did).",
+  "seed_data_creation": "Test creates one vendor booking for TODAY under testplayer, vendor accepts it, then check-in exercises 200 + 409. Cleanup cancels the booking. No permanent data left.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 4 checkin endpoints + both UI surfaces are green. When re-testing, use fetch('/api/auth/login', {credentials:'include'}) inside page.evaluate to bootstrap session — the Sign in button in /login does not have type='submit' so button[type='submit'] selector times out. Player self-check-in requires the fresh booking to be for TODAY and start_time within ±2h. Camera scanning cannot be automated in headless Playwright — only modal open verified.",
+  "rca of the issue": "N/A — no bugs found."
+}

@@ -5119,6 +5119,16 @@ _admin_seeds_routes.register(api, db, SimpleNamespace(
 ))
 
 
+# QR-based check-ins (player scans venue, vendor scans player) — Feb 2026
+from routes import checkins as _checkins_routes  # noqa: E402
+from routes.business import ensure_vendor_owner as _cn_ensure_vendor_owner  # noqa: E402
+
+_checkins_routes.register(api, db, SimpleNamespace(
+    get_current_user=get_current_user,
+    ensure_vendor_owner=_cn_ensure_vendor_owner,
+))
+
+
 # Register router + static mount AFTER all @api.x definitions above
 app.include_router(api)
 api_router = api  # alias kept for any callers

@@ -22,6 +22,19 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 51) Dynamic Book-a-Venue · Vendor Nav Cleanup · Review Escalator
+- **Dynamic chips on `/hire`** — new `GET /api/vendor-listings/types` returns only vendor_types that have ≥1 approved+active listing. VendorMarket filters its chips against this set — so if no vendor has listed a Table / Studio / Referee / Photographer yet, those buckets stay hidden and a guest never taps into an empty category. Chips also expanded to include Gyms and Studios (previously missing).
+- **Auto-jump to first available**: if the default `ground` bucket is empty, `VendorMarket` picks the first available vendor_type on load so users land on a productive category.
+- **"Book a venue" hidden in vendor primary mode**: the top-right nav CTA is now conditional. Vendors, scorers, and vendor staff in their primary workspace mode don't see the "Book a venue" button (they list venues, they don't book them). Still visible for guests, HR, players, and dual-role users switched into player mode.
+- **Review Auto-Publish Nudge** — new `routes/review_escalator.py` runs on the same daily lifecycle tick. Any `reviews` document with `status="pending_vendor"` and `created_at` older than 48h is moved to `pending_admin`, stamped with `auto_escalated_at` + `auto_escalated_reason`, and the platform admin is emailed. Vendors don't block reviews any longer.
+- **Verified**:
+  - `GET /vendor-listings/types` returns `["coach", "court", "ground", "gym"]` for the current seed (only categories with listings).
+  - `/hire` renders 4 chips instead of the 11 hardcoded ones.
+  - Vendor session — `nav-book-venue-btn` is absent from DOM.
+  - Escalator dry run: backdated 1 review to −49h → tick moved 1 review to `pending_admin` with `auto_escalated_at` timestamp.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 50) Review Confirmation State (Bug Fix)
 - **Bug**: `ReviewForm` kept rendering the editable star + textarea after a successful submission — inputs cleared but the form stayed. Users couldn't tell if their review went through.
 - **Fix**: `ReviewForm` now has three states —

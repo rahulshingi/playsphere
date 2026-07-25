@@ -22,12 +22,15 @@ import DatePicker from "@/components/ui/DatePicker";
 import PublicMembershipsList from "@/components/memberships/PublicMembershipsList";
 
 const VENDOR_TYPE_LABEL = {
-  ground: "Grounds", court: "Courts", table: "Tables", coach: "Coaches", referee: "Referees",
-  umpire: "Umpires", trainer: "Trainers", photographer: "Photographers", videographer: "Videographers",
+  ground: "Grounds", court: "Courts", table: "Tables", gym: "Gyms", studio: "Studios",
+  coach: "Coaches", referee: "Referees", umpire: "Umpires", trainer: "Trainers",
+  photographer: "Photographers", videographer: "Videographers",
 };
 
-// Categories that are bookable by sport/location (vs people whose flow is different)
-const VENUE_TYPES = ["ground", "court", "table"];
+// Categories that are bookable by sport/location. Gyms and studios also flow
+// through the same wizard (pick activity → city → listing → book) so we group
+// them with venue types even though they're indoor fitness spaces.
+const VENUE_TYPES = ["ground", "court", "table", "gym", "studio"];
 
 // Aliases → vendor_type. When the user types "snooker" / "pool" / "carrom" /
 // "table tennis" / "chess" into the search box, we auto-pivot to the `table`
@@ -58,6 +61,12 @@ export default function VendorMarket() {
     ? allSports.filter((s) => availableSportValues.has(s.value))
     : allSports.length > 0 ? allSports : SPORTS);
 
+  // Dynamic vendor-type chips: only surface a category (Grounds / Courts /
+  // Tables / Gyms / Studios / Coaches / …) when at least one approved+active
+  // listing of that type exists. Prevents wasted taps on empty buckets — a
+  // guest who lands on the hire wizard sees only what's actually bookable.
+  const [availableTypes, setAvailableTypes] = useState(null);  // null = still loading
+
   // Wizard state
   const [vendorType, setVendorType] = useState("ground");
   const [sport, setSport] = useState("");
@@ -87,6 +96,16 @@ export default function VendorMarket() {
       const values = new Set(r.data || []);
       setAvailableSportValues(values);
     }).catch(() => setAvailableSportValues(null));
+    // Which vendor_types have at least one active listing?
+    api.get("/vendor-listings/types").then((r) => {
+      const set = new Set(r.data || []);
+      setAvailableTypes(set);
+      // If the default vendorType has no listings, jump to the first available.
+      if (set.size > 0 && !set.has("ground")) {
+        const firstAvailable = Object.keys(VENDOR_TYPE_LABEL).find((v) => set.has(v));
+        if (firstAvailable) setVendorType(firstAvailable);
+      }
+    }).catch(() => setAvailableTypes(null));
   }, []);
 
   useEffect(() => {
@@ -207,9 +226,13 @@ export default function VendorMarket() {
           />
         </div>
 
-        {/* Vendor type selector — top bar */}
+        {/* Vendor type selector — top bar. Dynamic: only shows buckets with
+            at least one active listing so a guest can never end up on an
+            empty category. */}
         <div className="mt-6 flex flex-wrap gap-2">
-          {Object.entries(VENDOR_TYPE_LABEL).map(([v, l]) => (
+          {Object.entries(VENDOR_TYPE_LABEL)
+            .filter(([v]) => availableTypes === null || availableTypes.has(v))
+            .map(([v, l]) => (
             <button
               key={v}
               data-testid={`vm-vtype-${v}`}

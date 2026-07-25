@@ -232,15 +232,19 @@ export default function Nav() {
 
         {/* Right side actions */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Universal "Book a venue" CTA — guests can browse; login is required only at booking submit. */}
-          <Button
-            data-testid="nav-book-venue-btn"
-            size="sm"
-            onClick={() => navigate("/hire")}
-            className="hidden md:inline-flex bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm gap-1"
-          >
-            <Store className="w-3.5 h-3.5" /> Book a venue
-          </Button>
+          {/* "Book a venue" CTA — meaningful for guests, HR, and players.
+              Hidden for vendor / vendor_staff / scorer in their primary mode
+              because it's noise on their workspace (they list, not book). */}
+          {(!isAuthed || inPlayerMode || !(isVendor || isScorer) ) && (
+            <Button
+              data-testid="nav-book-venue-btn"
+              size="sm"
+              onClick={() => navigate("/hire")}
+              className="hidden md:inline-flex bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm gap-1"
+            >
+              <Store className="w-3.5 h-3.5" /> Book a venue
+            </Button>
+          )}
           {isAuthed ? (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

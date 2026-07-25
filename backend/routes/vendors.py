@@ -309,6 +309,16 @@ def register(api, db, deps):
         sports = await db.vendor_listings.distinct("sports", flt)
         return sorted([s for s in sports if s])
 
+    @api.get("/vendor-listings/types")
+    async def list_listing_types():
+        """Distinct vendor_type values that have at least one approved+active
+        listing. Consumed by the /hire wizard so we only show category chips
+        (Grounds / Courts / Tables / Gyms / Coaches / …) that will actually
+        return results — no empty buckets, no wasted taps."""
+        flt = {"approved": True, "active": True}
+        types = await db.vendor_listings.distinct("vendor_type", flt)
+        return sorted([t for t in types if t])
+
     @api.get("/vendor-listings/{listing_id}")
     async def get_public_listing(listing_id: str):
         doc = await db.vendor_listings.find_one({"id": listing_id, "approved": True, "active": True}, {"_id": 0})

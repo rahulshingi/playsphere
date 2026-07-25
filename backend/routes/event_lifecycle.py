@@ -265,6 +265,15 @@ async def run_tick(db: Any, send_email: Callable[..., Awaitable[bool] | bool]) -
 
     if stats["status_changed"] or stats["reminders_sent"]:
         logger.info("event_lifecycle tick complete | %s", stats)
+
+    # Piggyback: run the review-escalator on the same daily cadence so pending
+    # reviews never stall on a slow vendor. Failures are logged but don't halt.
+    try:
+        from routes import review_escalator  # local import to keep circular deps clean
+        await review_escalator.run_review_escalation(db, send_email)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("review escalator failed: %s", exc)
+
     return stats
 
 

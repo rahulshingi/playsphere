@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { fmtPrice } from "@/lib/currency";
-import { CheckCircle, XCircle, Clock, Ban, Megaphone, Edit3 } from "lucide-react";
+import { CheckCircle, XCircle, Clock, Ban, Megaphone, Edit3, RefreshCw } from "lucide-react";
 import { ReviewForm } from "@/components/Reviews";
 import { minTimeForDate, validateFutureDateTime } from "@/lib/dateConstraints";
 import DatePicker from "@/components/ui/DatePicker";
@@ -19,6 +19,78 @@ const STATUS_META = {
   rejected: { label: "Rejected by Kreeda Nation", color: "bg-[#FF3B30] text-white", icon: XCircle },
   cancelled: { label: "Cancelled", color: "bg-neutral-500 text-white", icon: Ban },
 };
+
+/**
+ * Renewal nudge card — visible only for subscription-style bookings (per
+ * month / per week / per day) whose access period ends within RENEW_WINDOW_DAYS.
+ * One-tap POST /vendor-bookings/{id}/renew creates a new booking starting the
+ * day after the current one's access ends.
+ */
+const RENEW_WINDOW_DAYS = 15;
+
+function subscriptionUnit(priceUnit) {
+  const u = (priceUnit || "").toLowerCase();
+  if (u.includes("month")) return "month";
+  if (u.includes("week"))  return "week";
+  if (u.includes("day"))   return "day";
+  return null;
+}
+
+function accessEnd(requestedDate, qty, unit) {
+  if (!unit) return null;
+  const d = new Date(requestedDate + "T00:00:00");
+  if (isNaN(d)) return null;
+  const n = Math.max(1, Number(qty) || 1);
+  if (unit === "month") d.setMonth(d.getMonth() + n);
+  else if (unit === "week") d.setDate(d.getDate() + n * 7);
+  else if (unit === "day")  d.setDate(d.getDate() + n);
+  d.setDate(d.getDate() - 1);
+  return d;
+}
+
+function RenewalCard({ booking, onRenewed }) {
+  const [busy, setBusy] = useState(false);
+  const unit = subscriptionUnit(booking.price_unit);
+  const end = unit ? accessEnd(booking.requested_date, booking.hours, unit) : null;
+  if (!unit || !end) return null;
+  if (["cancelled", "rejected"].includes(booking.status)) return null;
+  const daysLeft = Math.ceil((end.getTime() - Date.now()) / (86400000));
+  if (daysLeft > RENEW_WINDOW_DAYS || daysLeft < -7) return null;  // hide well outside the window
+
+  const renew = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/vendor-bookings/${booking.id}/renew`);
+      toast.success("Renewal request submitted");
+      onRenewed && onRenewed();
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Renewal failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const expired = daysLeft < 0;
+  return (
+    <div data-testid={`vb-renewal-${booking.id}`}
+         className={`mt-3 border rounded-sm p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 ${
+           expired ? "border-[#FF3B30]/40 bg-[#FF3B30]/10" : "border-[#FACC15]/40 bg-[#FACC15]/10"
+         }`}>
+      <div className="text-xs">
+        <div className={`font-mono uppercase tracking-widest text-[10px] ${expired ? "text-[#FF3B30]" : "text-[#FACC15]"}`}>
+          / {expired ? "Access expired" : `Expires in ${daysLeft} day${daysLeft === 1 ? "" : "s"}`}
+        </div>
+        <div className="text-neutral-200 mt-1">
+          Ends {end.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}. Renew now to keep going at ₹{booking.price}/{unit}.
+        </div>
+      </div>
+      <Button data-testid={`vb-renew-btn-${booking.id}`} onClick={renew} disabled={busy}
+              className="bg-[#FACC15] hover:bg-[#EAB308] text-black font-semibold rounded-sm whitespace-nowrap">
+        <RefreshCw className={`w-4 h-4 mr-1 ${busy ? "animate-spin" : ""}`} /> Renew {booking.hours} {unit}{booking.hours > 1 ? "s" : ""}
+      </Button>
+    </div>
+  );
+}
 
 function useVendorBookings() {
   const [bookings, setBookings] = useState([]);
@@ -168,6 +240,7 @@ function BookingRow({ booking, role, onPatch }) {
       </div>
 
       <NotificationBanner booking={booking} />
+      <RenewalCard booking={booking} onRenewed={() => onPatch && onPatch(booking.id, { __action: "reload" })} />
       {booking.admin_notes && (
         <div className="mt-2 text-[11px] text-[#84CC16] bg-[#84CC16]/5 border border-[#84CC16]/20 rounded-sm px-3 py-2">
           Admin note: {booking.admin_notes}
@@ -220,6 +293,8 @@ export default function VendorBookings() {
         const { __action, ...body } = payload; void __action;
         await api.post(`/vendor-bookings/${id}/reschedule`, body);
         toast.success("Booking rescheduled");
+      } else if (payload.__action === "reload") {
+        // no-op — just refresh (used by RenewalCard after a successful renew)
       } else {
         await api.patch(`/vendor-bookings/${id}`, payload);
         const verb = payload.status?.replace("vendor_", "") || "updated";

@@ -911,6 +911,7 @@ class VendorBooking(BaseModel):
     start_time: str
     end_time: str
     hours: int = 1
+    price_unit: Optional[str] = "per hour"  # snapshot from listing at booking time — drives access-end / renewal logic on the frontend
     sub_unit_id: Optional[str] = None
     sport: Optional[str] = None
     city: Optional[str] = None
@@ -2437,6 +2438,73 @@ async def _require_vendor_buyer(user: dict = Depends(get_current_user)) -> dict:
     raise HTTPException(403, "Only company admins, players or organisers can book vendors")
 
 
+def _subscription_unit(price_unit: Optional[str]) -> Optional[str]:
+    """Map a listing.price_unit string to a coarse subscription unit — used to
+    compute access-window end date and the "renew soon" nudge. Returns None
+    for hourly / session listings (they don't have an expiring window)."""
+    u = (price_unit or "").lower()
+    if "month" in u: return "month"
+    if "week" in u:  return "week"
+    if "day" in u:   return "day"
+    return None
+
+
+def _access_end(requested_date: str, qty: int, unit: str) -> Optional[str]:
+    """Given the booking's start date + quantity + unit, return the inclusive
+    access-end date (ISO YYYY-MM-DD). Returns None if inputs are invalid."""
+    try:
+        d = datetime.strptime(requested_date, "%Y-%m-%d")
+        n = max(1, int(qty))
+        if unit == "month":
+            # add n months, keeping the same day (JS-style with clamp)
+            month = d.month - 1 + n
+            year = d.year + month // 12
+            month = month % 12 + 1
+            day = min(d.day, 28)  # safe day for month arithmetic
+            d = d.replace(year=year, month=month, day=day)
+        elif unit == "week":
+            d = d + timedelta(days=n * 7)
+        elif unit == "day":
+            d = d + timedelta(days=n)
+        else:
+            return None
+        d = d - timedelta(days=1)  # inclusive end
+        return d.strftime("%Y-%m-%d")
+    except Exception:
+        return None
+
+
+@api.post("/vendor-bookings/{booking_id}/renew")
+async def renew_subscription_booking(booking_id: str, user: dict = Depends(get_current_user)):
+    """Renew a subscription-style booking (per month/week/day) for the same
+    duration at the same rate. Creates a new booking starting the day AFTER
+    the current one's access ends."""
+    doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(404, "Booking not found")
+    if doc.get("created_by") != user["id"]:
+        raise HTTPException(403, "Not your booking")
+    listing = await db.vendor_listings.find_one({"id": doc["listing_id"], "approved": True, "active": True}, {"_id": 0})
+    if not listing:
+        raise HTTPException(410, "Listing no longer available for renewal")
+    unit = _subscription_unit(listing.get("price_unit"))
+    if not unit:
+        raise HTTPException(400, "This booking isn't a subscription-style plan")
+    end_iso = _access_end(doc["requested_date"], doc.get("hours", 1), unit)
+    if not end_iso:
+        raise HTTPException(400, "Could not compute access end date")
+    # New start = day after current access ends
+    next_start = (datetime.strptime(end_iso, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    payload = VendorBookingRequest(
+        listing_id=doc["listing_id"],
+        requested_date=next_start,
+        start_time=doc.get("start_time") or "00:00",
+        hours=doc.get("hours") or 1,
+        notes=f"Auto-renewal of {booking_id[:8]}",
+    )
+    return await request_vendor_booking(payload, user)
+
+
 @api.post("/vendor-bookings")
 async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depends(_require_vendor_buyer)):
     listing = await db.vendor_listings.find_one({"id": body.listing_id, "approved": True, "active": True}, {"_id": 0})
@@ -2556,7 +2624,8 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
             company_id=user.get("company_id") or "",
             company_name=(company or {}).get("name") or user.get("name") or user.get("email") or "Player",
             requested_date=dt, start_time=body.start_time, end_time=end_time,
-            hours=hours, sport=sport, city=listing.get("city"), sub_unit_id=body.sub_unit_id,
+            hours=hours, price_unit=listing.get("price_unit") or "per hour",
+            sport=sport, city=listing.get("city"), sub_unit_id=body.sub_unit_id,
             price=price, currency=listing.get("currency", "INR"), total=this_price,
             notes=body.notes or "", created_by=user["id"], hr_email=user.get("email"),
             applied_membership_id=this_membership,

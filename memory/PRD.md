@@ -22,6 +22,18 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 54) Subscription Renewal Nudge
+- **`VendorBooking` schema** — added `price_unit` snapshot field (defaults to `"per hour"`). Booking creation now records `listing.price_unit` at request time so the frontend can compute access-end without a second listing lookup.
+- **New helpers** in `server.py`:
+  - `_subscription_unit(price_unit)` maps a price-unit string to `"month" | "week" | "day" | None`.
+  - `_access_end(requested_date, qty, unit)` computes the inclusive access-end date.
+- **New endpoint** `POST /api/vendor-bookings/{id}/renew` — creates a new booking with the same duration and rate starting the day AFTER the current one's access ends. Refuses if the listing is no longer active (410), or the booking isn't a subscription plan (400). Verified: monthly gym booking created with `price_unit="per month"`, renewal call produced a new booking with `notes="Auto-renewal of <8char>"` on the correct next-start date.
+- **RenewalCard component** in `/app/frontend/src/components/VendorBookings.jsx` — visible only when `subscriptionUnit(booking.price_unit)` returns non-null AND the access-end is within ±15 days. Yellow "Expires in N days" (or red "Access expired") card + one-tap "Renew N months" button that calls the endpoint.
+- **Recurrence toggle hidden** for subscription-style bookings in the /hire wizard (irrelevant when the plan already spans weeks/months). Weekly recurrence is only shown for hourly/session bookings.
+- **RenewalCard tolerates `expired` status** — for subscription plans the "expired" auto-transition doesn't actually mean the access window is closed, so users can still renew.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 53) Access-Range Picker + Dual-Role Booking Fix
 - **Bug fix — vendor in player mode was blocked from booking**: the `canBook` guard on `/hire` only accepted `player / organiser / company_admin`, so a `vendor` with `also_player=true` saw "Sign in to book" even when authenticated. Now `canBook` includes any user with `also_player === true` — same fix applied inside `BookingModal`.
 - **Backend guard `_require_vendor_buyer`** updated: HR / player / organiser continue to pass, plus any dual-role user (`also_player=true`). This unblocks vendors, sponsors, scorers, vendor_staff who've enabled player mode.

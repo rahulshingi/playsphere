@@ -22,6 +22,22 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 43) QR-based Bidirectional Check-in
+- **Backend** — new `/app/backend/routes/checkins.py` module wired from `server.py`:
+  - `GET /api/checkin/venue/{listing_id}/my-bookings` — player scans venue QR → sees their today's active bookings at that vendor (with `within_window` ±2h flag).
+  - `GET /api/checkin/player/{player_id}/bookings` — vendor scans player QR → sees the player's today's bookings across their listings (platform + offline via `vendor_customers.phone`/`.email` match).
+  - `POST /api/checkin/vendor-booking/{id}` — player-self OR vendor. Sets `checked_in_at`, `checked_in_by`, `checked_in_by_role`, status→`checked_in`. Second call → 409 with `{code:'already_checked_in', checked_in_at, checked_in_by_role}`. Rejects non-today (400) and terminal statuses (400).
+  - `POST /api/checkin/private-booking/{id}` — vendor-only, same idempotency + guards for offline private bookings.
+- **Frontend**:
+  - **New player page** `/players/check-in` (`PlayerCheckIn.jsx`) with tabs — `MY QR` renders a QRCodeSVG of `/p/<slug>`, `Scan Venue` opens camera scanner → API call → check-in row.
+  - **New component** `QrScannerModal.jsx` — `html5-qrcode` wrapper + `parseScanned()` helper that extracts ids from URL payloads (`/p/<slug>`, `/vendor-listing/<id>`).
+  - **New component** `VendorScanPlayer.jsx` — cyan "Scan player QR" button on Vendor Dashboard header opens camera → results dialog shows player's today bookings with per-row check-in.
+  - **Nav** — new `Check-in` primary link for players (data-testid `nav-link-check-in`).
+- **Libs added**: `qrcode.react@4.2.0` (QR display) + `html5-qrcode@2.3.8` (camera scanning).
+- **Testing** — Iter42 subagent: 9/9 pytest cases pass, both UI surfaces render all data-testids. E2E happy-path (create booking today → both scans return it with `within_window=true` → self check-in → 409 on second attempt) verified via curl + Playwright.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 42) Mobile App Store Footer Badges + Admin Config
 - **SiteSettings**: added `ios_app_url` and `android_app_url` (Optional[str], default `""`) to `server.py::SiteSettings`, auto-exposed via `GET/PATCH /api/settings`.
 - **New component** `/app/frontend/src/components/AppStoreBadges.jsx` — monochrome themed badges with lucide `Apple` and `Play` icons.

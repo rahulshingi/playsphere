@@ -2425,10 +2425,16 @@ def _resolve_booking_sport(body_sport: Optional[str], listing_sports: list) -> O
 
 
 async def _require_vendor_buyer(user: dict = Depends(get_current_user)) -> dict:
-    """Anyone who can send a vendor booking request: company_admin, player, organiser."""
-    if user.get("role") not in ("company_admin", "player", "organiser"):
-        raise HTTPException(403, "Only company admins, players or organisers can book vendors")
-    return user
+    """Anyone who can send a vendor booking request: company_admin, player,
+    organiser, OR any dual-role user (vendor / sponsor / staff / scorer) that
+    has opted in as a player via `POST /auth/also-player`. This lets a vendor
+    in player mode seamlessly book someone else's venue."""
+    role = user.get("role")
+    if role in ("company_admin", "player", "organiser"):
+        return user
+    if user.get("also_player") is True:
+        return user
+    raise HTTPException(403, "Only company admins, players or organisers can book vendors")
 
 
 @api.post("/vendor-bookings")
@@ -2606,7 +2612,13 @@ async def list_vendor_bookings(user: dict = Depends(get_current_user)):
     role = user.get("role")
     if role == "vendor":
         vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
-        flt = {"vendor_id": vendor["id"]} if vendor else {"vendor_id": "__none__"}
+        vendor_id = vendor["id"] if vendor else "__none__"
+        # Dual-role vendors (also_player=true) may have booked other venues as
+        # a player — include those bookings so they can track them from /bookings.
+        if user.get("also_player"):
+            flt = {"$or": [{"vendor_id": vendor_id}, {"created_by": user["id"]}]}
+        else:
+            flt = {"vendor_id": vendor_id}
     elif role == "company_admin":
         flt = {"company_id": user.get("company_id")}
     elif role in ("player", "organiser"):
@@ -2614,6 +2626,9 @@ async def list_vendor_bookings(user: dict = Depends(get_current_user)):
         flt = {"created_by": user["id"]}
     elif role in ("platform_admin", "admin"):
         flt = {}
+    elif user.get("also_player") is True:
+        # Sponsor / vendor_staff / scorer with player opt-in — show their own bookings.
+        flt = {"created_by": user["id"]}
     else:
         raise HTTPException(403, "Forbidden")
     docs = await db.vendor_bookings.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)

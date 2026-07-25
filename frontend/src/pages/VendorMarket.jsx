@@ -78,8 +78,12 @@ export default function VendorMarket() {
 
   // Anyone can browse /hire — no login wall. We only gate the click-to-book
   // action so QR-poster traffic and organic visitors can preview listings first.
-  // Players + organisers + company admins are the roles allowed to submit a booking.
-  const canBook = !!user && ["player", "organiser", "company_admin"].includes(user.role);
+  // Booking is allowed for native players, HR / organiser accounts, AND any
+  // dual-role user who has opted-in as a player (`also_player=true`) — so a
+  // vendor / sponsor in player mode can seamlessly book a venue.
+  const canBook = !!user && (
+    ["player", "organiser", "company_admin"].includes(user.role) || user.also_player === true
+  );
 
   const openBookingFor = (listing) => {
     // Anyone can open the modal to preview the calendar + available slots.
@@ -422,9 +426,31 @@ function unitInfoFor(priceUnit) {
   return { key: "hour", label: "Hours", unit: "hour", requiresTime: true, choices: [1, 2, 3, 4, 5, 6, 8, 10, 12] };
 }
 
+/**
+ * Given a start date + quantity + unit, compute the access end date for
+ * subscription-style listings. Simple calendar math — months add naturally
+ * to the same day-of-month (with a JS Date fallback), weeks/days multiply.
+ */
+function computeAccessEnd(startISO, qty, unit) {
+  const d = new Date(startISO + "T00:00:00");
+  const n = Math.max(1, Number(qty) || 1);
+  if (unit === "month") d.setMonth(d.getMonth() + n);
+  else if (unit === "week") d.setDate(d.getDate() + n * 7);
+  else if (unit === "day")  d.setDate(d.getDate() + n);
+  else                       d.setDate(d.getDate() + n);  // safe default
+  // -1 day so the end date is inclusive (e.g. 20 Feb + 1 month → 19 Mar)
+  d.setDate(d.getDate() - 1);
+  return d;
+}
+
 export function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
   const { user } = useAuth();
-  const canBook = !!user && ["player", "organiser", "company_admin"].includes(user.role);
+  // Booking is open to native players, HR / organiser, and any dual-role
+  // user who's opted-in (also_player=true) — so a vendor / sponsor in player
+  // mode isn't blocked by a "Sign in to book" wall.
+  const canBook = !!user && (
+    ["player", "organiser", "company_admin"].includes(user.role) || user.also_player === true
+  );
   const unitInfo = useMemo(() => unitInfoFor(listing.price_unit), [listing.price_unit]);
   const total = useMemo(() => Number(listing.price) * Number(form.hours || 0), [listing.price, form.hours]);
   const [availability, setAvailability] = useState(null);
@@ -552,7 +578,10 @@ export function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
           </div>
 
           {/* Weekly recurrence — creates individual bookings per week so each
-              occurrence can be rescheduled or cancelled on its own. */}
+              occurrence can be rescheduled or cancelled on its own. Only
+              meaningful for hourly / per-session bookings; hidden for monthly
+              / daily / weekly subscription-style listings. */}
+          {unitInfo.requiresTime && (
           <label data-testid="vm-recurrence-toggle-label" className="flex items-start gap-2 border border-[#06B6D4]/40 bg-[#06B6D4]/5 rounded-sm p-3 cursor-pointer">
             <input
               type="checkbox"
@@ -572,6 +601,22 @@ export function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
               )}
             </div>
           </label>
+          )}
+
+          {/* Access range readout — visible only for subscription-style units
+              (month / week / day) so users know exactly when their plan
+              begins and expires before they commit. */}
+          {!unitInfo.requiresTime && form.requested_date && Number(form.hours) > 0 && (
+            <div data-testid="vm-access-range" className="border border-[#84CC16]/30 bg-[#84CC16]/5 rounded-sm p-3 text-xs font-mono">
+              <div className="text-[10px] uppercase tracking-widest text-[#84CC16] mb-1">/ Access period</div>
+              <div className="text-neutral-200">
+                <span className="text-white">{new Date(form.requested_date + "T00:00:00").toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</span>
+                <span className="text-neutral-500 mx-2">→</span>
+                <span className="text-white">{computeAccessEnd(form.requested_date, form.hours, unitInfo.unit).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}</span>
+                <span className="text-neutral-500 ml-2">({Number(form.hours)} {unitInfo.unit}{Number(form.hours) > 1 ? "s" : ""})</span>
+              </div>
+            </div>
+          )}
 
           {eligibility && (
             <label data-testid="vm-apply-memb" className="flex items-start gap-2 border border-[#EC4899]/40 bg-[#EC4899]/5 rounded-sm p-3 cursor-pointer">

@@ -22,6 +22,16 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 53) Access-Range Picker + Dual-Role Booking Fix
+- **Bug fix — vendor in player mode was blocked from booking**: the `canBook` guard on `/hire` only accepted `player / organiser / company_admin`, so a `vendor` with `also_player=true` saw "Sign in to book" even when authenticated. Now `canBook` includes any user with `also_player === true` — same fix applied inside `BookingModal`.
+- **Backend guard `_require_vendor_buyer`** updated: HR / player / organiser continue to pass, plus any dual-role user (`also_player=true`). This unblocks vendors, sponsors, scorers, vendor_staff who've enabled player mode.
+- **`GET /vendor-bookings`** now returns dual-role vendor's own player-side bookings too: filter is `{$or: [{vendor_id: their_vendor_id}, {created_by: user.id}]}` when `also_player=true`. Sponsor / scorer / vendor_staff dual-role → simple `created_by` filter.
+- **Access-Range readout** on subscription-style bookings (per month / per week / per day): the modal now shows `/ ACCESS PERIOD · <start> → <end> (N months)` computed by a small `computeAccessEnd(startISO, qty, unit)` helper. Users see the exact plan expiry before submitting.
+- **Weekly recurrence toggle hidden** for subscription units — makes no sense to make a "book weekly" plan out of a monthly gym subscription.
+- **Verified end-to-end**: vendor toggles player mode → clicks a Demo Gym listing → modal shows Send request (not sign-in), MONTHS \* picker, ACCESS PERIOD Jul 25 → Sep 24 (2 months), Estimated Total ₹4,000. Backend booking POST succeeds and appears in `/vendor-bookings` under the vendor's dual-role list.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 52) Vendor-Type-Aware Sports + Unit-Aware Booking
 - **`/vendor-listings/sports` now vendor-type filterable**: `GET /api/vendor-listings/sports?vendor_type=gym` returns only fitness activities (yoga, zumba, crossfit, …), `?vendor_type=table` only cue/board sports, `?vendor_type=court` only racket sports, etc. VendorMarket refetches on each chip switch so the sport picker snaps to the right activities and clears any invalid stale selection.
 - **Sport catalog expanded** with fitness activities (`gym, yoga, zumba, crossfit, pilates, cardio, strength, dance, aerobics`) — seeded via `DEFAULT_SPORTS` at boot, idempotent. Now Gym listings created with `sports=[gym,yoga,zumba,crossfit,cardio]` show up in the /hire wizard's sport picker.

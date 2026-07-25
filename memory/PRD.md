@@ -22,6 +22,14 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 44) Check-in Follow-ups (Poster copy · Analytics · Email)
+- **QR poster copy** — `openQrPoster()` in `VendorDashboard.jsx` now uses the header "SCAN TO BOOK OR CHECK-IN" and a highlighted **"SCAN ME AT RECEPTION"** callout with a helper line "Open the Kreeda Nation app · Check-in · Scan Venue". Same QR encodes the listing URL, so scanning still opens the listing for booking OR check-in based on context.
+- **Vendor arrival analytics** — new endpoint `GET /api/vendor/checkin-analytics/today` returns `{checked_in_count, expected_count, not_yet_arrived, avg_delay_minutes}`. `avg_delay_minutes` = actual `checked_in_at` − scheduled start (positive = late, negative = early). New component `VendorCheckinAnalytics.jsx` renders it as a 3-metric strip on the Marketplace tab of the Vendor Dashboard, auto-refreshing every 60s.
+- **Arrival email** — `POST /api/checkin/vendor-booking/{id}` now dispatches an email (`kind=checkin_arrival`) to the vendor owner whenever `checked_in_by_role == "player"` (self check-in). Body includes player name, listing, slot, sport, booking id. Best-effort — failures logged but never block the check-in response.
+- **Verified** via curl + screenshot: analytics widget renders `3/3 · 0 · +0.9 min · ON TIME`; SendGrid mock log confirms `[MOCK EMAIL kind=checkin_arrival] to=rmshingi@gmail.com subject=Arrival: Test Player checked in at Demo Turf — Whitefield`.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 43) QR-based Bidirectional Check-in
 - **Backend** — new `/app/backend/routes/checkins.py` module wired from `server.py`:
   - `GET /api/checkin/venue/{listing_id}/my-bookings` — player scans venue QR → sees their today's active bookings at that vendor (with `within_window` ±2h flag).

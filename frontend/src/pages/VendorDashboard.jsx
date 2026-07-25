@@ -26,6 +26,7 @@ import VendorCommissionInvoices from "@/components/vendor/VendorCommissionInvoic
 import VendorOvertimeSettings from "@/components/vendor/VendorOvertimeSettings";
 import VendorOfflineBookingsList from "@/components/vendor/VendorOfflineBookingsList";
 import VendorScanPlayer from "@/components/vendor/VendorScanPlayer";
+import VendorCheckinAnalytics from "@/components/vendor/VendorCheckinAnalytics";
 import { useSports } from "@/hooks/useSports";
 
 // Fallback sport list used when /api/sports hasn't loaded yet. The live list
@@ -78,11 +79,15 @@ function openQrPoster(listing, vendor) {
     <style>body{font-family:Poppins,system-ui,sans-serif;text-align:center;padding:32px;color:#111}
     h1{margin:0 0 8px;font-size:34px;letter-spacing:1px}h2{margin:0 0 24px;font-weight:400;color:#666}
     img{width:400px;height:400px}p{margin-top:16px;font-family:monospace;color:#666;font-size:12px}
-    .biz{margin-top:24px;font-weight:600}@media print{body{padding:0}}</style></head>
+    .biz{margin-top:24px;font-weight:600}
+    .checkin{margin-top:28px;padding:14px 20px;border:2px dashed #111;display:inline-block;font-weight:600;letter-spacing:2px;text-transform:uppercase;font-size:14px}
+    .checkin small{display:block;font-weight:400;letter-spacing:0.5px;text-transform:none;color:#555;margin-top:6px;font-size:11px}
+    @media print{body{padding:0}}</style></head>
     <body>
-    <h1>SCAN &amp; BOOK</h1>
+    <h1>SCAN TO BOOK OR CHECK-IN</h1>
     <h2>${safeTitle}</h2>
     <img src="${qrSrc}" alt="QR" />
+    <div class="checkin">SCAN ME AT RECEPTION<small>Open the Kreeda Nation app · Check-in · Scan Venue</small></div>
     <p>${safeUrl}</p>
     <div class="biz">${safeBiz} · ${safeCity}</div>
     <p>Powered by Kreeda Nation</p>
@@ -200,6 +205,11 @@ export default function VendorDashboard() {
             <div>
               <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Dashboard</div>
               <DashboardPanel role="vendor" />
+            </div>
+
+            <div className="mt-6">
+              <div className="font-mono text-[10px] uppercase tracking-widest text-neutral-500 mb-3">/ Today&apos;s arrivals</div>
+              <VendorCheckinAnalytics />
             </div>
 
             <div className="mt-10">

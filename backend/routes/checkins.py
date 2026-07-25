@@ -62,6 +62,7 @@ _OPEN_OFFLINE_STATUSES = {"active"}
 def register(api, db, deps):
     get_current_user = deps.get_current_user
     ensure_vendor_owner = deps.ensure_vendor_owner  # async fn from business.py
+    send_email = getattr(deps, "send_email", None) or (lambda *a, **k: {"ok": False})
 
     # ---------------------------------------------------------------
     # PLAYER-SIDE: scan venue QR → list my active bookings at that vendor
@@ -243,6 +244,35 @@ def register(api, db, deps):
             }},
         )
         logger.info("checkin OK | booking=%s by=%s(%s)", booking_id, user.get("email"), actor_role)
+
+        # Notify vendor whenever a PLAYER self-checks-in (vendor-initiated
+        # check-ins don't need a "someone just arrived" alert since the vendor
+        # is already at the counter). Best-effort — never blocks the request.
+        if actor_role == "player":
+            try:
+                vendor_doc = await db.vendors.find_one({"id": doc.get("vendor_id")}, {"_id": 0, "user_id": 1, "business_name": 1})
+                vendor_user = await db.users.find_one({"id": (vendor_doc or {}).get("user_id")}, {"_id": 0, "email": 1, "name": 1}) if vendor_doc else None
+                if vendor_user and vendor_user.get("email"):
+                    player_name = user.get("name") or user.get("email") or "A player"
+                    listing_title = doc.get("listing_title") or "your venue"
+                    slot = f"{doc.get('start_time','?')}–{doc.get('end_time','?')}"
+                    body = (
+                        f"Hi {vendor_user.get('name') or 'there'},\n\n"
+                        f"{player_name} has just checked in at {listing_title}.\n\n"
+                        f"Slot: {slot} ({doc.get('requested_date')})\n"
+                        f"Sport: {doc.get('sport') or '—'}\n"
+                        f"Booking ID: {booking_id}\n\n"
+                        f"— Kreeda Nation"
+                    )
+                    send_email(
+                        vendor_user["email"],
+                        f"Arrival: {player_name} checked in at {listing_title}",
+                        body,
+                        kind="checkin_arrival",
+                    )
+            except Exception as e:  # pragma: no cover — email best-effort
+                logger.warning("checkin arrival email failed | booking=%s err=%s", booking_id, e)
+
         return {"ok": True, "checked_in_at": now_iso, "checked_in_by_role": actor_role, "status": "checked_in"}
 
     @api.post("/checkin/private-booking/{booking_id}")
@@ -278,3 +308,53 @@ def register(api, db, deps):
         )
         logger.info("checkin OK (private) | booking=%s vendor=%s", booking_id, vendor["id"])
         return {"ok": True, "checked_in_at": now_iso, "checked_in_by_role": "vendor", "status": "checked_in"}
+
+    # ---------------------------------------------------------------
+    # ANALYTICS — vendor's today snapshot: check-in count + avg delay
+    # ---------------------------------------------------------------
+    @api.get("/vendor/checkin-analytics/today")
+    async def checkin_analytics_today(user: dict = Depends(get_current_user)):
+        """Compact snapshot for the vendor dashboard:
+          - checked_in_count: bookings checked-in today (platform + offline)
+          - expected_count: bookings scheduled for today (platform + offline, non-cancelled)
+          - avg_delay_minutes: (actual checked_in_at − scheduled start) averaged across today's check-ins.
+            Positive = late arrival, negative = early.
+        """
+        vendor = await ensure_vendor_owner(db, user)
+        today = _today_iso()
+
+        # Load all today's bookings (both surfaces)
+        platform = await db.vendor_bookings.find(
+            {"vendor_id": vendor["id"], "requested_date": today,
+             "status": {"$nin": ["cancelled", "rejected", "expired"]}},
+            {"_id": 0, "id": 1, "start_time": 1, "checked_in_at": 1, "requested_date": 1, "status": 1},
+        ).to_list(500)
+        offline = await db.private_bookings.find(
+            {"vendor_id": vendor["id"], "requested_date": today,
+             "status": {"$nin": ["cancelled", "expired"]}},
+            {"_id": 0, "id": 1, "start_time": 1, "checked_in_at": 1, "requested_date": 1, "status": 1},
+        ).to_list(500)
+        rows = platform + offline
+
+        expected = len(rows)
+        deltas: List[float] = []
+        checked_in = 0
+        for r in rows:
+            if not r.get("checked_in_at"):
+                continue
+            checked_in += 1
+            try:
+                start = datetime.strptime(f"{r['requested_date']} {r['start_time']}", "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+                actual = datetime.fromisoformat(r["checked_in_at"].replace("Z", "+00:00"))
+                deltas.append((actual - start).total_seconds() / 60.0)
+            except Exception:
+                continue
+
+        avg_delay = round(sum(deltas) / len(deltas), 1) if deltas else None
+        return {
+            "date": today,
+            "checked_in_count": checked_in,
+            "expected_count": expected,
+            "not_yet_arrived": max(expected - checked_in, 0),
+            "avg_delay_minutes": avg_delay,
+        }

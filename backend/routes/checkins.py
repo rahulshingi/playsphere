@@ -139,7 +139,13 @@ def register(api, db, deps):
     @api.get("/checkin/player/{player_id}/bookings", response_model=List[ScanBooking])
     async def vendor_scan_player(player_id: str, user: dict = Depends(get_current_user)):
         vendor = await ensure_vendor_owner(db, user)
-        profile = await db.player_profiles.find_one({"id": player_id}, {"_id": 0})
+        # Accept either the player's UUID `id` OR their public `slug` (which is
+        # what the /p/<slug> QR contains). This fixes the "not a Kreeda player"
+        # false-negative when the vendor scans a player QR poster.
+        profile = await db.player_profiles.find_one(
+            {"$or": [{"id": player_id}, {"slug": player_id}]},
+            {"_id": 0},
+        )
         if not profile:
             raise HTTPException(404, "Player not found")
 

@@ -148,7 +148,7 @@ function RowActions({ row, busy, onAction }) {
           size="sm"
           data-testid={`offline-complete-${row.id}`}
           disabled={busy}
-          onClick={() => onAction(row.id, "check-in", "Marked completed")}
+          onClick={() => onAction(row.id, "complete", "Marked completed")}
           className="bg-[#84CC16] hover:bg-[#65A30D] text-black h-7 rounded-sm text-[10px] px-2"
         >
           <CheckCircle2 className="w-3 h-3 mr-1" /> Complete

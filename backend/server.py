@@ -920,7 +920,14 @@ class VendorBooking(BaseModel):
     total: float = 0
     notes: str = ""
     admin_notes: Optional[str] = ""
-    status: str = "pending"
+    # Booking now auto-confirms on creation — vendor can still cancel/reject.
+    # Removes the admin approval delay that was frustrating buyers.
+    status: str = "confirmed"
+    # Snapshot who actually made the booking so the vendor sees the real
+    # person's name + phone (not the company name). Populated at creation.
+    booker_name: Optional[str] = ""
+    booker_phone: Optional[str] = ""
+    booker_role: Optional[str] = ""  # player | company_admin | organiser | vendor(dual) | …
     notifications: List[dict] = Field(default_factory=list)
     created_by: str
     hr_email: Optional[str] = None
@@ -2607,6 +2614,55 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
     else:
         dates = [body.requested_date]
 
+    # OVERLAP PREVENTION — reject if any existing confirmed / checked_in
+    # booking on this listing (and sub_unit if provided) collides with the
+    # requested slot. Same-day + interval overlap check.
+    def _hhmm_to_min(h): return int(h.split(":")[0]) * 60 + int(h.split(":")[1])
+    req_start_min = _hhmm_to_min(body.start_time)
+    req_end_min = req_start_min + hours * 60
+    for dt in dates:
+        overlap_filter: Dict[str, Any] = {
+            "listing_id": listing["id"],
+            "requested_date": dt,
+            "status": {"$in": ["confirmed", "checked_in", "vendor_accepted", "pending"]},
+        }
+        if body.sub_unit_id:
+            overlap_filter["sub_unit_id"] = body.sub_unit_id
+        existing = await db.vendor_bookings.find(overlap_filter, {"_id": 0, "start_time": 1, "end_time": 1, "hours": 1}).to_list(200)
+        # Find any overlap and compute the biggest safe window that starts at req_start
+        next_booking_start_min: Optional[int] = None
+        for b in existing:
+            try:
+                bs = _hhmm_to_min(b["start_time"])
+                be = _hhmm_to_min(b.get("end_time") or "23:59") if b.get("end_time") else bs + int(b.get("hours", 1)) * 60
+            except Exception:
+                continue
+            # Overlap condition
+            if req_start_min < be and bs < req_end_min:
+                if bs >= req_start_min and (next_booking_start_min is None or bs < next_booking_start_min):
+                    next_booking_start_min = bs
+        if next_booking_start_min is not None:
+            avail_min = next_booking_start_min - req_start_min
+            avail_hours = max(0, avail_min // 60)
+            next_hh = next_booking_start_min // 60
+            next_mm = next_booking_start_min % 60
+            hint = (
+                f"Only {avail_hours}h available before the next booking at "
+                f"{next_hh:02d}:{next_mm:02d}. Reduce hours and try again."
+                if avail_hours > 0
+                else f"Slot fully booked from {next_hh:02d}:{next_mm:02d}. Pick a different time."
+            )
+            raise HTTPException(409, {"code": "slot_overlap", "message": hint, "max_hours": avail_hours, "next_start": f"{next_hh:02d}:{next_mm:02d}"})
+
+    # Snapshot the booker's identity so the vendor sees the real person's name
+    # + phone, not just the company name. For players / dual-role users we
+    # pull from `player_profiles`; for HR / organiser fall back to `users`.
+    booker_profile = None
+    if user.get("role") == "player" or user.get("also_player") is True:
+        booker_profile = await db.player_profiles.find_one({"user_id": user["id"]}, {"_id": 0, "name": 1, "mobile": 1})
+    booker_name = (booker_profile or {}).get("name") or user.get("name") or (user.get("email", "").split("@")[0] if user.get("email") else "")
+    booker_phone = (booker_profile or {}).get("mobile") or user.get("mobile") or ""
+
     group_id = str(uuid.uuid4()) if len(dates) > 1 else None
     created: List[dict] = []
     for i, dt in enumerate(dates):
@@ -2628,6 +2684,7 @@ async def request_vendor_booking(body: VendorBookingRequest, user: dict = Depend
             sport=sport, city=listing.get("city"), sub_unit_id=body.sub_unit_id,
             price=price, currency=listing.get("currency", "INR"), total=this_price,
             notes=body.notes or "", created_by=user["id"], hr_email=user.get("email"),
+            booker_name=booker_name, booker_phone=booker_phone, booker_role=user.get("role") or "player",
             applied_membership_id=this_membership,
             offline_source=offline_source,
             commission_percent=commission_percent if not this_membership else 0,

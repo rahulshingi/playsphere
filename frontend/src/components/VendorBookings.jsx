@@ -228,6 +228,24 @@ function BookingRow({ booking, role, onPatch }) {
           <div className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest mt-0.5">
             {booking.city || "—"} · {booking.sport || booking.vendor_type} · {booking.requested_date} · {booking.start_time}–{booking.end_time} ({booking.hours}h)
           </div>
+          {/* Show WHO booked — player name + phone (or HR / organiser). This
+              replaces the older "company name" line that confused vendors when
+              the actual booker was a player, not a company employee. */}
+          {(booking.booker_name || booking.booker_phone) && (
+            <div data-testid={`vb-booker-${booking.id}`} className="text-xs font-mono text-neutral-300 mt-1">
+              <span className="text-[10px] uppercase tracking-widest text-neutral-500 mr-1">
+                {booking.booker_role === "company_admin" ? "HR" :
+                 booking.booker_role === "organiser" ? "Organiser" :
+                 booking.booker_role === "vendor" ? "Vendor (as player)" :
+                 booking.booker_role === "sponsor" ? "Sponsor" : "Player"}:
+              </span>
+              {booking.booker_name || "—"}
+              {booking.booker_phone && <span className="text-neutral-500"> · {booking.booker_phone}</span>}
+              {booking.booker_role === "company_admin" && booking.company_name && (
+                <span className="text-neutral-500"> · {booking.company_name}</span>
+              )}
+            </div>
+          )}
           {isPlatformAdmin && <div className="text-[11px] font-mono text-neutral-500 mt-0.5">HR: {booking.hr_email || booking.company_name}</div>}
         </div>
         <div className="flex items-center gap-2">

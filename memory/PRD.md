@@ -22,6 +22,28 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 55) Booking Simplification (P0 sweep)
+- **Auto-confirm platform bookings** — `VendorBooking.status` default changed from `"pending"` to `"confirmed"`. New bookings skip the admin approval step. Vendors still have 1-tap Reject / Cancel from their dashboard.
+- **Overlap prevention** — `POST /vendor-bookings` now rejects any request that overlaps a `confirmed / checked_in / vendor_accepted / pending` booking on the same listing (and sub_unit_id if provided). Returns 409 with a helpful hint: `"Only Nh available before the next booking at HH:MM. Reduce hours and try again."` and includes `max_hours` + `next_start` fields.
+- **Booker identity snapshot** — new `VendorBooking.booker_name / booker_phone / booker_role` fields, populated at creation from `player_profiles` for player / dual-role users, falling back to `users.name` for HR / organiser. Vendor booking row now shows a `Player: Rahul Shingi · +91…` line instead of only the company name. Company still shown next to HR bookings as a suffix.
+- **QR parser hardened** — `parseScanned()` in `QrScannerModal.jsx` now accepts:
+  - `kn:player:<id>` prefixed strings
+  - `https://<host>/p/<slug>` (existing)
+  - `https://<host>/players/profiles/<id>` (existing)
+  - `https://<host>/players/<id>` (new)
+  - `https://<host>/vendors/<id>` (new)
+  - Bare UUID / slug (≥6 chars) — treated as the hinted kind (player for vendor scanner, listing for player scanner).
+- **Vendor scan endpoint now accepts slug OR id** — `GET /checkin/player/{player_id}/bookings` uses `$or: [{id: player_id}, {slug: player_id}]` so scanning a `/p/rahul-shingi` QR now correctly resolves the profile.
+- **Bug fix: Vendor offline "Complete" said "booking not found"** — button was calling `check-in` endpoint instead of `complete`. Fixed. Completing a private booking now flows through the correct handler that computes overtime and closes the row.
+- **Verified via curl**: player booking auto-confirms with `booker_name="Test Player"`, `booker_role="player"`, `booker_phone="+919000000001"`. Overlap booking blocked with 409. Non-overlapping succeeds.
+
+### P1 deferred to next iteration (would exceed this pass)
+- Live calendar view on vendor dashboard + Hire wizard
+- Check-in adjusts start_time / auto-recomputes end_time; completion warns of unused time and offers partial refund per cancellation policy
+- Vendor-referred player registrations → tag those player bookings as offline for that vendor
+
+
+
 ## Implemented (Feb 18, 2026 · iter 54) Subscription Renewal Nudge
 - **`VendorBooking` schema** — added `price_unit` snapshot field (defaults to `"per hour"`). Booking creation now records `listing.price_unit` at request time so the frontend can compute access-end without a second listing lookup.
 - **New helpers** in `server.py`:

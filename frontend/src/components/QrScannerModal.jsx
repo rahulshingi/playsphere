@@ -99,25 +99,32 @@ export default function QrScannerModal({ open, onOpenChange, onScan, title, desc
  * Parses a scanned string and returns a payload of the form
  *   { kind: "player"|"listing", id: string } | null
  *
- * Accepts:
- *   - Raw UUID / slug: assumed to be a player id when kind hint = "player"
- *   - URL like https://<host>/p/<slug> → { kind: "player", id: slug }
- *   - URL like https://<host>/players/profiles/<id> → { kind: "player", id }
- *   - URL like https://<host>/vendor-listing/<id> → { kind: "listing", id }
+ * Accepts many friendly formats — a URL of any shape that contains a known
+ * path prefix, a bare UUID / long slug, or a prefixed protocol string
+ * (`kn:player:<id>`). If a hint kind is provided and the payload looks like
+ * a plain id, we honour the hint so both the player and vendor scanners can
+ * work with the same person's QR.
  */
 export function parseScanned(text, hintKind) {
   const s = String(text || "").trim();
   if (!s) return null;
+  // Prefixed protocol form
+  const proto = s.match(/^kn:(player|listing):([\w-]+)$/i);
+  if (proto) return { kind: proto[1].toLowerCase(), id: proto[2] };
   try {
     // URL form
     const url = new URL(s);
     const parts = url.pathname.split("/").filter(Boolean);
     if (parts[0] === "p" && parts[1]) return { kind: "player", id: parts[1] };
     if (parts[0] === "players" && parts[1] === "profiles" && parts[2]) return { kind: "player", id: parts[2] };
+    if (parts[0] === "players" && parts[1] && parts[1] !== "profiles") return { kind: "player", id: parts[1] };
     if (parts[0] === "vendor-listing" && parts[1]) return { kind: "listing", id: parts[1] };
+    if (parts[0] === "vendors" && parts[1]) return { kind: "listing", id: parts[1] };
   } catch {
-    /* not a URL — treat as raw id */
+    /* not a URL — fall through */
   }
-  if (hintKind) return { kind: hintKind, id: s };
+  // Bare UUID/slug — treat as the hinted kind (defaults to player when the
+  // caller is a vendor's scanner).
+  if (/^[\w-]{6,}$/.test(s)) return { kind: hintKind || "player", id: s };
   return null;
 }

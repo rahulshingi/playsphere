@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Plus, Trash2, Briefcase, Store } from "lucide-react";
+import { Plus, Trash2, Briefcase, Store, UserPlus } from "lucide-react";
 import { CURRENCIES, fmtPrice } from "@/lib/currency";
 import ImageUpload from "@/components/ImageUpload";
 import DashboardPanel from "@/components/DashboardPanel";
@@ -27,6 +27,8 @@ import VendorOvertimeSettings from "@/components/vendor/VendorOvertimeSettings";
 import VendorOfflineBookingsList from "@/components/vendor/VendorOfflineBookingsList";
 import VendorScanPlayer from "@/components/vendor/VendorScanPlayer";
 import VendorCheckinAnalytics from "@/components/vendor/VendorCheckinAnalytics";
+import VendorArrivalBanner from "@/components/vendor/VendorArrivalBanner";
+import WalkInCheckInModal from "@/components/vendor/WalkInCheckInModal";
 import { useSports } from "@/hooks/useSports";
 
 // Fallback sport list used when /api/sports hasn't loaded yet. The live list
@@ -130,6 +132,7 @@ export default function VendorDashboard() {
   const [bookings, setBookings] = useState([]);
   const [editing, setEditing] = useState(null);
   const [scheduling, setScheduling] = useState(null);
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   const load = () => {
     api.get("/vendors/me").then((r) => setVendor(r.data));
@@ -184,7 +187,11 @@ export default function VendorDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <VendorScanPlayer onCheckIn={load} />
+            <Button data-testid="vendor-walk-in" onClick={() => setWalkInOpen(true)}
+                    className="bg-[#FACC15] hover:bg-[#EAB308] text-black font-semibold rounded-sm">
+              <UserPlus className="w-4 h-4 mr-1.5" /> Walk-in
+            </Button>
+            <VendorScanPlayer onCheckIn={load} listings={listings} />
             <Button data-testid="vendor-new-listing" onClick={() => setEditing({ ...blank, city: vendor.city })} className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">
               <Plus className="w-4 h-4 mr-1" /> New listing
             </Button>
@@ -267,6 +274,14 @@ export default function VendorDashboard() {
 
       {editing && <ListingEditor listing={editing} setListing={setEditing} onSave={save} onClose={() => setEditing(null)} />}
       {scheduling && <VenueScheduleEditor listing={scheduling} onClose={() => setScheduling(null)} />}
+
+      <WalkInCheckInModal
+        open={walkInOpen}
+        onOpenChange={setWalkInOpen}
+        listings={listings}
+        onDone={load}
+      />
+      <VendorArrivalBanner />
 
       <Footer />
     </div>

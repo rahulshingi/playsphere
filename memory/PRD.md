@@ -22,6 +22,20 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 45) Walk-in Check-in + Real-time Arrival Banner
+- **Walk-in check-in** — new `POST /api/checkin/walk-in` endpoint accepts `{listing_id, client_name*, client_phone*, client_email?, sport?, hours, amount, notes}`. In one shot it:
+  1. Upserts a `VendorCustomer` (dedup by phone — same phone → same customer id).
+  2. Creates a `private_booking` already in `status="checked_in"` at the current time.
+  3. Broadcasts a `vendor_arrival` WS payload with `source="walkin"`.
+  Validation: 400 for missing name/phone, 404 if the listing isn't owned by the caller.
+- **VendorScanPlayer flow** — when a scanned QR doesn't parse as a Kreeda player OR the player is unknown (404), the walk-in modal opens automatically. The empty-results state also exposes an explicit "Start walk-in check-in" button. Guest details land in the vendor's customer directory instantly.
+- **Standalone Walk-in button** — new yellow `[data-testid=vendor-walk-in]` button in the Vendor Dashboard header for cases where there is no QR at all. Opens the same modal.
+- **Real-time Arrival Banner** — new component `VendorArrivalBanner.jsx` mounts on the Vendor Dashboard, opens a WebSocket to `/api/ws` (auto-reconnect + 30s ping), listens for `type='vendor_arrival'` payloads where `vendor_id === my vendor`, and stacks up to 3 arrival cards bottom-right. Each card shows the player name, listing, sport and source tag (`WALK-IN` / `OFFLINE`). Cards auto-dismiss after 30s or on manual close.
+- **Check-in endpoints now broadcast** — both `/checkin/vendor-booking/{id}` and `/checkin/private-booking/{id}` push a `vendor_arrival` WS payload on success in addition to the existing email notification. Best-effort — never blocks the response.
+- **Verified**: curl walk-in produces the private booking + captures the customer (dedup confirmed for repeat phone), analytics reflects the new arrival instantly, and a Python WebSocket listener receives the `vendor_arrival` broadcast within milliseconds: `✅ ARRIVAL: {vendor_id, source: walkin, player_name: WSFin, listing_title: 'Demo Turf — Whitefield'}`.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 44) Check-in Follow-ups (Poster copy · Analytics · Email)
 - **QR poster copy** — `openQrPoster()` in `VendorDashboard.jsx` now uses the header "SCAN TO BOOK OR CHECK-IN" and a highlighted **"SCAN ME AT RECEPTION"** callout with a helper line "Open the Kreeda Nation app · Check-in · Scan Venue". Same QR encodes the listing URL, so scanning still opens the listing for booking OR check-in based on context.
 - **Vendor arrival analytics** — new endpoint `GET /api/vendor/checkin-analytics/today` returns `{checked_in_count, expected_count, not_yet_arrived, avg_delay_minutes}`. `avg_delay_minutes` = actual `checked_in_at` − scheduled start (positive = late, negative = early). New component `VendorCheckinAnalytics.jsx` renders it as a 3-metric strip on the Marketplace tab of the Vendor Dashboard, auto-refreshing every 60s.

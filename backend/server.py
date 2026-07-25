@@ -5127,6 +5127,7 @@ _checkins_routes.register(api, db, SimpleNamespace(
     get_current_user=get_current_user,
     ensure_vendor_owner=_cn_ensure_vendor_owner,
     send_email=send_email,
+    ws_manager=ws_manager,
 ))
 
 

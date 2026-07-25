@@ -3,8 +3,9 @@ import api from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { ScanLine, Clock, Check, Loader2, User } from "lucide-react";
+import { ScanLine, Clock, Check, Loader2, User, UserPlus } from "lucide-react";
 import QrScannerModal, { parseScanned } from "@/components/QrScannerModal";
+import WalkInCheckInModal from "@/components/vendor/WalkInCheckInModal";
 
 function fmtTime(iso) {
   if (!iso) return "";
@@ -20,19 +21,22 @@ function fmtTime(iso) {
  * onCheckIn: optional parent callback so a listing / bookings widget can
  * refresh after a successful check-in.
  */
-export default function VendorScanPlayer({ onCheckIn }) {
+export default function VendorScanPlayer({ onCheckIn, listings }) {
   const [scanOpen, setScanOpen] = useState(false);
   const [resultsOpen, setResultsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [bookings, setBookings] = useState([]);
   const [playerName, setPlayerName] = useState("");
   const [checkingId, setCheckingId] = useState("");
+  const [walkInOpen, setWalkInOpen] = useState(false);
 
   const handleScan = useCallback(async (decoded) => {
     setScanOpen(false);
     const p = parseScanned(decoded, "player");
     if (!p || p.kind !== "player") {
-      toast.error("This QR is not a Kreeda Nation player code.");
+      // Unknown QR — offer walk-in so the vendor can still capture the guest
+      toast.info("Unknown QR — starting walk-in check-in.");
+      setWalkInOpen(true);
       return;
     }
     setLoading(true);
@@ -41,10 +45,16 @@ export default function VendorScanPlayer({ onCheckIn }) {
       const { data } = await api.get(`/checkin/player/${p.id}/bookings`);
       setBookings(data || []);
       setPlayerName(data?.[0]?.player_name || "");
-      if (!data?.length) toast.info("No active bookings for this player at your venue today.");
+      if (!data?.length) toast.info("No bookings — you can still start a walk-in.");
     } catch (e) {
-      toast.error(e.response?.data?.detail || "Unable to look up player bookings");
-      setResultsOpen(false);
+      if (e.response?.status === 404) {
+        toast.info("Player not on Kreeda Nation — starting walk-in.");
+        setResultsOpen(false);
+        setWalkInOpen(true);
+      } else {
+        toast.error(e.response?.data?.detail || "Unable to look up player bookings");
+        setResultsOpen(false);
+      }
     } finally {
       setLoading(false);
     }
@@ -103,8 +113,15 @@ export default function VendorScanPlayer({ onCheckIn }) {
               <Loader2 className="w-5 h-5 animate-spin mx-auto mb-2" /> Loading…
             </div>
           ) : bookings.length === 0 ? (
-            <div className="text-xs font-mono text-neutral-500 border border-white/10 p-4 rounded-sm text-center">
-              No active bookings for this player today.
+            <div className="grid gap-3">
+              <div className="text-xs font-mono text-neutral-500 border border-white/10 p-4 rounded-sm text-center">
+                No active bookings for this player today.
+              </div>
+              <Button data-testid="scan-results-walkin"
+                      onClick={() => { setResultsOpen(false); setWalkInOpen(true); }}
+                      className="bg-[#FACC15] hover:bg-[#EAB308] text-black font-semibold rounded-sm">
+                <UserPlus className="w-4 h-4 mr-1" /> Start walk-in check-in
+              </Button>
             </div>
           ) : (
             <div className="grid gap-3">
@@ -150,6 +167,13 @@ export default function VendorScanPlayer({ onCheckIn }) {
           )}
         </DialogContent>
       </Dialog>
+
+      <WalkInCheckInModal
+        open={walkInOpen}
+        onOpenChange={setWalkInOpen}
+        listings={listings}
+        onDone={() => onCheckIn?.()}
+      />
     </>
   );
 }

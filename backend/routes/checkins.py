@@ -63,6 +63,29 @@ def register(api, db, deps):
     get_current_user = deps.get_current_user
     ensure_vendor_owner = deps.ensure_vendor_owner  # async fn from business.py
     send_email = getattr(deps, "send_email", None) or (lambda *a, **k: {"ok": False})
+    ws_manager = getattr(deps, "ws_manager", None)
+
+    async def _broadcast_arrival(vendor_id: str, booking: dict, player_name: str, source: str, role: str):
+        """Best-effort real-time push to the vendor's live dashboard banner.
+        Never blocks the request — swallow every ws exception."""
+        if ws_manager is None:
+            return
+        try:
+            await ws_manager.broadcast({
+                "type": "vendor_arrival",
+                "vendor_id": vendor_id,
+                "booking_id": booking.get("id"),
+                "source": source,  # "platform" | "offline" | "walkin"
+                "player_name": player_name,
+                "listing_id": booking.get("listing_id"),
+                "listing_title": booking.get("listing_title") or booking.get("_listing_title") or "",
+                "sport": booking.get("sport"),
+                "start_time": booking.get("start_time"),
+                "checked_in_by_role": role,
+                "at": datetime.now(timezone.utc).isoformat(),
+            })
+        except Exception:  # pragma: no cover
+            pass
 
     # ---------------------------------------------------------------
     # PLAYER-SIDE: scan venue QR → list my active bookings at that vendor
@@ -273,6 +296,17 @@ def register(api, db, deps):
             except Exception as e:  # pragma: no cover — email best-effort
                 logger.warning("checkin arrival email failed | booking=%s err=%s", booking_id, e)
 
+        # Real-time push to vendor dashboards
+        player_name = ""
+        if actor_role == "player":
+            player_name = user.get("name") or user.get("email") or "Player"
+        else:
+            # Vendor-initiated — look up the player who owns the booking
+            player_user = await db.users.find_one({"id": doc.get("created_by")}, {"_id": 0, "name": 1, "email": 1})
+            if player_user:
+                player_name = player_user.get("name") or player_user.get("email") or "Player"
+        await _broadcast_arrival(doc.get("vendor_id"), doc, player_name, source="platform", role=actor_role)
+
         return {"ok": True, "checked_in_at": now_iso, "checked_in_by_role": actor_role, "status": "checked_in"}
 
     @api.post("/checkin/private-booking/{booking_id}")
@@ -307,7 +341,111 @@ def register(api, db, deps):
             }},
         )
         logger.info("checkin OK (private) | booking=%s vendor=%s", booking_id, vendor["id"])
+        listing = await db.vendor_listings.find_one({"id": doc.get("listing_id")}, {"_id": 0, "title": 1})
+        doc["_listing_title"] = (listing or {}).get("title") or ""
+        await _broadcast_arrival(vendor["id"], doc, doc.get("client_name") or "Guest", source="offline", role="vendor")
         return {"ok": True, "checked_in_at": now_iso, "checked_in_by_role": "vendor", "status": "checked_in"}
+
+    # ---------------------------------------------------------------
+    # WALK-IN — vendor captures a guest with no existing booking. Creates a
+    # customer entry + a private_booking that is immediately in `checked_in`
+    # state. Perfect for casual drop-ins so they still land in reports.
+    # ---------------------------------------------------------------
+    class WalkInPayload(BaseModel):
+        listing_id: str
+        client_name: str
+        client_phone: str
+        client_email: Optional[str] = ""
+        sport: Optional[str] = ""
+        hours: int = 1
+        amount: float = 0
+        notes: Optional[str] = ""
+
+    @api.post("/checkin/walk-in")
+    async def create_walk_in_checkin(body: WalkInPayload, user: dict = Depends(get_current_user)):
+        vendor = await ensure_vendor_owner(db, user)
+
+        # Verify listing belongs to the caller
+        listing = await db.vendor_listings.find_one({"id": body.listing_id, "vendor_id": vendor["id"]}, {"_id": 0, "title": 1})
+        if not listing:
+            raise HTTPException(404, "Listing not found for this vendor")
+
+        name = body.client_name.strip()
+        phone = body.client_phone.strip()
+        if not name or not phone:
+            raise HTTPException(400, "Name and phone are required for a walk-in")
+
+        now = datetime.now(timezone.utc)
+        today = now.strftime("%Y-%m-%d")
+        start_time = now.strftime("%H:%M")
+        # Compute a rough end_time by adding hours to now
+        try:
+            end_time = (now.replace(minute=0, second=0, microsecond=0)
+                        .fromtimestamp(now.timestamp() + max(1, body.hours) * 3600, tz=timezone.utc)
+                        .strftime("%H:%M"))
+        except Exception:
+            end_time = "23:59"
+
+        # Upsert VendorCustomer — match on phone, else create.
+        cust_doc = await db.vendor_customers.find_one(
+            {"vendor_id": vendor["id"], "phone": phone}, {"_id": 0}
+        )
+        if cust_doc:
+            cust_id = cust_doc["id"]
+            # backfill missing fields
+            patch = {}
+            if body.client_email and not cust_doc.get("email"):
+                patch["email"] = body.client_email.strip()
+            if name and not cust_doc.get("name"):
+                patch["name"] = name
+            if patch:
+                await db.vendor_customers.update_one({"id": cust_id}, {"$set": patch})
+        else:
+            import uuid as _uuid
+            cust_id = str(_uuid.uuid4())
+            await db.vendor_customers.insert_one({
+                "id": cust_id, "vendor_id": vendor["id"], "name": name,
+                "phone": phone, "email": body.client_email or "",
+                "address": "", "gstin": "", "notes": "",
+                "created_at": now.isoformat(),
+            })
+
+        # Create the private booking already in checked_in state
+        import uuid as _uuid
+        pb_id = str(_uuid.uuid4())
+        pb_doc = {
+            "id": pb_id, "vendor_id": vendor["id"], "listing_id": body.listing_id,
+            "customer_id": cust_id, "client_name": name, "client_phone": phone,
+            "client_email": body.client_email or "",
+            "requested_date": today, "start_time": start_time, "end_time": end_time,
+            "hours": int(body.hours or 1), "rate_type": "total",
+            "rate_per_hour": 0, "amount": float(body.amount or 0),
+            "currency": "INR", "notes": body.notes or f"Walk-in check-in via QR at {start_time}",
+            "sport": body.sport or "",
+            "status": "checked_in",
+            "invoice_id": None,
+            "checked_in_at": now.isoformat(),
+            "checked_in_by": user["id"],
+            "checked_in_by_role": "vendor",
+            "arrived_at": now.isoformat(),
+            "no_show_at": None, "completed_at": None,
+            "actual_end_time": None, "overtime_minutes": 0, "overtime_amount": 0,
+            "overtime_note": "",
+        }
+        await db.private_bookings.insert_one(pb_doc)
+        logger.info("walk-in checkin OK | vendor=%s customer=%s booking=%s", vendor["id"], cust_id, pb_id)
+
+        # Real-time push + email
+        pb_doc["_listing_title"] = listing.get("title") or ""
+        await _broadcast_arrival(vendor["id"], pb_doc, name, source="walkin", role="vendor")
+
+        return {
+            "ok": True,
+            "booking_id": pb_id,
+            "customer_id": cust_id,
+            "checked_in_at": pb_doc["checked_in_at"],
+            "status": "checked_in",
+        }
 
     # ---------------------------------------------------------------
     # ANALYTICS — vendor's today snapshot: check-in count + avg delay

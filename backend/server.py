@@ -2876,6 +2876,21 @@ async def create_review(listing_id: str, body: dict, user: dict = Depends(get_cu
     return review
 
 
+@api.get("/vendor-bookings/{booking_id}/my-review")
+async def get_my_review_for_booking(booking_id: str, user: dict = Depends(get_current_user)):
+    """Returns the caller's OWN review for this booking (any status: pending
+    vendor, pending admin, visible, rejected) or 404 if they haven't reviewed.
+    Used by the frontend to render the collapsed "already submitted" state
+    across reloads so the review form doesn't reappear after submission."""
+    rv = await db.reviews.find_one(
+        {"booking_id": booking_id, "author_user_id": user["id"]},
+        {"_id": 0},
+    )
+    if not rv:
+        raise HTTPException(404, "No review yet")
+    return rv
+
+
 @api.get("/vendor-listings/{listing_id}/reviews")
 async def list_listing_reviews(listing_id: str, include_pending: bool = False, user: Optional[dict] = Depends(get_current_user_optional)):
     """Public route: by default returns only `visible` reviews. Vendor or platform admin can pass include_pending=true to see all."""

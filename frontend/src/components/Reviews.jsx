@@ -60,12 +60,30 @@ function ReviewCard({ rv }) {
 }
 
 /* ============================================================
-   Star widget — input form for a completed booking
+   Star widget — input form for a completed booking.
+
+   After a successful POST the form collapses into a compact
+   "thanks, awaiting approval" confirmation card so the user
+   isn't left staring at an empty form (which was confusing —
+   it looked like the submission didn't work).
    ============================================================ */
 export function ReviewForm({ listingId, bookingId, onSubmitted }) {
   const [rating, setRating] = useState(0);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [submitted, setSubmitted] = useState(null);  // populated with the saved review after submit
+  const [loading, setLoading] = useState(true);
+
+  // Check on mount whether the user has already reviewed this booking so we
+  // render the confirmation state across reloads — not the empty form.
+  useEffect(() => {
+    let alive = true;
+    api.get(`/vendor-bookings/${bookingId}/my-review`)
+      .then((r) => { if (alive) setSubmitted(r.data); })
+      .catch(() => { /* 404 = no review yet — leave the form open */ })
+      .finally(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [bookingId]);
   const submit = async () => {
     if (rating < 1) return toast.error("Please pick a star rating");
     try {
@@ -74,11 +92,47 @@ export function ReviewForm({ listingId, bookingId, onSubmitted }) {
         rating, text, booking_id: bookingId,
       });
       toast.success("Review submitted — pending vendor approval");
+      // Snapshot what was sent so we can render the confirmation state.
+      setSubmitted({ rating, text, ...(r.data || {}) });
       onSubmitted && onSubmitted(r.data);
-      setRating(0); setText("");
     } catch (e) { toast.error(e.response?.data?.detail || "Failed"); }
     finally { setBusy(false); }
   };
+
+  // Post-submit / existing-review confirmation — no more editable form, no ambiguity.
+  if (loading) {
+    return (
+      <div data-testid={`review-loading-${bookingId}`} className="border border-white/5 rounded-sm bg-black/20 p-3 mt-3 text-[10px] font-mono uppercase text-neutral-600 tracking-widest">
+        / checking review status…
+      </div>
+    );
+  }
+  if (submitted) {
+    const status = submitted.status || "pending_vendor";
+    const label = ({
+      pending_vendor: "Review submitted · pending vendor approval",
+      pending_admin: "Approved by vendor · pending Kreeda Nation approval",
+      visible: "Review published — thanks!",
+      flagged: "Flagged by vendor — Kreeda Nation is reviewing",
+      rejected: "This review wasn't approved",
+    })[status] || "Review submitted";
+    const accent = status === "visible" ? "#84CC16" : status === "rejected" ? "#FF3B30" : status === "flagged" ? "#FACC15" : "#06B6D4";
+    return (
+      <div data-testid={`review-submitted-${bookingId}`} className="rounded-sm p-4 mt-3 border" style={{ borderColor: `${accent}55`, background: `${accent}0F` }}>
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4" style={{ color: accent }} />
+          <span className="font-mono text-[10px] uppercase tracking-widest" style={{ color: accent }}>/ {label}</span>
+        </div>
+        <div className="flex items-center gap-1 mt-2">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <Star key={n} className={`w-4 h-4 ${n <= submitted.rating ? "fill-[#FACC15] text-[#FACC15]" : "text-neutral-700"}`} />
+          ))}
+        </div>
+        {submitted.text && <p className="text-xs text-neutral-300 mt-2 whitespace-pre-line">{submitted.text}</p>}
+      </div>
+    );
+  }
+
   return (
     <div data-testid={`review-form-${bookingId}`} className="border border-white/10 rounded-sm bg-[#141414] p-4 mt-3">
       <div className="font-mono text-[10px] uppercase text-neutral-500">/ Leave a review</div>

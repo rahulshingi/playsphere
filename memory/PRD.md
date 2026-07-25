@@ -22,6 +22,17 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 50) Review Confirmation State (Bug Fix)
+- **Bug**: `ReviewForm` kept rendering the editable star + textarea after a successful submission — inputs cleared but the form stayed. Users couldn't tell if their review went through.
+- **Fix**: `ReviewForm` now has three states —
+  1. `loading` — quick "/ checking review status…" pill on mount.
+  2. `submitted` — collapsed confirmation card with the submitted star row, text, and a status-aware label (`Review submitted · pending vendor approval` / `Approved by vendor · pending Kreeda Nation approval` / `Review published — thanks!` / `Flagged by vendor` / `This review wasn't approved`) using an accent colour per status.
+  3. Editable form — only shown when the user hasn't reviewed yet.
+- **New endpoint** `GET /api/vendor-bookings/{booking_id}/my-review` — returns the caller's own review for a booking (any status) or 404. Lets the frontend render the collapsed state across page reloads / navigation.
+- **Verified** on `/bookings` → CLOSED tab: player with prior 1-star + 5-star reviews sees the cyan "/ REVIEW SUBMITTED · PENDING VENDOR APPROVAL" card with the star row instead of the old empty form. Zero editable forms remain.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 49) Table Sports · Cross-Mode Dot · Player Greeting
 - **Table venue type + new sports**: added `table` to `VendorType` Literal and `VENDOR_CATEGORY_SPORTS['table'] = ['tabletennis','snooker','pool','carrom','chess']`. New sport rows for `pool`, `carrom` (kept `snooker`, split from prior `snooker/pool`). Vendor Dashboard now offers the "Snooker / Pool / TT / Carrom Table" listing type with the right sport picker. VendorMarket exposes a "Tables" chip.
 - **Smart search on Hire vendor** — new `data-testid="vm-search"` box above the vendor-type row. Aliases (`snooker`, `pool`, `table tennis`, `carrom`, `chess`, `tt`, `ping-pong`, `court`, `ground`, `gym`, `crossfit`, …) auto-switch the vendor-type chip AND pre-select the sport. Zero typing after the search — just tap a city.

@@ -645,7 +645,7 @@ class BookingCreate(BaseModel):
 
 
 # ---------- Player profiles ----------
-VendorType = Literal["ground", "court", "coach", "referee", "umpire", "trainer", "photographer", "videographer", "gym", "studio"]
+VendorType = Literal["ground", "court", "table", "coach", "referee", "umpire", "trainer", "photographer", "videographer", "gym", "studio"]
 
 # Category → activity list. Powers the adaptive "Sports / Activities" picker in
 # the listing form. Grounds / courts / coaches all share the sport list; gyms
@@ -653,9 +653,10 @@ VendorType = Literal["ground", "court", "coach", "referee", "umpire", "trainer",
 VENDOR_CATEGORY_SPORTS: dict = {
     "ground": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
     "court": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
-    "coach": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+    "table": ["tabletennis", "snooker", "pool", "carrom", "chess"],
+    "coach": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis", "snooker", "pool"],
     "referee": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
-    "umpire": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
+    "umpire": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis", "snooker"],
     "trainer": ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"],
     "photographer": [],
     "videographer": [],
@@ -4398,7 +4399,9 @@ DEFAULT_SPORTS = [
     {"value": "pickleball", "label": "Pickleball"},
     {"value": "tabletennis", "label": "Table Tennis"},
     {"value": "tennis", "label": "Lawn Tennis"},
-    {"value": "snooker", "label": "Snooker / Pool"},
+    {"value": "snooker", "label": "Snooker"},
+    {"value": "pool", "label": "Pool"},
+    {"value": "carrom", "label": "Carrom"},
     {"value": "volleyball", "label": "Volleyball"},
     {"value": "chess", "label": "Chess"},
     {"value": "quiz", "label": "Quiz"},

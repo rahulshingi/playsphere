@@ -37,14 +37,18 @@ import { useSports } from "@/hooks/useSports";
 const FALLBACK_SPORTS = ["cricket", "football", "badminton", "tennis", "basketball", "volleyball", "tabletennis"];
 
 // Per-type activity overrides — e.g. `gym` uses fitness activities, not sports.
+// `table` covers indoor cue / racket / board table sports (snooker, pool, TT,
+// carrom, chess) so those vendors get the right sport picker.
 const ACTIVITY_BY_TYPE = {
   gym: ["gym", "yoga", "zumba", "crossfit", "pilates", "cardio", "strength"],
   studio: ["yoga", "zumba", "pilates", "dance", "aerobics"],
+  table: ["tabletennis", "snooker", "pool", "carrom", "chess"],
 };
 
 const LISTING_TYPES = [
   { v: "ground", l: "Cricket / Football Ground" },
   { v: "court", l: "Badminton / Tennis / Basketball Court" },
+  { v: "table", l: "Snooker / Pool / TT / Carrom Table" },
   { v: "gym", l: "Gym" },
   { v: "studio", l: "Yoga / Dance Studio" },
   { v: "coach", l: "Coach" },
@@ -55,8 +59,8 @@ const LISTING_TYPES = [
   { v: "videographer", l: "Videographer" },
 ];
 
-const NEEDS_SPORTS = new Set(["ground", "court", "coach", "referee", "umpire", "trainer", "gym", "studio"]);
-const NEEDS_CAPACITY = new Set(["ground", "court", "gym", "studio"]);
+const NEEDS_SPORTS = new Set(["ground", "court", "table", "coach", "referee", "umpire", "trainer", "gym", "studio"]);
+const NEEDS_CAPACITY = new Set(["ground", "court", "table", "gym", "studio"]);
 
 // Opens a printable QR poster in a new tab. The QR image comes from the free
 // api.qrserver.com service — the encoded URL points at the vendor's public

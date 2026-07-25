@@ -51,7 +51,7 @@ function snapshot(p) {
 }
 
 export default function PlayerProfile() {
-  const { user, ready } = useAuth();
+  const { user, ready, inPlayerMode } = useAuth();
   const nav = useNavigate();
   const [profile, setProfile] = useState(null);
   const [original, setOriginal] = useState("");
@@ -132,6 +132,28 @@ export default function PlayerProfile() {
     <div className="bg-[#0a0a0a] min-h-screen text-white">
       <Nav />
       <div className="max-w-5xl mx-auto px-6 pt-12 pb-24">
+        {inPlayerMode && user?.role !== "player" && (
+          <div data-testid="player-mode-greeting" className="mb-8 border border-[#84CC16]/30 rounded-sm bg-gradient-to-br from-[#84CC16]/10 to-[#06B6D4]/5 p-5 sm:p-6">
+            <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16] mb-1">/ Welcome</div>
+            <div className="font-display text-2xl sm:text-3xl tracking-wide text-white">
+              Ready to play, {(profile.name || user.name || "champ").split(" ")[0]}? <span className="text-[#84CC16]">🏏</span>
+            </div>
+            <p className="text-sm text-neutral-400 mt-2 max-w-xl">
+              Your player profile is live. Book a venue, scan a QR at the door, or find teammates — everything you need on the field is a click away.
+            </p>
+            <div className="flex flex-wrap gap-2 mt-4">
+              <Link to="/players/check-in" data-testid="greet-cta-checkin">
+                <Button className="bg-[#84CC16] hover:bg-[#65A30D] text-black font-semibold rounded-sm">Show my QR</Button>
+              </Link>
+              <Link to="/hire" data-testid="greet-cta-book">
+                <Button variant="outline" className="border-white/10 text-white bg-transparent rounded-sm">Book a venue</Button>
+              </Link>
+              <Link to="/players/profiles" data-testid="greet-cta-find">
+                <Button variant="outline" className="border-white/10 text-white bg-transparent rounded-sm">Find players</Button>
+              </Link>
+            </div>
+          </div>
+        )}
         <div className="flex items-end justify-between flex-wrap gap-3">
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#84CC16]">/ Your Profile</div>

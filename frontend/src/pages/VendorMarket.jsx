@@ -22,12 +22,27 @@ import DatePicker from "@/components/ui/DatePicker";
 import PublicMembershipsList from "@/components/memberships/PublicMembershipsList";
 
 const VENDOR_TYPE_LABEL = {
-  ground: "Grounds", court: "Courts", coach: "Coaches", referee: "Referees",
+  ground: "Grounds", court: "Courts", table: "Tables", coach: "Coaches", referee: "Referees",
   umpire: "Umpires", trainer: "Trainers", photographer: "Photographers", videographer: "Videographers",
 };
 
 // Categories that are bookable by sport/location (vs people whose flow is different)
-const VENUE_TYPES = ["ground", "court"];
+const VENUE_TYPES = ["ground", "court", "table"];
+
+// Aliases → vendor_type. When the user types "snooker" / "pool" / "carrom" /
+// "table tennis" / "chess" into the search box, we auto-pivot to the `table`
+// venue type and pre-select the sport.
+const SEARCH_ALIASES = [
+  { rx: /\b(snooker|billiard)s?\b/i, type: "table", sport: "snooker" },
+  { rx: /\bpool\b/i, type: "table", sport: "pool" },
+  { rx: /\b(tt|table[\s-]?tennis|ping[\s-]?pong)\b/i, type: "table", sport: "tabletennis" },
+  { rx: /\bcarrom\b/i, type: "table", sport: "carrom" },
+  { rx: /\bchess\b/i, type: "table", sport: "chess" },
+  { rx: /\btable\b/i, type: "table", sport: "" },
+  { rx: /\b(court|badminton|tennis|basketball)\b/i, type: "court", sport: "" },
+  { rx: /\b(ground|cricket|football|volleyball)\b/i, type: "ground", sport: "" },
+  { rx: /\b(gym|crossfit|yoga|pilates)\b/i, type: "gym", sport: "" },
+];
 
 export default function VendorMarket() {
   const { ready, user } = useAuth();
@@ -168,8 +183,32 @@ export default function VendorMarket() {
           </div>
         )}
 
+        {/* Universal search — types like "snooker" or "pool" jump straight
+            to Tables → sport pre-selected. Keeps the click-through short. */}
+        <div className="mt-8 max-w-md">
+          <Label className="text-xs font-mono uppercase text-neutral-500">Looking for something specific?</Label>
+          <Input
+            data-testid="vm-search"
+            placeholder="Try 'snooker', 'pool', 'table tennis', 'badminton court'…"
+            className="mt-2 bg-black/40 border-white/10 text-white"
+            onChange={(e) => {
+              const q = e.target.value.trim();
+              if (!q) return;
+              for (const alias of SEARCH_ALIASES) {
+                if (alias.rx.test(q)) {
+                  if (vendorType !== alias.type) {
+                    setVendorType(alias.type); setSport(""); setCity(""); setSelected(null);
+                  }
+                  if (alias.sport) setSport(alias.sport);
+                  return;
+                }
+              }
+            }}
+          />
+        </div>
+
         {/* Vendor type selector — top bar */}
-        <div className="mt-8 flex flex-wrap gap-2">
+        <div className="mt-6 flex flex-wrap gap-2">
           {Object.entries(VENDOR_TYPE_LABEL).map(([v, l]) => (
             <button
               key={v}

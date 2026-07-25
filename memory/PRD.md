@@ -22,6 +22,19 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 49) Table Sports · Cross-Mode Dot · Player Greeting
+- **Table venue type + new sports**: added `table` to `VendorType` Literal and `VENDOR_CATEGORY_SPORTS['table'] = ['tabletennis','snooker','pool','carrom','chess']`. New sport rows for `pool`, `carrom` (kept `snooker`, split from prior `snooker/pool`). Vendor Dashboard now offers the "Snooker / Pool / TT / Carrom Table" listing type with the right sport picker. VendorMarket exposes a "Tables" chip.
+- **Smart search on Hire vendor** — new `data-testid="vm-search"` box above the vendor-type row. Aliases (`snooker`, `pool`, `table tennis`, `carrom`, `chess`, `tt`, `ping-pong`, `court`, `ground`, `gym`, `crossfit`, …) auto-switch the vendor-type chip AND pre-select the sport. Zero typing after the search — just tap a city.
+- **Cross-mode notification** — Nav polls `GET /vendor-bookings` (or `/rfqs` for HR) every 60s while `inPlayerMode` is on. `workspacePending` count drives:
+  - Red pulsing pill `[data-testid=workspace-pending-strip]` in the top strip: `"2 PENDING BOOKINGS ON YOUR WORKSPACE"`.
+  - Red numeric dot `[data-testid=workspace-pending-dot]` on the avatar (shows "9+" past 9).
+  Vendors playing a match never miss a booking request again.
+- **Personalised greeting** — `/players/me` renders a `[data-testid=player-mode-greeting]` hero card with **"Ready to play, {firstName}? 🏏"** and three CTAs (Show my QR · Book a venue · Find players) only when `inPlayerMode && role !== "player"`.
+- **First-time toggle now lands the user on `/players/me`** so the greeting is the first thing they see, not the vendor dashboard.
+- **Verified**: vendor searches "snooker" → Tables chip highlighted; creates a `vendor_type=table` listing with `sports=[snooker,pool]` via API; toggles player mode → auto-navigates to `/players/me` showing greeting + `2 PENDING BOOKINGS ON YOUR WORKSPACE` strip + red "2" dot on avatar.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 48) Nav Cleanup + Arrival Chime
 - **Bug fix — vendor workspace was leaking player links**: the `isPlayer` branch in `roleLinks()` was firing whenever `also_player=true`, even when `activeMode="primary"`. Refactored to `showPlayer = isNativePlayer || (isPlayer && inPlayerMode)` and gated **every** primary-role branch by `showPrimary = !inPlayerMode`. Now the nav is strictly mode-aware:
   - Native player → always sees player links.

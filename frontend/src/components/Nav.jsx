@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import api from "@/lib/api";
@@ -125,6 +125,31 @@ export default function Nav() {
   const allRoleLinks = [...primaryRoleLinks, ...moreRoleLinks];  // used by mobile drawer
   const guide = isAuthed ? getRoleGuide(user.role) : null;
 
+  // Cross-mode attention badge: when a vendor / HR / sponsor is currently in
+  // PLAYER mode, poll their workspace side for pending items so they don't
+  // miss a booking request while playing. Every 60s is enough.
+  const [workspacePending, setWorkspacePending] = useState(0);
+  useEffect(() => {
+    if (!isAuthed || !inPlayerMode || user.role === "player") { setWorkspacePending(0); return; }
+    let alive = true;
+    const load = async () => {
+      try {
+        if (isVendor) {
+          const { data } = await api.get("/vendor-bookings");
+          const pending = (data || []).filter((b) => ["pending", "vendor_accepted"].includes(b.status));
+          if (alive) setWorkspacePending(pending.length);
+        } else if (isCompanyAdmin) {
+          const { data } = await api.get("/rfqs").catch(() => ({ data: [] }));
+          const open = (data || []).filter((r) => ["quoted", "negotiating"].includes(r.status));
+          if (alive) setWorkspacePending(open.length);
+        }
+      } catch { /* silent */ }
+    };
+    load();
+    const iv = setInterval(load, 60000);
+    return () => { alive = false; clearInterval(iv); };
+  }, [isAuthed, inPlayerMode, user, isVendor, isCompanyAdmin]);
+
   const closeMobile = () => setMobileOpen(false);
 
   // Corporate-style header: when authenticated, only show the role's PRIMARY
@@ -145,6 +170,12 @@ export default function Nav() {
         <div data-testid="player-mode-strip" className="bg-[#84CC16]/15 border-b border-[#84CC16]/30 text-[#84CC16] text-[11px] font-mono uppercase tracking-widest flex items-center justify-center gap-3 py-1.5 px-4">
           <User className="w-3 h-3" />
           <span>You&apos;re in player mode</span>
+          {workspacePending > 0 && (
+            <span data-testid="workspace-pending-strip" className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm bg-[#FF3B30]/20 text-[#FF3B30] border border-[#FF3B30]/40">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#FF3B30] animate-pulse" />
+              {workspacePending} pending {isVendor ? "booking" : "RFQ"}{workspacePending === 1 ? "" : "s"} on your workspace
+            </span>
+          )}
           <button
             data-testid="player-mode-strip-exit"
             onClick={() => {
@@ -215,11 +246,17 @@ export default function Nav() {
               <DropdownMenuTrigger asChild>
                 <button
                   data-testid="nav-user-menu"
-                  className="hidden md:flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-white/5 transition-colors"
+                  className="hidden md:flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-white/5 transition-colors relative"
                   aria-label="Open account menu"
                 >
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#84CC16] to-[#06B6D4] flex items-center justify-center text-black font-bold text-sm shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#84CC16] to-[#06B6D4] flex items-center justify-center text-black font-bold text-sm shrink-0 relative">
                     {(user.name || user.email || "?").charAt(0).toUpperCase()}
+                    {workspacePending > 0 && (
+                      <span data-testid="workspace-pending-dot"
+                            className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#FF3B30] text-[9px] font-bold text-white grid place-items-center border border-black">
+                        {workspacePending > 9 ? "9+" : workspacePending}
+                      </span>
+                    )}
                   </div>
                   <div className="flex flex-col items-start leading-tight max-w-[160px]">
                     {companyName ? (
@@ -259,13 +296,14 @@ export default function Nav() {
                       onSelect={async (e) => {
                         e.preventDefault();
                         // Case 1 — not yet opted in: enable also_player on the
-                        // server, then flip the local mode. One-time API call.
+                        // server, then flip the local mode and land the user
+                        // on their new player home.
                         if (!user.also_player) {
                           try {
                             await api.post("/auth/also-player", { enabled: true });
                             setActiveMode("player");
                             toast.success("Switched to player mode");
-                            setTimeout(() => window.location.reload(), 500);
+                            setTimeout(() => { window.location.href = "/players/me"; }, 500);
                           } catch (err) {
                             toast.error(err.response?.data?.detail || "Failed to enable");
                           }

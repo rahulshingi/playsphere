@@ -877,6 +877,12 @@
     <priority>0.6</priority>
   </url>
   <url>
+    <loc>https://kreedanation.com/p/demovendorname</loc>
+    <lastmod>2026-07-25</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
     <loc>https://kreedanation.com/p/fh-x-0-fh1783062272</loc>
     <lastmod>2026-07-03</lastmod>
     <changefreq>monthly</changefreq>

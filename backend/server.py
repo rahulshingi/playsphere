@@ -1004,21 +1004,35 @@ class SiteSettings(BaseModel):
 
 @api.post("/auth/also-player")
 async def toggle_also_player(body: dict, user: dict = Depends(get_current_user)):
-    """HR / organiser opts in (or out) of being a player too. On opt-in,
-    creates a PlayerProfile keyed to their user_id if one doesn't exist yet
-    (idempotent). On opt-out, keeps the profile but sets `also_player=False`
-    so the top-nav player links disappear — no data loss."""
-    if user.get("role") not in ("company_admin", "organiser", "platform_admin", "admin"):
-        raise HTTPException(403, "Only HR, organiser, or admin accounts can opt-in as a player")
+    """Any non-player role can opt-in (or out) of being a player too. On opt-in
+    we create a PlayerProfile keyed to their user_id if one doesn't exist yet
+    (idempotent). On opt-out we keep the profile but set `also_player=False`
+    so the top-nav player links disappear — no data loss.
+
+    Native `player` accounts don't need this toggle. Every other role — HR,
+    organiser, admin, sponsor, vendor, vendor_staff, scorer — is supported
+    so any employee-engagement user can arrive at a venue and check in via
+    their personal QR just like a native player."""
+    role = user.get("role")
+    if role == "player":
+        raise HTTPException(400, "Native player accounts are already players")
+    if role not in ("company_admin", "organiser", "platform_admin", "admin",
+                    "sponsor", "vendor", "vendor_staff", "scorer"):
+        raise HTTPException(403, "Your role can't opt-in as a player")
     enabled = bool((body or {}).get("enabled", True))
     await db.users.update_one({"id": user["id"]}, {"$set": {"also_player": enabled}})
     if enabled:
         existing = await db.player_profiles.find_one({"user_id": user["id"]}, {"_id": 0})
         if not existing:
+            # `player_profiles.mobile` is unique. Non-player accounts (vendor,
+            # sponsor) may not have collected a mobile at signup — synthesise
+            # a placeholder from the user_id so the insert succeeds. The user
+            # can replace it from `/players/me` any time.
+            mobile = user.get("mobile") or f"+00-{user['id'][:10]}"
             prof = PlayerProfile(
                 user_id=user["id"],
                 name=user.get("name") or user.get("email", "").split("@")[0],
-                mobile=user.get("mobile") or "",
+                mobile=mobile,
                 email=user.get("email"),
                 company_id=user.get("company_id"),
                 slug=await _unique_player_slug(user.get("name") or "player"),

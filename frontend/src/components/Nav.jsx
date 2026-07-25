@@ -1,13 +1,15 @@
 import { useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import api from "@/lib/api";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent,
   DropdownMenuItem, DropdownMenuSeparator, DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
-import { LogOut, Shield, Briefcase, Crown, User, Store, Menu, X, BookOpen, ChevronDown, ScanLine } from "lucide-react";
+import { LogOut, Shield, Briefcase, Crown, User, Store, Menu, X, BookOpen, ChevronDown, ScanLine, ToggleRight, ToggleLeft } from "lucide-react";
 import { getRoleGuide } from "@/lib/guides";
 
 const LOGO_URL = "/kreeda-mark.png";
@@ -209,7 +211,38 @@ export default function Nav() {
                   <div className="text-sm text-neutral-200 truncate">{user.name || user.email}</div>
                   <div className="text-[11px] text-neutral-500 font-mono truncate">{user.email}</div>
                   {companyName && <div className="text-[11px] text-[#84CC16] font-mono truncate mt-0.5">{companyName}</div>}
+                  {user.also_player && user.role !== "player" && (
+                    <div className="mt-2 inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-sm bg-[#84CC16]/20 text-[#84CC16] border border-[#84CC16]/40" data-testid="nav-player-mode-badge">
+                      <User className="w-2.5 h-2.5" /> Player mode on
+                    </div>
+                  )}
                 </div>
+                {user.role !== "player" && (
+                  <>
+                    <DropdownMenuSeparator className="bg-white/10" />
+                    <DropdownMenuItem
+                      data-testid="nav-toggle-also-player"
+                      onSelect={async (e) => {
+                        e.preventDefault();
+                        const wantOn = !user.also_player;
+                        try {
+                          await api.post("/auth/also-player", { enabled: wantOn });
+                          toast.success(wantOn ? "Player mode on — refreshing…" : "Player mode off — refreshing…");
+                          setTimeout(() => window.location.reload(), 700);
+                        } catch (err) {
+                          toast.error(err.response?.data?.detail || "Failed to update");
+                        }
+                      }}
+                      className="cursor-pointer focus:bg-white/5 focus:text-white flex items-center gap-2"
+                    >
+                      {user.also_player ? (
+                        <><ToggleRight className="w-4 h-4 text-[#84CC16]" /> <span>Switch off player mode</span></>
+                      ) : (
+                        <><ToggleLeft className="w-4 h-4 text-neutral-400" /> <span>Switch to player mode</span></>
+                      )}
+                    </DropdownMenuItem>
+                  </>
+                )}
                 {moreRoleLinks.length > 0 && (
                   <>
                     <DropdownMenuSeparator className="bg-white/10" />

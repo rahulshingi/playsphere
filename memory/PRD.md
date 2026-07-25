@@ -22,6 +22,16 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 46) Universal "Switch to Player" Mode
+- **Backend** — `POST /api/auth/also-player` now accepts every non-player role: `company_admin`, `organiser`, `platform_admin`, `admin`, `sponsor`, `vendor`, `vendor_staff`, `scorer`. Native `player` accounts are rejected with 400. When a user without a stored mobile (typical for sponsors/vendors) opts in, we synthesise a unique placeholder `+00-<user_id[:10]>` so the unique-mobile index accepts the row; the user can edit it later from `/players/me`.
+- **Frontend Nav dropdown** — new `[data-testid="nav-toggle-also-player"]` item at the top of the user menu (visible to every non-player role). Copy toggles between **"Switch to player mode"** ↔ **"Switch off player mode"**. After the toggle, the page reloads and the Nav auto-lights up primary player links: "My profile", "Check-in", "Host match".
+- **"PLAYER MODE ON" badge** shown inside the dropdown header (`[data-testid="nav-player-mode-badge"]`) so users always know they're dual-role.
+- **Full player parity for dual-role users** — every helper that gates on `isPlayer` (`user.role === "player" || user.also_player === true`) works uniformly. `/players/me`, `/players/check-in` (own QR + scanner), `/bookings`, player directory search, player profile editor are all available to a dual-role vendor / sponsor / organiser / HR / scorer.
+- **Opt-out semantics** — turning it off keeps the PlayerProfile row intact (no data loss); it just flips `also_player=false` so the player nav disappears. Re-opting in is idempotent — same profile is reused.
+- **Verified**: vendor (rmshingi@gmail.com) toggle → `/auth/me` returns `also_player=true` + `player_profile_id`; `/api/players/me` returns the profile; nav shows Check-in link; `/players/check-in` renders the vendor's personal QR. Opt-out restores baseline.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 45) Walk-in Check-in + Real-time Arrival Banner
 - **Walk-in check-in** — new `POST /api/checkin/walk-in` endpoint accepts `{listing_id, client_name*, client_phone*, client_email?, sport?, hours, amount, notes}`. In one shot it:
   1. Upserts a `VendorCustomer` (dedup by phone — same phone → same customer id).

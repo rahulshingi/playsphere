@@ -209,6 +209,11 @@ class UserPublic(BaseModel):
     # rostered onto teams, and accrue player stats — all under the same login.
     also_player: Optional[bool] = False
     player_profile_id: Optional[str] = None
+    # Vendor referral — when a user signs up via `?ref=<vendor_id>`, we
+    # snapshot that vendor's id here. Their subsequent platform bookings at
+    # that vendor are surfaced as "offline_referred" so the vendor knows this
+    # customer originated from their own funnel (Store QR poster, WhatsApp DM, …).
+    ref_vendor_id: Optional[str] = None
 
 
 class RegisterBody(BaseModel):
@@ -928,6 +933,18 @@ class VendorBooking(BaseModel):
     booker_name: Optional[str] = ""
     booker_phone: Optional[str] = ""
     booker_role: Optional[str] = ""  # player | company_admin | organiser | vendor(dual) | …
+    # Rejection metadata — vendor picks a canned reason (or free text) when
+    # cancelling / rejecting so the buyer sees a specific explanation.
+    reject_reason_code: Optional[str] = None  # staff_unavailable | maintenance | weather | overbooked | other
+    reject_reason_text: Optional[str] = None
+    # Check-in / completion tracking for time-adjusted billing.
+    original_start_time: Optional[str] = None  # snapshot of the initially-booked start_time when check-in shifts it
+    unused_minutes: Optional[int] = None       # populated when the booking ends before its scheduled end_time
+    refund_amount: Optional[float] = None      # pro-rata refund for unused time
+    # Referral tag — True when the booker signed up via this vendor's referral
+    # link (`player_profiles.offline_source_vendor_id == vendor_id`). Frontend
+    # renders an orange "REFERRED · OFFLINE" badge on the vendor booking row.
+    offline_referred: Optional[bool] = False
     notifications: List[dict] = Field(default_factory=list)
     created_by: str
     hr_email: Optional[str] = None
@@ -1830,6 +1847,10 @@ async def player_register(body: PlayerSignupBody, response: Response):
         "mobile": body.mobile,
         "password_hash": hash_password(body.password),
         "email_verified": True,
+        # Vendor referral snapshot — the same value is written to
+        # player_profiles.offline_source_vendor_id below. Kept here too so any
+        # future non-player signup flow can reuse the field.
+        "ref_vendor_id": body.ref_vendor or None,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
     company_name = None
@@ -2760,14 +2781,33 @@ async def list_vendor_bookings(user: dict = Depends(get_current_user)):
     docs = await db.vendor_bookings.find(flt, {"_id": 0}).sort("created_at", -1).to_list(500)
     # Auto-expire any elapsed active bookings (4h grace) BEFORE returning.
     docs = await sweep_online_bookings(db, docs)
+    # Referral enrichment: for vendor viewers, flag bookings whose booker
+    # signed up via this vendor's referral link so the vendor knows the
+    # customer came from their own funnel.
     if role == "vendor":
+        vendor_doc = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0, "id": 1})
+        vid = (vendor_doc or {}).get("id")
+        if vid:
+            profiles = await db.player_profiles.find(
+                {"user_id": {"$in": list({d.get("created_by") for d in docs if d.get("created_by")})},
+                 "offline_source_vendor_id": vid},
+                {"_id": 0, "user_id": 1},
+            ).to_list(500)
+            referred_users = {p["user_id"] for p in profiles}
+            for d in docs:
+                if d.get("created_by") in referred_users:
+                    d["offline_referred"] = True
         docs = [_mask_for_vendor(d) for d in docs]
     return [VendorBooking(**d) for d in docs]
 
 
 @api.post("/vendor-bookings/{booking_id}/check-in", response_model=VendorBooking)
-async def check_in_vendor_booking(booking_id: str, user: dict = Depends(get_current_user)):
-    """Vendor confirms the customer arrived. Marks status=completed."""
+async def check_in_vendor_booking(booking_id: str, body: Optional[Dict[str, Any]] = None, user: dict = Depends(get_current_user)):
+    """Vendor / user closes a booking. Marks status=completed and — if the
+    completion time is before the booked end_time — records unused minutes
+    and a pro-rata refund so the buyer can see time-based billing.
+
+    Optional body: `{ actual_end_time: "HH:MM", confirm_refund: true }`."""
     doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
     if not doc:
         raise HTTPException(404, "Booking not found")
@@ -2776,15 +2816,44 @@ async def check_in_vendor_booking(booking_id: str, user: dict = Depends(get_curr
         vendor = await db.vendors.find_one({"user_id": user["id"]}, {"_id": 0})
         if not vendor or doc["vendor_id"] != vendor["id"]:
             raise HTTPException(403, "Not your booking")
-    elif role not in ("platform_admin", "admin"):
-        raise HTTPException(403, "Only the vendor or platform admin can mark arrival")
-    if doc.get("status") in ("cancelled", "rejected", "expired", "no_show"):
-        raise HTTPException(400, f"Booking is {doc['status']} — cannot mark arrival")
-    now_iso = datetime.now(timezone.utc).isoformat()
+    elif role not in ("platform_admin", "admin") and doc.get("created_by") != user["id"]:
+        raise HTTPException(403, "Only the vendor, buyer or platform admin can close this")
+    if doc.get("status") in ("cancelled", "rejected", "expired", "no_show", "completed"):
+        raise HTTPException(400, f"Booking is {doc['status']} — cannot complete")
+
+    now_dt = datetime.now(timezone.utc)
+    now_iso = now_dt.isoformat()
+    body = body or {}
+    actual_end = (body.get("actual_end_time") or "").strip() or now_dt.strftime("%H:%M")
+
+    # Compute unused time (only when actual_end < scheduled end_time)
+    def _to_min(t):
+        try:
+            return int(t.split(":")[0]) * 60 + int(t.split(":")[1])
+        except Exception:
+            return 0
+    unused_min = 0
+    refund_amount = 0.0
+    scheduled_end = doc.get("end_time") or ""
+    if scheduled_end:
+        diff = _to_min(scheduled_end) - _to_min(actual_end)
+        if diff > 0:
+            unused_min = diff
+            hours = int(doc.get("hours") or 1)
+            total = float(doc.get("total") or (doc.get("price") or 0) * hours)
+            per_hour = total / hours if hours > 0 else 0
+            refund_amount = round((unused_min / 60.0) * per_hour, 2)
+
     await db.vendor_bookings.update_one(
         {"id": booking_id},
-        {"$set": {"status": "completed", "completed_at": now_iso,
-                  "checked_in_at": now_iso, "checked_in_by": user["id"]}},
+        {"$set": {
+            "status": "completed", "completed_at": now_iso,
+            "checked_in_at": doc.get("checked_in_at") or now_iso,
+            "checked_in_by": doc.get("checked_in_by") or user["id"],
+            "actual_end_time": actual_end,
+            "unused_minutes": unused_min,
+            "refund_amount": refund_amount,
+        }},
     )
     doc = await db.vendor_bookings.find_one({"id": booking_id}, {"_id": 0})
     return VendorBooking(**doc)
@@ -3431,6 +3500,12 @@ async def cancel_vendor_booking(booking_id: str, body: dict, user: dict = Depend
         "refund_amount": refund,
         "refund_reason": reason,
     }
+    # Reject reason — canned code + optional free text so the buyer sees a
+    # specific explanation ("Court under maintenance") instead of "cancelled".
+    if body.get("reject_reason_code"):
+        upd["reject_reason_code"] = str(body["reject_reason_code"])[:32]
+    if body.get("reject_reason_text"):
+        upd["reject_reason_text"] = str(body["reject_reason_text"])[:280]
     if body.get("notes"):
         upd["admin_notes"] = (doc.get("admin_notes") or "") + f"\n[Cancel] {body['notes']}"
     await db.vendor_bookings.update_one({"id": booking_id}, {"$set": upd})

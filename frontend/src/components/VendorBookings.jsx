@@ -206,8 +206,33 @@ function BookingRow({ booking, role, onPatch }) {
   const canBuyerModify = (isCompanyAdmin || isPlayer) && !["cancelled", "rejected", "completed"].includes(booking.status);
 
   const hrCancel = async () => {
-    if (!window.confirm("Cancel this booking? Refund will be auto-calculated from the listing policy.")) return;
-    onPatch(booking.id, { __action: "cancel" });
+    // Canned reject reasons — small dropdown-via-prompt keeps the code light
+    // while giving the buyer a specific cancellation reason. Free-text is
+    // accepted via "Other".
+    const CODES = [
+      { code: "staff_unavailable", label: "Staff unavailable" },
+      { code: "maintenance", label: "Under maintenance" },
+      { code: "weather", label: "Weather / conditions" },
+      { code: "overbooked", label: "Overbooked / double-slot" },
+      { code: "customer_request", label: "Customer request" },
+      { code: "other", label: "Other (I'll type it)" },
+    ];
+    const menu = CODES.map((c, i) => `${i + 1}. ${c.label}`).join("\n");
+    const pick = window.prompt(`Cancel this booking?\nPick a reason (1–${CODES.length}):\n\n${menu}`);
+    if (!pick) return;
+    const idx = parseInt(pick, 10) - 1;
+    if (isNaN(idx) || idx < 0 || idx >= CODES.length) return;
+    const chosen = CODES[idx];
+    let text = "";
+    if (chosen.code === "other") {
+      text = window.prompt("Type the reason (buyer will see this):", "") || "";
+      if (!text.trim()) return;
+    }
+    onPatch(booking.id, {
+      __action: "cancel",
+      reject_reason_code: chosen.code,
+      reject_reason_text: text || chosen.label,
+    });
   };
   const hrReschedule = (payload) => {
     onPatch(booking.id, { __action: "reschedule", ...payload });
@@ -244,6 +269,11 @@ function BookingRow({ booking, role, onPatch }) {
               {booking.booker_role === "company_admin" && booking.company_name && (
                 <span className="text-neutral-500"> · {booking.company_name}</span>
               )}
+              {booking.offline_referred && (
+                <span data-testid={`vb-referred-${booking.id}`} className="ml-2 inline-block text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-sm bg-[#F97316]/20 text-[#F97316] border border-[#F97316]/40">
+                  Referred · Offline
+                </span>
+              )}
             </div>
           )}
           {isPlatformAdmin && <div className="text-[11px] font-mono text-neutral-500 mt-0.5">HR: {booking.hr_email || booking.company_name}</div>}
@@ -258,6 +288,21 @@ function BookingRow({ booking, role, onPatch }) {
       </div>
 
       <NotificationBanner booking={booking} />
+      {booking.status === "cancelled" && (booking.reject_reason_text || booking.reject_reason_code) && (
+        <div data-testid={`vb-reject-reason-${booking.id}`} className="mt-3 border border-[#FF3B30]/40 bg-[#FF3B30]/10 rounded-sm p-3">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[#FF3B30]">/ Cancel reason</div>
+          <div className="text-xs text-neutral-200 mt-1">{booking.reject_reason_text || booking.reject_reason_code}</div>
+        </div>
+      )}
+      {booking.status === "completed" && (booking.unused_minutes || 0) > 0 && (
+        <div data-testid={`vb-refund-notice-${booking.id}`} className="mt-3 border border-[#FACC15]/40 bg-[#FACC15]/10 rounded-sm p-3">
+          <div className="text-[10px] font-mono uppercase tracking-widest text-[#FACC15]">/ Ended early — refund applied</div>
+          <div className="text-xs text-neutral-200 mt-1">
+            Unused: {Math.floor(booking.unused_minutes / 60)}h {booking.unused_minutes % 60}m ·
+            Refund: {booking.currency || "INR"} {booking.refund_amount || 0}
+          </div>
+        </div>
+      )}
       <RenewalCard booking={booking} onRenewed={() => onPatch && onPatch(booking.id, { __action: "reload" })} />
       {booking.admin_notes && (
         <div className="mt-2 text-[11px] text-[#84CC16] bg-[#84CC16]/5 border border-[#84CC16]/20 rounded-sm px-3 py-2">
@@ -305,7 +350,11 @@ export default function VendorBookings() {
   const onPatch = async (id, payload) => {
     try {
       if (payload.__action === "cancel") {
-        await api.post(`/vendor-bookings/${id}/cancel`, { notes: payload.notes || "" });
+        await api.post(`/vendor-bookings/${id}/cancel`, {
+          notes: payload.notes || "",
+          reject_reason_code: payload.reject_reason_code || "",
+          reject_reason_text: payload.reject_reason_text || "",
+        });
         toast.success("Booking cancelled");
       } else if (payload.__action === "reschedule") {
         const { __action, ...body } = payload; void __action;

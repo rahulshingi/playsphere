@@ -22,6 +22,15 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 56) Referral Tag · Time-Adjusted Billing · Reject Reason
+- **Referral-based OFFLINE tag** — new field `VendorBooking.offline_referred`. Enriched in `GET /vendor-bookings` when the viewer is a vendor: any booking whose booker's `player_profiles.offline_source_vendor_id == this vendor` is flagged. Vendor row shows an orange `REFERRED · OFFLINE` badge (`[data-testid=vb-referred-<id>]`). `users.ref_vendor_id` also snapshotted on signup for future-proofing.
+- **Check-in shifts start_time on early arrival** — `POST /checkin/vendor-booking/{id}` records the actual arrival time and, if it's before the scheduled `start_time`, updates `start_time = arrival` + `end_time = arrival + hours`. The original slot is preserved on `original_start_time` for audit.
+- **Complete-early with pro-rata refund** — `POST /vendor-bookings/{id}/check-in` (existing completion endpoint) now accepts `{actual_end_time?: "HH:MM"}`. If actual_end < scheduled end_time, it computes `unused_minutes` + `refund_amount = (unused_min/60) × (total/hours)` and stores both on the booking. Frontend renders a yellow "Ended early — refund applied" card with the numbers.
+- **Reject reason** — cancel/reject endpoint now accepts `{reject_reason_code, reject_reason_text}`. Six canned codes: `staff_unavailable / maintenance / weather / overbooked / customer_request / other`. Vendor booking row prompts the vendor with a numbered list; free-text on "other". Cancelled bookings display a red `/ CANCEL REASON` card with the text.
+- **Verified end-to-end** via curl: player booking 13:00–15:00 completed at 14:15 → `status: completed, actual_end: 14:15, unused_min: 45, refund: ₹900`. Admin cancel with `maintenance / "Court under maintenance"` persisted correctly on the booking doc. Booker snapshot present (`Test Player · +919000000001 · player`).
+
+
+
 ## Implemented (Feb 18, 2026 · iter 55) Booking Simplification (P0 sweep)
 - **Auto-confirm platform bookings** — `VendorBooking.status` default changed from `"pending"` to `"confirmed"`. New bookings skip the admin approval step. Vendors still have 1-tap Reject / Cancel from their dashboard.
 - **Overlap prevention** — `POST /vendor-bookings` now rejects any request that overlaps a `confirmed / checked_in / vendor_accepted / pending` booking on the same listing (and sub_unit_id if provided). Returns 409 with a helpful hint: `"Only Nh available before the next booking at HH:MM. Reduce hours and try again."` and includes `max_hours` + `next_start` fields.

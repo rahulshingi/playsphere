@@ -261,17 +261,36 @@ def register(api, db, deps):
         if doc.get("status") in ("cancelled", "rejected", "completed", "no_show", "expired"):
             raise HTTPException(400, f"Cannot check in — booking is {doc.get('status')}")
 
-        now_iso = datetime.now(timezone.utc).isoformat()
-        await db.vendor_bookings.update_one(
-            {"id": booking_id},
-            {"$set": {
-                "checked_in_at": now_iso,
-                "checked_in_by": user["id"],
-                "checked_in_by_role": actor_role,
-                "arrived_at": doc.get("arrived_at") or now_iso,
-                "status": "checked_in",
-            }},
-        )
+        now_dt = datetime.now(timezone.utc)
+        now_iso = now_dt.isoformat()
+
+        # If the player is early, shift start_time to actual arrival and
+        # recompute end_time so the full booked duration is preserved.
+        update: Dict[str, Any] = {
+            "checked_in_at": now_iso,
+            "checked_in_by": user["id"],
+            "checked_in_by_role": actor_role,
+            "arrived_at": doc.get("arrived_at") or now_iso,
+            "status": "checked_in",
+        }
+        try:
+            arrival_hhmm = now_dt.strftime("%H:%M")
+            original = doc.get("start_time") or arrival_hhmm
+            arrival_min = int(now_dt.hour) * 60 + int(now_dt.minute)
+            orig_min = int(original.split(":")[0]) * 60 + int(original.split(":")[1])
+            if arrival_min < orig_min:  # early arrival
+                hours = int(doc.get("hours") or 1)
+                new_end_min = arrival_min + hours * 60
+                new_end_hhmm = f"{new_end_min // 60:02d}:{new_end_min % 60:02d}"
+                update.update({
+                    "original_start_time": original,
+                    "start_time": arrival_hhmm,
+                    "end_time": new_end_hhmm,
+                })
+        except Exception:
+            pass
+
+        await db.vendor_bookings.update_one({"id": booking_id}, {"$set": update})
         logger.info("checkin OK | booking=%s by=%s(%s)", booking_id, user.get("email"), actor_role)
 
         # Notify vendor whenever a PLAYER self-checks-in (vendor-initiated

@@ -29,11 +29,18 @@ const CORPORATE_SERVICES_LINK = { to: "/corporate-services", label: "Corporate S
  * Each role exposes a `primary` list (rendered horizontally in the header) and
  * an optional `more` list (folded into the user-menu dropdown). Keep primary at
  * 2-3 items max to avoid horizontal scroll on HR / admin accounts.
+ *
+ * When `inPlayerMode` is true (dual-role user has flipped to player view via
+ * the nav dropdown), we intentionally SKIP the primary-role branches and emit
+ * ONLY the player links — that's what keeps the nav clean.
  */
-function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer }) {
+function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer, inPlayerMode }) {
   const primary = [];
   const more = [];
-  if (isCompanyAdmin) {
+  // Player-mode collapse: hide every other role's links so the header shows
+  // only the player experience while the user is checked-in as a player.
+  const suppressOther = inPlayerMode && isPlayer;
+  if (isCompanyAdmin && !suppressOther) {
     primary.push({ to: "/dashboard", label: "Dashboard", icon: Briefcase, accent: "#84CC16" });
     primary.push({ to: "/admin", label: "Manage", icon: Shield, accent: "#84CC16" });
     more.push({ to: CORPORATE_SERVICES_LINK.to, label: CORPORATE_SERVICES_LINK.label, icon: Store, accent: "#06B6D4" });
@@ -52,18 +59,18 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
     more.push({ to: "/players/profiles", label: "Find players" });
     more.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
   }
-  if (isVendor) {
+  if (isVendor && !suppressOther) {
     primary.push({ to: "/vendor/dashboard", label: "Dashboard", icon: Store, accent: "#EC4899" });
     primary.push({ to: "/bookings", label: "Requests" });
   }
-  if (isSponsor) {
+  if (isSponsor && !suppressOther) {
     primary.push({ to: "/sponsors/me", label: "Sponsor profile", icon: Briefcase, accent: "#FACC15" });
     primary.push({ to: "/sponsorships", label: "Sponsorships" });
   }
-  if (isScorer) {
+  if (isScorer && !suppressOther) {
     primary.push({ to: "/scorer/dashboard", label: "Scorer", icon: Shield, accent: "#06B6D4" });
   }
-  if (isPlatformAdmin) {
+  if (isPlatformAdmin && !suppressOther) {
     primary.push({ to: "/platform-admin", label: "HQ", icon: Crown, accent: "#FF3B30" });
   }
   // Dual-role users (e.g. HR with `also_player=true`) can match multiple
@@ -104,11 +111,11 @@ function DesktopLink({ link }) {
 }
 
 export default function Nav() {
-  const { user, isCompanyAdmin, isPlatformAdmin, isPlayer, isVendor, isSponsor, isScorer, companyName, logout } = useAuth();
+  const { user, isCompanyAdmin, isPlatformAdmin, isPlayer, isVendor, isSponsor, isScorer, companyName, logout, inPlayerMode, setActiveMode, activeMode } = useAuth();
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isAuthed = user && user !== false;
-  const roles = { isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer };
+  const roles = { isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer, inPlayerMode };
   const { primary: primaryRoleLinks, more: moreRoleLinks } = roleLinks(roles);
   const allRoleLinks = [...primaryRoleLinks, ...moreRoleLinks];  // used by mobile drawer
   const guide = isAuthed ? getRoleGuide(user.role) : null;
@@ -127,6 +134,28 @@ export default function Nav() {
       data-testid="site-nav"
       className="sticky top-0 z-50 w-full backdrop-blur-xl bg-black/70 border-b border-white/10"
     >
+      {/* Persistent "Player mode" strip — reminds dual-role users their nav
+          is currently collapsed to player-only, with a one-tap way back. */}
+      {inPlayerMode && user.role !== "player" && (
+        <div data-testid="player-mode-strip" className="bg-[#84CC16]/15 border-b border-[#84CC16]/30 text-[#84CC16] text-[11px] font-mono uppercase tracking-widest flex items-center justify-center gap-3 py-1.5 px-4">
+          <User className="w-3 h-3" />
+          <span>You&apos;re in player mode</span>
+          <button
+            data-testid="player-mode-strip-exit"
+            onClick={() => {
+              setActiveMode("primary");
+              if (isVendor) navigate("/vendor/dashboard");
+              else if (isSponsor) navigate("/sponsors/me");
+              else if (isPlatformAdmin) navigate("/platform-admin");
+              else if (isCompanyAdmin) navigate("/dashboard");
+              else navigate("/");
+            }}
+            className="underline hover:text-white transition"
+          >
+            Back to my workspace
+          </button>
+        </div>
+      )}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 h-20 flex items-center justify-between gap-3">
         <Link to="/" data-testid="nav-logo" className="flex items-center gap-3 shrink-0">
           <img src={LOGO_URL} alt="Kreeda Nation" className="w-16 h-16 object-cover rounded-full border border-white/10 bg-black" />
@@ -211,9 +240,9 @@ export default function Nav() {
                   <div className="text-sm text-neutral-200 truncate">{user.name || user.email}</div>
                   <div className="text-[11px] text-neutral-500 font-mono truncate">{user.email}</div>
                   {companyName && <div className="text-[11px] text-[#84CC16] font-mono truncate mt-0.5">{companyName}</div>}
-                  {user.also_player && user.role !== "player" && (
+                  {user.also_player && user.role !== "player" && inPlayerMode && (
                     <div className="mt-2 inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-widest px-1.5 py-0.5 rounded-sm bg-[#84CC16]/20 text-[#84CC16] border border-[#84CC16]/40" data-testid="nav-player-mode-badge">
-                      <User className="w-2.5 h-2.5" /> Player mode on
+                      <User className="w-2.5 h-2.5" /> Player mode active
                     </div>
                   )}
                 </div>
@@ -224,21 +253,40 @@ export default function Nav() {
                       data-testid="nav-toggle-also-player"
                       onSelect={async (e) => {
                         e.preventDefault();
-                        const wantOn = !user.also_player;
-                        try {
-                          await api.post("/auth/also-player", { enabled: wantOn });
-                          toast.success(wantOn ? "Player mode on — refreshing…" : "Player mode off — refreshing…");
-                          setTimeout(() => window.location.reload(), 700);
-                        } catch (err) {
-                          toast.error(err.response?.data?.detail || "Failed to update");
+                        // Case 1 — not yet opted in: enable also_player on the
+                        // server, then flip the local mode. One-time API call.
+                        if (!user.also_player) {
+                          try {
+                            await api.post("/auth/also-player", { enabled: true });
+                            setActiveMode("player");
+                            toast.success("Switched to player mode");
+                            setTimeout(() => window.location.reload(), 500);
+                          } catch (err) {
+                            toast.error(err.response?.data?.detail || "Failed to enable");
+                          }
+                          return;
                         }
+                        // Case 2 — already opted in: just flip the view mode,
+                        // no API call, no reload. Route the user to a page
+                        // that fits the new mode so they don't sit on a page
+                        // that just got hidden from the nav.
+                        const next = inPlayerMode ? "primary" : "player";
+                        setActiveMode(next);
+                        toast.success(next === "player" ? "Switched to player mode" : "Switched back to your workspace");
+                        if (next === "player") navigate("/players/me");
+                        else if (isVendor) navigate("/vendor/dashboard");
+                        else if (isSponsor) navigate("/sponsors/me");
+                        else if (isPlatformAdmin) navigate("/platform-admin");
+                        else if (isCompanyAdmin) navigate("/dashboard");
                       }}
                       className="cursor-pointer focus:bg-white/5 focus:text-white flex items-center gap-2"
                     >
-                      {user.also_player ? (
-                        <><ToggleRight className="w-4 h-4 text-[#84CC16]" /> <span>Switch off player mode</span></>
+                      {inPlayerMode ? (
+                        <><ToggleRight className="w-4 h-4 text-[#84CC16]" /> <span>Back to my workspace</span></>
+                      ) : user.also_player ? (
+                        <><ToggleLeft className="w-4 h-4 text-[#06B6D4]" /> <span>Switch to player mode</span></>
                       ) : (
-                        <><ToggleLeft className="w-4 h-4 text-neutral-400" /> <span>Switch to player mode</span></>
+                        <><ToggleLeft className="w-4 h-4 text-neutral-400" /> <span>Enable player mode</span></>
                       )}
                     </DropdownMenuItem>
                   </>

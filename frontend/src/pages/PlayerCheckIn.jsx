@@ -8,7 +8,7 @@ import Footer from "@/components/Footer";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { QrCode, ScanLine, MapPin, Clock, Check, Loader2 } from "lucide-react";
+import { QrCode, ScanLine, MapPin, Clock, Check, Loader2, AlertCircle } from "lucide-react";
 import QrScannerModal, { parseScanned } from "@/components/QrScannerModal";
 
 function fmtTime(iso) {
@@ -144,6 +144,25 @@ export default function PlayerCheckIn() {
         <p className="text-sm text-neutral-400 mt-2 max-w-2xl">
           Show your QR to the venue staff for a lightning-fast check-in, or scan the venue&apos;s poster QR to check in yourself.
         </p>
+
+        {/* First-run mobile nudge — for dual-role users whose mobile was
+            synthesised (`+00-<uid>`) at opt-in time. They can text-message
+            the venue only if they add a real number. */}
+        {profile.mobile && profile.mobile.startsWith("+00-") && (
+          <div data-testid="mobile-nudge" className="mt-6 border border-[#FACC15]/40 bg-[#FACC15]/10 rounded-sm p-4 flex flex-col sm:flex-row items-start sm:items-center gap-3 justify-between">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-[#FACC15] shrink-0 mt-0.5" />
+              <div>
+                <div className="font-display tracking-wider text-sm text-white">ADD YOUR MOBILE NUMBER</div>
+                <div className="text-xs text-neutral-400 mt-0.5">Venue staff need this to reach you about your booking. Takes 15 seconds.</div>
+              </div>
+            </div>
+            <Button data-testid="mobile-nudge-cta" onClick={() => nav("/players/me")}
+                    className="bg-[#FACC15] hover:bg-[#EAB308] text-black font-semibold rounded-sm whitespace-nowrap">
+              Add mobile
+            </Button>
+          </div>
+        )}
 
         <Tabs value={tab} onValueChange={setTab} className="mt-8">
           <TabsList data-testid="checkin-tabs" className="bg-black/40 border border-white/10 rounded-sm">

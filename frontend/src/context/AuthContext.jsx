@@ -7,6 +7,16 @@ const AuthContext = createContext(null);
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null); // null = checking
   const [ready, setReady] = useState(false);
+  // "primary" = show the account's original role nav (vendor / HR / sponsor / …)
+  // "player" = show only the player nav for dual-role users. Persisted in
+  // localStorage so a mode switch survives page reloads.
+  const [activeMode, setActiveModeState] = useState(() => {
+    try { return localStorage.getItem("kn_active_mode") || "primary"; } catch { return "primary"; }
+  });
+  const setActiveMode = (m) => {
+    setActiveModeState(m);
+    try { localStorage.setItem("kn_active_mode", m); } catch { /* noop */ }
+  };
 
   useEffect(() => {
     (async () => {
@@ -77,7 +87,18 @@ export const AuthProvider = ({ children }) => {
       devError("[AuthContext] Logout request failed:", err);
     }
     setUser(false);
+    // Reset mode on logout so the next user starts on their primary nav.
+    setActiveMode("primary");
   };
+
+  // Whether the user is actually operating as a player right now.
+  // - Native players are always in "player" mode implicitly.
+  // - Dual-role users toggle via the nav dropdown; `activeMode==="player"`
+  //   collapses their nav to only player links so the UI stays clean.
+  const inPlayerMode = !!user && (
+    user.role === "player" ||
+    (user.also_player === true && activeMode === "player")
+  );
 
   // Memoise the context value so consumers only re-render when auth state
   // actually changes — a new object identity on every provider render would
@@ -103,6 +124,12 @@ export const AuthProvider = ({ children }) => {
     // `isPlayer` also needs to be reachable by these dual-role users —
     // /players/me, /admin (host match), match-history, etc.
     isPlayer: !!user && (user.role === "player" || user.also_player === true),
+    // NEW — reflects the active *view* mode. When a dual-role user picks
+    // "Switch to player mode" from the nav dropdown, we set this so the nav
+    // hides their primary-role links and shows only the player links.
+    activeMode,
+    setActiveMode,
+    inPlayerMode,
     isVendor: !!user && user.role === "vendor",
     isSponsor: !!user && user.role === "sponsor",
     isScorer: !!user && user.role === "scorer",
@@ -110,7 +137,7 @@ export const AuthProvider = ({ children }) => {
     companyId: user && user.company_id,
     companyName: user && user.company_name,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [user, ready]);
+  }), [user, ready, activeMode]);
 
   return (
     <AuthContext.Provider value={contextValue}>

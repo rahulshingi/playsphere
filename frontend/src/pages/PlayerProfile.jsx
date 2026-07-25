@@ -138,10 +138,19 @@ export default function PlayerProfile() {
             <h1 className="font-display text-5xl tracking-wide mt-2">{profile.name?.toUpperCase()}</h1>
             {user?.also_player && user?.role !== "player" && (
               <span data-testid="pp-role-badge" className="inline-block mt-2 font-mono text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-sm bg-[#06B6D4] text-black">
-                {user.role === "organiser" ? "ORGANISER · PLAYER" : "HR · PLAYER"}
+                {user.role === "organiser" ? "ORGANISER · PLAYER" :
+                  user.role === "vendor" ? "VENDOR · PLAYER" :
+                  user.role === "sponsor" ? "SPONSOR · PLAYER" :
+                  user.role === "vendor_staff" ? "STAFF · PLAYER" :
+                  user.role === "scorer" ? "SCORER · PLAYER" :
+                  user.role === "company_admin" ? "HR · PLAYER" : "PLAYER"}
               </span>
             )}
-            <p className="text-neutral-400 text-sm mt-2 font-mono">{profile.mobile}</p>
+            <p className="text-neutral-400 text-sm mt-2 font-mono">
+              {profile.mobile?.startsWith("+00-") ? (
+                <span data-testid="pp-mobile-missing" className="text-[#FACC15]">Add your mobile — edit profile below</span>
+              ) : profile.mobile}
+            </p>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             <div className="text-right">

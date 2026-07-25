@@ -22,6 +22,20 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 47) Clean Player-Mode Switch + Mobile Nudge
+- **New view-mode state** in `AuthContext` — `activeMode` (`"primary" | "player"`), persisted in localStorage under `kn_active_mode`. Adds `inPlayerMode`, `setActiveMode` to the context.
+- **Nav collapses to a single mode** — when a dual-role user picks "Switch to player mode", `roleLinks()` now suppresses vendor / sponsor / HR / scorer / admin primary branches, so the header shows ONLY the player links (My profile, Check-in, Host match) + player secondaries in the dropdown. No more mixed nav.
+- **Persistent "Player mode" strip** — a green top strip (`[data-testid=player-mode-strip]`) with a one-tap "Back to my workspace" link so the user is never confused about which view they're in. Exit routes them to their primary role's landing page (`/vendor/dashboard` / `/sponsors/me` / etc.).
+- **Dropdown toggle rewritten**:
+  - First time: enable `also_player` on the server, flip mode to "player", reload.
+  - Subsequent: no API call, just flips `activeMode`, and navigates to the appropriate landing page (`/players/me` when entering, `/vendor/dashboard` when leaving). Fast, feels native.
+  - Copy adapts: `Enable player mode` → `Switch to player mode` (when already enabled) → `Back to my workspace` (when active).
+- **Mobile-number nudge** — `/players/check-in` renders a yellow `AlertCircle` card with a `Add mobile` CTA whenever `profile.mobile` starts with `+00-` (the synthesised placeholder used for opt-in users who lacked a mobile). CTA lands on `/players/me` for editing. Complementary hint on `/players/me` — the placeholder is hidden and replaced with a yellow "Add your mobile — edit profile below" string until fixed.
+- **Role badge widened** — `pp-role-badge` on `/players/me` now supports VENDOR·PLAYER, SPONSOR·PLAYER, STAFF·PLAYER, SCORER·PLAYER, ORGANISER·PLAYER, HR·PLAYER.
+- **Verified**: vendor toggle → nav collapses to player only, dashboard link disappears, player-mode-strip appears with exit link. Exit link restores vendor nav in one click. Screenshots at `/tmp/vendor_player_mode.png` + `/tmp/checkin_with_nudge.png`.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 46) Universal "Switch to Player" Mode
 - **Backend** — `POST /api/auth/also-player` now accepts every non-player role: `company_admin`, `organiser`, `platform_admin`, `admin`, `sponsor`, `vendor`, `vendor_staff`, `scorer`. Native `player` accounts are rejected with 400. When a user without a stored mobile (typical for sponsors/vendors) opts in, we synthesise a unique placeholder `+00-<user_id[:10]>` so the unique-mobile index accepts the row; the user can edit it later from `/players/me`.
 - **Frontend Nav dropdown** — new `[data-testid="nav-toggle-also-player"]` item at the top of the user menu (visible to every non-player role). Copy toggles between **"Switch to player mode"** ↔ **"Switch off player mode"**. After the toggle, the page reloads and the Nav auto-lights up primary player links: "My profile", "Check-in", "Host match".

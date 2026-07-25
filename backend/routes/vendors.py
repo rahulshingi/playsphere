@@ -301,11 +301,17 @@ def register(api, db, deps):
         return sorted([c for c in cities if c])
 
     @api.get("/vendor-listings/sports")
-    async def list_listing_sports():
+    async def list_listing_sports(vendor_type: Optional[str] = None):
         """Distinct sport slugs that have at least one approved+active listing.
         Consumed by the /hire wizard to filter its sport-picker so admin-added
-        sports (e.g. snooker/pool) show up as soon as a vendor lists a table."""
-        flt = {"approved": True, "active": True}
+        sports (e.g. snooker/pool) show up as soon as a vendor lists a table.
+
+        When `vendor_type` is passed, we scope to that bucket only — so a user
+        who picked "Gyms" sees only fitness activities (yoga, crossfit, …) and
+        a user who picked "Tables" sees only cue/board sports."""
+        flt: dict = {"approved": True, "active": True}
+        if vendor_type:
+            flt["vendor_type"] = vendor_type
         sports = await db.vendor_listings.distinct("sports", flt)
         return sorted([s for s in sports if s])
 

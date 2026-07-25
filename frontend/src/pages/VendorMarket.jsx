@@ -90,12 +90,21 @@ export default function VendorMarket() {
 
   // When sport is picked, fetch cities
   useEffect(() => {
-    // Which sports have at least one active vendor listing? Filters the
-    // sport-picker so we don't show buckets that would return zero results.
-    api.get("/vendor-listings/sports").then((r) => {
+    // Which sports have at least one active vendor listing for the CURRENT
+    // vendor_type? Refetches whenever the user switches Grounds ↔ Courts ↔
+    // Gyms ↔ Tables etc, so "Gyms" shows fitness activities (yoga / crossfit)
+    // and "Tables" shows cue/board sports (snooker / pool / carrom) — never
+    // an unrelated sport bleeding across buckets.
+    api.get(`/vendor-listings/sports?vendor_type=${vendorType}`).then((r) => {
       const values = new Set(r.data || []);
       setAvailableSportValues(values);
+      // If the current `sport` isn't offered under the new vendor_type,
+      // clear it so the user isn't stuck on an invalid combination.
+      if (sport && !values.has(sport)) setSport("");
     }).catch(() => setAvailableSportValues(null));
+  }, [vendorType]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     // Which vendor_types have at least one active listing?
     api.get("/vendor-listings/types").then((r) => {
       const set = new Set(r.data || []);
@@ -393,9 +402,30 @@ function SectionTitle({ n, title }) {
   );
 }
 
+/**
+ * Derive booking-unit metadata from the listing's `price_unit`. This is what
+ * lets a Gym listed at "₹2000 per month" render "Months" instead of "Hours"
+ * in the wizard — and compute the correct total (price × months).
+ *
+ * The backend still receives an integer `hours` field (kept for backwards
+ * compatibility across bookings), but we relabel the UI so users know they're
+ * buying months / sessions / days when relevant.
+ */
+function unitInfoFor(priceUnit) {
+  const u = (priceUnit || "per hour").toLowerCase();
+  if (u.includes("month")) return { key: "month", label: "Months", unit: "month",  requiresTime: false, choices: [1, 3, 6, 12] };
+  if (u.includes("day"))   return { key: "day",   label: "Days",   unit: "day",    requiresTime: false, choices: [1, 2, 3, 5, 7] };
+  if (u.includes("week"))  return { key: "week",  label: "Weeks",  unit: "week",   requiresTime: false, choices: [1, 2, 4, 8] };
+  if (u.includes("session") || u.includes("class") || u.includes("match") || u.includes("event") || u.includes("piece") || u.includes("trophy"))
+    return { key: "session", label: "Sessions", unit: "session", requiresTime: true, choices: [1, 2, 3, 4, 5] };
+  // default → hourly (courts, grounds, tables)
+  return { key: "hour", label: "Hours", unit: "hour", requiresTime: true, choices: [1, 2, 3, 4, 5, 6, 8, 10, 12] };
+}
+
 export function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
   const { user } = useAuth();
   const canBook = !!user && ["player", "organiser", "company_admin"].includes(user.role);
+  const unitInfo = useMemo(() => unitInfoFor(listing.price_unit), [listing.price_unit]);
   const total = useMemo(() => Number(listing.price) * Number(form.hours || 0), [listing.price, form.hours]);
   const [availability, setAvailability] = useState(null);
   const [eligibility, setEligibility] = useState(null);
@@ -468,22 +498,28 @@ export function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
               />
             </div>
             <div>
-              <Label className="text-xs font-mono uppercase text-neutral-500 flex items-center gap-1"><Clock className="w-3 h-3" />Start</Label>
-              <Input data-testid="vm-book-start" type="time" min={minTimeForDate(form.requested_date)} value={form.start_time} onChange={(e) => setForm({ ...form, start_time: e.target.value })} className="mt-2 bg-black/40 border-white/10 text-white" />
+              <Label className="text-xs font-mono uppercase text-neutral-500 flex items-center gap-1"><Clock className="w-3 h-3" />{unitInfo.requiresTime ? "Start" : "Start time (n/a)"}</Label>
+              <Input data-testid="vm-book-start" type="time" min={unitInfo.requiresTime ? minTimeForDate(form.requested_date) : undefined}
+                     disabled={!unitInfo.requiresTime}
+                     value={unitInfo.requiresTime ? form.start_time : "00:00"}
+                     onChange={(e) => setForm({ ...form, start_time: e.target.value })}
+                     className="mt-2 bg-black/40 border-white/10 text-white disabled:opacity-40" />
             </div>
             <div>
-              <Label className="text-xs font-mono uppercase text-neutral-500">Hours *</Label>
+              <Label className="text-xs font-mono uppercase text-neutral-500">{unitInfo.label} *</Label>
               <Select value={String(form.hours)} onValueChange={(v) => setForm({ ...form, hours: Number(v) })}>
                 <SelectTrigger data-testid="vm-book-hours" className="mt-2 bg-black/40 border-white/10 text-white"><SelectValue /></SelectTrigger>
                 <SelectContent className="bg-[#141414] text-white border-white/10">
-                  {[1, 2, 3, 4, 5, 6, 8, 10, 12].map((h) => <SelectItem key={h} value={String(h)}>{h} hour{h > 1 ? "s" : ""}</SelectItem>)}
+                  {unitInfo.choices.map((n) => (
+                    <SelectItem key={n} value={String(n)}>{n} {unitInfo.unit}{n > 1 ? "s" : ""}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          {/* SLOT GRID */}
-          {availability && (
+          {/* SLOT GRID — only meaningful for hourly listings */}
+          {availability && unitInfo.requiresTime && (
             <div data-testid="vm-slot-grid">
               <Label className="text-xs font-mono uppercase text-neutral-500">Available slots {availability.is_weekend && <span className="ml-2 text-[#F59E0B]">· weekend pricing</span>}</Label>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -567,7 +603,7 @@ export function BookingModal({ listing, form, setForm, onSubmit, onClose }) {
             <div>
               <div className="text-[10px] font-mono uppercase text-neutral-500">Rate · {listing.price_unit}</div>
               <div className="font-mono text-base text-neutral-300">{fmtPrice(listing.price, listing.currency)}</div>
-              <div className="text-[10px] font-mono uppercase text-neutral-500 mt-1">Estimated total ({form.hours || 0}h){applyOn && <span className="text-[#EC4899] ml-1">· via membership</span>}</div>
+              <div className="text-[10px] font-mono uppercase text-neutral-500 mt-1">Estimated total ({form.hours || 0} {unitInfo.unit}{(form.hours || 0) > 1 ? "s" : ""}){applyOn && <span className="text-[#EC4899] ml-1">· via membership</span>}</div>
               <div data-testid="vm-book-total" className={`font-display text-3xl ${applyOn ? "text-[#EC4899]" : "text-[#84CC16]"}`}>{fmtPrice(displayTotal, listing.currency)}</div>
             </div>
             <div className="flex gap-2">

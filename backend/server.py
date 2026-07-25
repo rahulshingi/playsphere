@@ -4419,6 +4419,17 @@ DEFAULT_SPORTS = [
     {"value": "carrom", "label": "Carrom"},
     {"value": "volleyball", "label": "Volleyball"},
     {"value": "chess", "label": "Chess"},
+    # Fitness activities (offered by Gyms and Studios). Grouped with sports so
+    # they flow through the same /hire wizard and can be booked like anything else.
+    {"value": "gym", "label": "Gym"},
+    {"value": "yoga", "label": "Yoga"},
+    {"value": "zumba", "label": "Zumba"},
+    {"value": "crossfit", "label": "CrossFit"},
+    {"value": "pilates", "label": "Pilates"},
+    {"value": "cardio", "label": "Cardio"},
+    {"value": "strength", "label": "Strength"},
+    {"value": "dance", "label": "Dance"},
+    {"value": "aerobics", "label": "Aerobics"},
     {"value": "quiz", "label": "Quiz"},
     {"value": "hackathon", "label": "Hackathon"},
     {"value": "other", "label": "Other"},

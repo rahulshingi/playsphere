@@ -22,6 +22,20 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 52) Vendor-Type-Aware Sports + Unit-Aware Booking
+- **`/vendor-listings/sports` now vendor-type filterable**: `GET /api/vendor-listings/sports?vendor_type=gym` returns only fitness activities (yoga, zumba, crossfit, …), `?vendor_type=table` only cue/board sports, `?vendor_type=court` only racket sports, etc. VendorMarket refetches on each chip switch so the sport picker snaps to the right activities and clears any invalid stale selection.
+- **Sport catalog expanded** with fitness activities (`gym, yoga, zumba, crossfit, pilates, cardio, strength, dance, aerobics`) — seeded via `DEFAULT_SPORTS` at boot, idempotent. Now Gym listings created with `sports=[gym,yoga,zumba,crossfit,cardio]` show up in the /hire wizard's sport picker.
+- **Unit-aware Booking Modal** — new `unitInfoFor(price_unit)` helper switches the modal's UI based on the listing's price unit:
+  - `per hour` → **Hours** picker + start time + slot grid (existing UX preserved).
+  - `per month` → **Months** picker with defaults [1, 3, 6, 12], start time greyed out as "N/A", slot grid hidden.
+  - `per day` → **Days** picker with [1, 2, 3, 5, 7].
+  - `per week` → **Weeks** picker.
+  - `per session/class/match/event/piece` → **Sessions** picker keeping time.
+- **Total calculation is unit-agnostic** — `Estimated total (2 months)` shows `₹4,000` for a `₹2000/month` gym, not `₹2000×2h`. The backend still receives `hours` = quantity, so no schema change needed.
+- **Verified end-to-end**: Gym → Gym sport → Pune → Demo Gym modal opens with "MONTHS *" picker, Start Time (N/A) greyed out, `RATE · PER MONTH · ₹2,000`, `ESTIMATED TOTAL (2 MONTHS): ₹4,000`. Slot grid is completely hidden. Sport chips per bucket: Grounds→[cricket/badminton], Courts→[badminton/cricket], Gyms→[gym/yoga/zumba/crossfit/cardio], Tables→[].
+
+
+
 ## Implemented (Feb 18, 2026 · iter 51) Dynamic Book-a-Venue · Vendor Nav Cleanup · Review Escalator
 - **Dynamic chips on `/hire`** — new `GET /api/vendor-listings/types` returns only vendor_types that have ≥1 approved+active listing. VendorMarket filters its chips against this set — so if no vendor has listed a Table / Studio / Referee / Photographer yet, those buckets stay hidden and a guest never taps into an empty category. Chips also expanded to include Gyms and Studios (previously missing).
 - **Auto-jump to first available**: if the default `ground` bucket is empty, `VendorMarket` picks the first available vendor_type on load so users land on a productive category.

@@ -1,9 +1,40 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import api from "@/lib/api";
-import { Bell, X, Check } from "lucide-react";
+import { Bell, BellOff, X, Check } from "lucide-react";
 
 const MAX_ITEMS = 3;
 const AUTOHIDE_MS = 30000;
+const MUTE_KEY = "kn_arrival_mute";
+
+/**
+ * Play a short 2-note chime (A5 → E6) using Web Audio. No asset needed and
+ * browsers only require a prior user gesture to allow playback — which is
+ * always satisfied on a vendor dashboard (they clicked login / navigated).
+ * Kept short (~350ms) and light so it's audible but not annoying.
+ */
+function playChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const beep = (freq, startOffset, duration) => {
+      const t = ctx.currentTime + startOffset;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.001, t);
+      gain.gain.exponentialRampToValueAtTime(0.28, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t);
+      osc.stop(t + duration + 0.05);
+    };
+    beep(880, 0, 0.18);   // A5
+    beep(1320, 0.13, 0.22); // E6
+    setTimeout(() => { try { ctx.close(); } catch { /* noop */ } }, 800);
+  } catch { /* audio unavailable — silently no-op */ }
+}
 
 /**
  * Live "arrival" banner for the vendor dashboard.
@@ -20,7 +51,20 @@ const AUTOHIDE_MS = 30000;
 export default function VendorArrivalBanner() {
   const [vendorId, setVendorId] = useState("");
   const [items, setItems] = useState([]);
+  const [muted, setMuted] = useState(() => {
+    try { return localStorage.getItem(MUTE_KEY) === "1"; } catch { return false; }
+  });
+  const mutedRef = useRef(muted);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
   const wsRef = useRef(null);
+
+  const toggleMute = useCallback(() => {
+    setMuted((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(MUTE_KEY, next ? "1" : "0"); } catch { /* noop */ }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     api.get("/vendors/me").then((r) => setVendorId(r.data?.id || "")).catch(() => {});
@@ -32,6 +76,7 @@ export default function VendorArrivalBanner() {
       const next = [item, ...prev.filter((x) => x._key !== item._key)].slice(0, MAX_ITEMS);
       return next;
     });
+    if (!mutedRef.current) playChime();
     // schedule auto-hide
     setTimeout(() => {
       setItems((prev) => prev.filter((x) => x._key !== `${payload.booking_id}-${payload.at}`));
@@ -79,7 +124,20 @@ export default function VendorArrivalBanner() {
     };
   }, [vendorId, push]);
 
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    // No arrivals right now — still expose a small mute toggle at bottom-right
+    // so the vendor can pre-configure the chime before a busy shift starts.
+    return (
+      <button
+        data-testid="arrival-mute-toggle"
+        onClick={toggleMute}
+        title={muted ? "Arrival chime muted — tap to unmute" : "Arrival chime on — tap to mute"}
+        className="fixed z-[60] bottom-6 right-6 w-9 h-9 rounded-full bg-[#141414]/90 border border-white/10 grid place-items-center text-neutral-400 hover:text-white hover:border-white/30 transition backdrop-blur"
+      >
+        {muted ? <BellOff className="w-4 h-4" /> : <Bell className="w-4 h-4 text-[#84CC16]" />}
+      </button>
+    );
+  }
 
   const fmtTime = (iso) => {
     try { return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); }
@@ -88,7 +146,18 @@ export default function VendorArrivalBanner() {
 
   return (
     <div data-testid="vendor-arrival-banner"
-         className="fixed z-[60] bottom-6 right-6 flex flex-col gap-2 max-w-xs pointer-events-none">
+         className="fixed z-[60] bottom-6 right-6 flex flex-col gap-2 max-w-xs">
+      {/* Header row with mute toggle */}
+      <div className="flex justify-end pointer-events-auto">
+        <button
+          data-testid="arrival-mute-toggle"
+          onClick={toggleMute}
+          title={muted ? "Arrival chime muted — tap to unmute" : "Arrival chime on — tap to mute"}
+          className="w-7 h-7 rounded-sm bg-[#141414]/90 border border-white/10 grid place-items-center text-neutral-400 hover:text-white hover:border-white/30 transition backdrop-blur"
+        >
+          {muted ? <BellOff className="w-3.5 h-3.5" /> : <Bell className="w-3.5 h-3.5 text-[#84CC16]" />}
+        </button>
+      </div>
       {items.map((it) => (
         <div key={it._key} data-testid={`arrival-item-${it.booking_id}`}
              className="pointer-events-auto bg-[#141414] border border-[#84CC16]/40 rounded-sm shadow-lg shadow-[#84CC16]/10 p-3 flex items-start gap-3 animate-in slide-in-from-right-6 duration-300">

@@ -34,13 +34,17 @@ const CORPORATE_SERVICES_LINK = { to: "/corporate-services", label: "Corporate S
  * the nav dropdown), we intentionally SKIP the primary-role branches and emit
  * ONLY the player links — that's what keeps the nav clean.
  */
-function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer, inPlayerMode }) {
+function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer, inPlayerMode, isNativePlayer }) {
   const primary = [];
   const more = [];
-  // Player-mode collapse: hide every other role's links so the header shows
-  // only the player experience while the user is checked-in as a player.
-  const suppressOther = inPlayerMode && isPlayer;
-  if (isCompanyAdmin && !suppressOther) {
+  // Rules:
+  //   - Native `player` accounts always see player links.
+  //   - Dual-role users see EITHER their primary-role links (default) OR the
+  //     player links — never both at once — so the header stays clean.
+  const showPlayer = isNativePlayer || (isPlayer && inPlayerMode);
+  const showPrimary = !inPlayerMode;
+
+  if (isCompanyAdmin && showPrimary) {
     primary.push({ to: "/dashboard", label: "Dashboard", icon: Briefcase, accent: "#84CC16" });
     primary.push({ to: "/admin", label: "Manage", icon: Shield, accent: "#84CC16" });
     more.push({ to: CORPORATE_SERVICES_LINK.to, label: CORPORATE_SERVICES_LINK.label, icon: Store, accent: "#06B6D4" });
@@ -50,7 +54,7 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
     more.push({ to: "/players/profiles", label: "Players", icon: User });
     more.push({ to: "/sponsors/me", label: "Sponsor hub", accent: "#FACC15" });
   }
-  if (isPlayer) {
+  if (showPlayer) {
     primary.push({ to: "/players/me", label: "My profile", icon: User, accent: "#84CC16" });
     primary.push({ to: "/players/check-in", label: "Check-in", icon: ScanLine, accent: "#06B6D4" });
     primary.push({ to: "/admin", label: "Host match", icon: Shield, accent: "#84CC16" });
@@ -59,18 +63,18 @@ function roleLinks({ isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAd
     more.push({ to: "/players/profiles", label: "Find players" });
     more.push({ to: "/my-memberships", label: "Memberships", accent: "#EC4899" });
   }
-  if (isVendor && !suppressOther) {
+  if (isVendor && showPrimary) {
     primary.push({ to: "/vendor/dashboard", label: "Dashboard", icon: Store, accent: "#EC4899" });
     primary.push({ to: "/bookings", label: "Requests" });
   }
-  if (isSponsor && !suppressOther) {
+  if (isSponsor && showPrimary) {
     primary.push({ to: "/sponsors/me", label: "Sponsor profile", icon: Briefcase, accent: "#FACC15" });
     primary.push({ to: "/sponsorships", label: "Sponsorships" });
   }
-  if (isScorer && !suppressOther) {
+  if (isScorer && showPrimary) {
     primary.push({ to: "/scorer/dashboard", label: "Scorer", icon: Shield, accent: "#06B6D4" });
   }
-  if (isPlatformAdmin && !suppressOther) {
+  if (isPlatformAdmin && showPrimary) {
     primary.push({ to: "/platform-admin", label: "HQ", icon: Crown, accent: "#FF3B30" });
   }
   // Dual-role users (e.g. HR with `also_player=true`) can match multiple
@@ -115,7 +119,8 @@ export default function Nav() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isAuthed = user && user !== false;
-  const roles = { isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer, inPlayerMode };
+  const isNativePlayer = !!user && user.role === "player";
+  const roles = { isCompanyAdmin, isPlayer, isVendor, isSponsor, isPlatformAdmin, isScorer, inPlayerMode, isNativePlayer };
   const { primary: primaryRoleLinks, more: moreRoleLinks } = roleLinks(roles);
   const allRoleLinks = [...primaryRoleLinks, ...moreRoleLinks];  // used by mobile drawer
   const guide = isAuthed ? getRoleGuide(user.role) : null;

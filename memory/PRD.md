@@ -22,6 +22,18 @@ Create a web platform for employee engagement company **PlaySphere** — tagline
 3. **Spectator** — browses events, players, sponsors anonymously.
 
 
+## Implemented (Feb 18, 2026 · iter 48) Nav Cleanup + Arrival Chime
+- **Bug fix — vendor workspace was leaking player links**: the `isPlayer` branch in `roleLinks()` was firing whenever `also_player=true`, even when `activeMode="primary"`. Refactored to `showPlayer = isNativePlayer || (isPlayer && inPlayerMode)` and gated **every** primary-role branch by `showPrimary = !inPlayerMode`. Now the nav is strictly mode-aware:
+  - Native player → always sees player links.
+  - Dual-role user in `primary` mode → sees ONLY their vendor / sponsor / HR / etc. links.
+  - Dual-role user in `player` mode → sees ONLY player links.
+  Verified: after a vendor toggles player mode ON then exits back to workspace, the previously-leaked "Hire vendors / My bookings / Find players / Memberships" items are all gone from the dropdown.
+- **Arrival chime** — `VendorArrivalBanner.jsx` now plays a short 2-note Web Audio chime (A5 → E6, ~350ms, ~0.28 gain) every time a new arrival is pushed. Zero external assets — the chime is synthesized in-browser.
+- **Mute toggle** — small floating bell button (`[data-testid=arrival-mute-toggle]`) at the bottom-right. When the banner has arrivals it sits in the banner header; when idle it lives on its own so vendors can pre-mute for a shift. Preference persists in `localStorage.kn_arrival_mute`.
+- **Verified**: Nav e2e — Hire vendors / My bookings / Find players / Memberships all gone from vendor dropdown after workspace-return. Mute toggle visible in bottom-right corner on empty state.
+
+
+
 ## Implemented (Feb 18, 2026 · iter 47) Clean Player-Mode Switch + Mobile Nudge
 - **New view-mode state** in `AuthContext` — `activeMode` (`"primary" | "player"`), persisted in localStorage under `kn_active_mode`. Adds `inPlayerMode`, `setActiveMode` to the context.
 - **Nav collapses to a single mode** — when a dual-role user picks "Switch to player mode", `roleLinks()` now suppresses vendor / sponsor / HR / scorer / admin primary branches, so the header shows ONLY the player links (My profile, Check-in, Host match) + player secondaries in the dropdown. No more mixed nav.
